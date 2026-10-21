@@ -41,7 +41,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
-| 4.1 | Bucket o prefijo `atlas/` en MinIO de dev y qa | ⏳ | En la 177 cada stack tiene su MinIO propio con hostPath. Decidir: MinIO propio en `atlas-*` (recomendado, aislado) o prefijo en uno existente | Daniel Mejía | HU 1.8 |
+| 4.1 | Bucket o prefijo `atlas/` en MinIO de dev y qa | ⏳ | En la 177 cada stack tiene su MinIO propio con hostPath. Decidir: S3 propio en `atlas-*` (recomendado, aislado) o prefijo en uno existente. **Ojo:** MinIO ya no publica imágenes públicas (N-18) | Daniel Mejía | HU 1.8 |
 | 4.2 | Bucket `atlas` en Contabo (pdn) | ⏳ | Separado de adjuntos y de `flit-db-backups`. Firma en cabecera o query (Contabo rechaza el POST policy) | Daniel Mejía | F4 |
 | 4.3 | RabbitMQ por ambiente con el exchange `flit.atlas` | 🔶 | dev tiene RabbitMQ en `flit2-dev`; **qa no tiene** (manual, 18/10/2026) y `services/flit2-pdn` tampoco lo declara. Decidir si Atlas usa el de FLIT 2.0 (con vhost propio) o uno propio | Daniel Mejía | HU 1.8 |
 | 4.4 | Redis por ambiente | 🔶 | Ningún `flit2-*` declara Redis; solo los satélites (p. ej. `flito-dev`) tienen el suyo. Propuesta: Redis propio en `atlas-*` (caché, Data Protection, rate limiting) | Daniel Mejía | HU 1.8 |

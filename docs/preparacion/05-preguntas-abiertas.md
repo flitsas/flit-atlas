@@ -34,6 +34,7 @@
 | **N-08** | ¿Redis, MinIO y RabbitMQ propios de Atlas o compartidos? | **Propios en `atlas-*`** para Redis y MinIO (dev y qa no tienen uno compartido). RabbitMQ: propio, salvo que N-05 elija core-notificaciones, que obliga a compartir el broker de FLIT 2.0 (y qa y pdn todavía no tienen) | HU 1.8 |
 | **N-09** | ¿`flit-atlas` usa los runners propios de la 177? | Sí, por costo. Mientras tanto, `ubuntu-latest` | HU 1.1 |
 | **N-17** | La 169 está a ~190 ms de Colombia y con CPU escasa. ¿Atlas pdn espera la decisión de Cloudflare o de una VPS en América? | No esperar: diseñar la PWA para tolerar latencia (shell precargado, caché offline) y medir en qa con 190 ms simulados. Si se elige Cloudflare, evaluar antes el tratamiento de datos personales (Ley 1581) | F4 |
+| **N-18** | MinIO dejó de publicar imágenes públicas (Docker Hub responde «repository does not exist» y quay.io pide autenticación; verificado el 21/10/2026). ¿Qué S3 usan Atlas dev y qa? | Para **local**, RustFS 1.0.1 (Apache-2.0, compatible con la API de MinIO), ya en el AppHost. Para **dev y qa**: (a) reutilizar la imagen de MinIO que ya corre en la 177, con el riesgo de quedarse sin parches; (b) RustFS, joven pero activo; o (c) SeaweedFS, más maduro pero más complejo de configurar. Recomiendo **(b)**, evaluado en dev durante la HU 1.8. pdn no cambia (Contabo) | HU 1.8 |
 
 ### Identidad y Microsoft 365
 
