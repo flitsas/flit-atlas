@@ -34,7 +34,7 @@ Aplicación central de conocimiento de FLIT S.A.S.: catálogo de aplicativos, eq
 | `staging` | qa |
 | `release` | pdn |
 
-Las tres están protegidas: se entra solo por PR, con revisión de CODEOWNERS y CI en verde. Cada PR lleva **una** historia de usuario, con su evidencia (ver la plantilla de PR).
+Las tres están protegidas: se entra solo por PR, con revisión de CODEOWNERS y CI en verde. El líder técnico puede integrar sus propios PR sin una segunda aprobación, pero nunca sin el CI ([ATLAS-ADR-0017](docs/adr/0017-aprobacion-del-lider-tecnico.md)). Cada PR lleva **una** historia de usuario, con su evidencia (ver la plantilla de PR).
 
 ## Configuración del clon
 
