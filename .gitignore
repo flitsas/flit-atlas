@@ -1,0 +1,51 @@
+# --- Insumos que NO van a git (ATLAS-ADR-0001, README de insumos) ---
+# El Excel de contratos ICT trae tokens con forma de JWT, correos de clientes y rutas locales.
+docs/atlas/insumos/Contratos_*.xlsx
+*.zip
+
+# --- Secretos y configuración local ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+appsettings.*.Local.json
+appsettings.Local.json
+secrets.json
+*.pem
+*.key
+*.pfx
+*.p12
+
+# --- .NET ---
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+coverage/
+.vite/
+playwright-report/
+test-results/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# --- Go ---
+/services/render/bin/
+
+# --- Editores y SO ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+~$*

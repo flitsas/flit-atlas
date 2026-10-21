@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Pre-commit de Flit Atlas: bloquea archivos sensibles y escanea lo que está en staging con gitleaks.
+# Instalación (una vez por clon): scripts/install-githooks.sh
+set -euo pipefail
+
+BLOCKED_PATTERNS=(
+  '(^|/)appsettings\.(Production|Staging|Local)\.json$'
+  '(^|/)appsettings\..*\.Local\.json$'
+  '(^|/)secrets\.json$'
+  '\.(pem|key|p12|pfx|pkcs12)$'
+  '(^|/)secrets/'
+  '(^|/)\.env$'
+  '(^|/)\.env\.[^/]+$'
+  # Excel de contratos ICT: contiene datos sensibles; vive fuera de git.
+  '^docs/atlas/insumos/Contratos_.*\.xlsx$'
+)
+ALLOWLIST_PATTERNS=(
+  '\.example$'
+  '\.example\.[^/]+$'
+)
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged_files" ] && exit 0
+
+violations=()
+while IFS= read -r file; do
+  allowed=0
+  for pat in "${ALLOWLIST_PATTERNS[@]}"; do
+    [[ "$file" =~ $pat ]] && { allowed=1; break; }
+  done
+  [ "$allowed" -eq 1 ] && continue
+  for pat in "${BLOCKED_PATTERNS[@]}"; do
+    [[ "$file" =~ $pat ]] && { violations+=("$file"); break; }
+  done
+done <<< "$staged_files"
+
+if [ "${#violations[@]}" -gt 0 ]; then
+  echo "pre-commit: archivos sensibles en staging; quítalos con 'git restore --staged <archivo>':" >&2
+  printf '  - %s\n' "${violations[@]}" >&2
+  exit 1
+fi
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks no está instalado. Instálalo (https://github.com/gitleaks/gitleaks#installing) y repite el commit." >&2
+  exit 1
+fi
+
+gitleaks git --staged --config .gitleaks.toml --redact --no-banner

@@ -1,0 +1,14 @@
+{
+  // Reglas de markdownlint para Flit Atlas.
+  "config": {
+    "default": true,
+    "MD013": false,          // largo de línea: las tablas y los enlaces lo rompen
+    "MD024": { "siblings_only": true },
+    "MD033": false,          // HTML en línea (<br/>, <details>)
+    "MD041": false,          // los ADR empiezan con front-matter
+    "MD060": false           // alineación de columnas de tablas
+  },
+  "globs": ["**/*.md"],
+  // docs/atlas/ son documentos importados (planes, prompts, insumos); se mantienen como llegaron.
+  "ignores": ["node_modules/**", "docs/atlas/**"]
+}

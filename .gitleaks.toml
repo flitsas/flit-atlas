@@ -1,0 +1,20 @@
+# Configuración de gitleaks para Flit Atlas.
+# Hereda el conjunto de reglas por defecto. Sin excepciones: si algo se marca, se corrige
+# el contenido (valores ficticios, variables como $TOKEN), no se agrega a la lista blanca
+# sin un PR revisado por CODEOWNERS.
+#
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+
+title = "Flit Atlas gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Artefactos generados que no contienen secretos"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''pnpm-lock\.yaml$''',
+  '''package-lock\.json$''',
+]
