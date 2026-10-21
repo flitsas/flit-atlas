@@ -22,6 +22,7 @@ El panel de Aspire queda en `http://localhost:15031` (el enlace con el token sal
 
 | Recurso | Puerto local | Salud |
 |---|---|---|
+| `migrador` | — | Aplica las migraciones y termina; `api` arranca solo si terminó bien |
 | `api` (atlas-api) | 4031 | `/health/ready`: Postgres, Redis y RabbitMQ |
 | `web` (PWA, Vite) | 4032 | `/`; hace de proxy de `/api` hacia `api` (mismo origen) |
 | `render` (atlas-render) | 4033 | `/health/ready` |

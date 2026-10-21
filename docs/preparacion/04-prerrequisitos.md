@@ -43,9 +43,9 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 |---|---|---|---|---|---|
 | 4.1 | Bucket o prefijo `atlas/` en MinIO de dev y qa | ⏳ | En la 177 cada stack tiene su MinIO propio con hostPath. Decidir: S3 propio en `atlas-*` (recomendado, aislado) o prefijo en uno existente. **Ojo:** MinIO ya no publica imágenes públicas (N-18) | Daniel Mejía | HU 1.8 |
 | 4.2 | Bucket `atlas` en Contabo (pdn) | ⏳ | Separado de adjuntos y de `flit-db-backups`. Firma en cabecera o query (Contabo rechaza el POST policy) | Daniel Mejía | F4 |
-| 4.3 | RabbitMQ por ambiente con el exchange `flit.atlas` | 🔶 | dev tiene RabbitMQ en `flit2-dev`; **qa no tiene** (manual, 18/10/2026) y `services/flit2-pdn` tampoco lo declara. Decidir si Atlas usa el de FLIT 2.0 (con vhost propio) o uno propio | Daniel Mejía | HU 1.8 |
+| 4.3 | RabbitMQ por ambiente con el exchange `flit.atlas` | 📋 | Decidido: **RabbitMQ propio en `atlas-*`** (ATLAS-ADR-0018). dev tiene uno en `flit2-dev`, pero qa y pdn no tienen; Atlas no usa ninguno de FLIT 2.0 | Daniel Mejía | HU 1.8 |
 | 4.4 | Redis por ambiente | 🔶 | Ningún `flit2-*` declara Redis; solo los satélites (p. ej. `flito-dev`) tienen el suyo. Propuesta: Redis propio en `atlas-*` (caché, Data Protection, rate limiting) | Daniel Mejía | HU 1.8 |
-| 4.5 | `Flit.Platform.Sdk` publicado en GitHub Packages | 🔶 | No hay workflow de publicación en `flit` (ATLAS-ADR-0015). PR en `flit` o plan B de ATLAS-ADR-0014 | Jorman Copete | HU 1.2 (outbox) |
+| 4.5 | `Flit.Platform.Sdk` publicado en GitHub Packages | ✅ | **Ya no aplica**: Atlas no usa el SDK por ahora (ATLAS-ADR-0018) | — | — |
 
 ## 5. Microsoft Entra ID y Microsoft Graph
 
@@ -78,7 +78,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
 | 7.1 | GitHub App de solo lectura para CODEOWNERS y repos | 📋 | Permisos `contents: read` y `metadata: read`, instalada solo en los repos del catálogo. Recomendado: una app propia de Atlas, no la que ya usa Argo CD para leer `flit-gitops` (mínimo privilegio y rotación independiente) | Jorman Copete | F2 |
-| 7.2 | Acceso del `GITHUB_TOKEN` de `flit-atlas` al paquete NuGet del SDK | 📋 | Configuración de acceso del paquete, después de 4.5 | Jorman Copete | HU 1.2 |
+| 7.2 | Acceso del `GITHUB_TOKEN` de `flit-atlas` al paquete NuGet del SDK | ✅ | **Ya no aplica** (ATLAS-ADR-0018) | — | — |
 | 7.3 | OIDC de GitHub Actions para publicar en Atlas | ✅ | No requiere nada previo: la lista blanca vive en Atlas (ATLAS-ADR-0009). Se configura en F3 | Jorman Copete | — |
 
 ## 8. DNS y borde
@@ -100,6 +100,6 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 
 ## 10. Resumen de bloqueos para arrancar F1
 
-- **HU 1.1 y 1.2** se pueden empezar ya en local. Solo el outbox de HU 1.2 depende de 4.5 (o del plan B).
+- **HU 1.1 y 1.2** se pueden hacer en local. El outbox de HU 1.2 ya no depende de `flit` (ATLAS-ADR-0018).
 - **HU 1.3** necesita 5.1 a 5.4 y 5.8 para la prueba con una cuenta real. Mientras tanto se avanza con el proveedor simulado de dev.
 - **HU 1.8** necesita 2.1, 2.4, 3.1, 4.1, 4.3, 4.4, 8.1 y 8.3.

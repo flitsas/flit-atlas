@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.Atlas.Migrador</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
+    <ProjectReference Include="..\Flit.Atlas.ServiceDefaults\Flit.Atlas.ServiceDefaults.csproj" />
+  </ItemGroup>
+</Project>
