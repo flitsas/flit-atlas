@@ -10,5 +10,5 @@
   },
   "globs": ["**/*.md"],
   // docs/atlas/ son documentos importados (planes, prompts, insumos); se mantienen como llegaron.
-  "ignores": ["node_modules/**", "docs/atlas/**"]
+  "ignores": ["**/node_modules/**", "**/.venv/**", "docs/atlas/**"]
 }
