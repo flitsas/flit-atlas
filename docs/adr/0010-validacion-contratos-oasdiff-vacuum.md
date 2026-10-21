@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0010
 titulo: Validación de contratos con oasdiff y vacuum (Go)
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

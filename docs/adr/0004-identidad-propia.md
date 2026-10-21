@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0004
 titulo: Identidad propia de Atlas — ASP.NET Core Identity, Entra ID, cuentas locales por invitación y OpenIddict
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas
