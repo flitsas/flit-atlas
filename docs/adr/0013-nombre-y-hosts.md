@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0013
 titulo: Nombre «Flit Atlas» y hosts por ambiente
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

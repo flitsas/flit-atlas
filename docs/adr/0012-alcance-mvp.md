@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0012
 titulo: Alcance del MVP — fases F0 a F4
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

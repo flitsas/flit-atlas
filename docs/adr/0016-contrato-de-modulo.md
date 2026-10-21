@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0016
 titulo: Contrato de módulo — manifiestos IModuloAtlas y ModuloAtlas con banderas
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

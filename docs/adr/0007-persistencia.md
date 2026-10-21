@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0007
 titulo: Persistencia — esquema atlas con prefijos por módulo, Redis, S3 y RabbitMQ
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

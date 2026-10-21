@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0014
 titulo: Mensajería — outbox e inbox del SDK de plataforma de FLIT sobre RabbitMQ
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas
