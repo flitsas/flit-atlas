@@ -24,6 +24,7 @@ Aplicación central de conocimiento de FLIT S.A.S.: catálogo de aplicativos, eq
 | `deploy/` | Base kustomize/helm que consume `flit-gitops` |
 | `docs/adr/` | ADR de Atlas (serie `ATLAS-ADR-NNNN`) |
 | `docs/arquitectura/` | Modelo LikeC4 de Atlas |
+| `docs/preparacion/` | Entregables de F0: puertos, prerrequisitos y preguntas abiertas |
 | `docs/atlas/` | Planes, prompts e insumos del proyecto |
 
 ## Ramas
