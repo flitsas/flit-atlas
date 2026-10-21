@@ -10,4 +10,17 @@
 | `src/Flit.Atlas.Modulos.<X>/` | Un proyecto por módulo funcional (dominio, endpoints, EF Core) |
 | `tests/` | xUnit + Testcontainers |
 
-Se llena en la fase **F1**.
+También está `src/Flit.Atlas.ServiceDefaults/`: telemetría, sondas `/health/live` y `/health/ready`, y `ConfiguracionRequerida`, que falla el arranque nombrando todas las variables que faltan.
+
+## Configuración obligatoria
+
+| Variable | Uso |
+|---|---|
+| `ConnectionStrings__atlas` | PostgreSQL (esquema `atlas`) |
+| `ConnectionStrings__redis` | Redis |
+| `ConnectionStrings__rabbitmq` | RabbitMQ |
+
+```bash
+dotnet build Flit.Atlas.slnx
+dotnet test --solution Flit.Atlas.slnx
+```
