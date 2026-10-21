@@ -15,5 +15,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\services\api\src\Flit.Atlas.Api\Flit.Atlas.Api.csproj" />
+    <ProjectReference Include="..\..\services\api\src\Flit.Atlas.Migrador\Flit.Atlas.Migrador.csproj" />
   </ItemGroup>
 </Project>

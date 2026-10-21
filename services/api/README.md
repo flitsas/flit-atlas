@@ -10,7 +10,16 @@
 | `src/Flit.Atlas.Modulos.<X>/` | Un proyecto por módulo funcional (dominio, endpoints, EF Core) |
 | `tests/` | xUnit + Testcontainers |
 
-También está `src/Flit.Atlas.ServiceDefaults/`: telemetría, sondas `/health/live` y `/health/ready`, y `ConfiguracionRequerida`, que falla el arranque nombrando todas las variables que faltan.
+Proyectos ya creados:
+
+| Proyecto | Contenido |
+|---|---|
+| `src/Flit.Atlas.ServiceDefaults/` | Telemetría, sondas `/health/live` y `/health/ready`, y `ConfiguracionRequerida` |
+| `src/Flit.Atlas.Plataforma/` | `PlataformaDbContext` (tablas `plataforma_*` del §9), auditoría de solo inserción, outbox e inbox (ATLAS-ADR-0018) |
+| `src/Flit.Atlas.Migrador/` | Aplica las migraciones y termina; corre antes de `atlas-api` |
+| `tests/Flit.Atlas.Plataforma.Tests/` | Integración con Postgres y RabbitMQ reales (Testcontainers; requiere Docker) |
+
+En `src/Flit.Atlas.ServiceDefaults/` está: telemetría, sondas `/health/live` y `/health/ready`, y `ConfiguracionRequerida`, que falla el arranque nombrando todas las variables que faltan.
 
 ## Configuración obligatoria
 
@@ -22,5 +31,21 @@ También está `src/Flit.Atlas.ServiceDefaults/`: telemetría, sondas `/health/l
 
 ```bash
 dotnet build Flit.Atlas.slnx
-dotnet test --solution Flit.Atlas.slnx
+dotnet test --solution Flit.Atlas.slnx      # las pruebas de Plataforma necesitan Docker
 ```
+
+## Persistencia
+
+- Esquema `atlas`, `snake_case` (EFCore.NamingConventions), claves uuid v7 generadas en la app y fechas en `timestamptz`. Las columnas con datos personales llevan el comentario `@pii`.
+- Cada `DbContext` tiene su historial: `atlas.__ef_migraciones_plataforma` (ATLAS-ADR-0016).
+- `atlas.plataforma_auditoria` es de solo inserción: la migración inicial revoca `UPDATE`, `DELETE` y `TRUNCATE`, y un trigger los rechaza incluso a un superusuario. Ver la pregunta N-19.
+- En dev, qa y pdn, el administrador crea el usuario `flit_atlas` y el esquema con `flit/deploy/postgres/servicio-con-esquema-propio.sql -v servicio=atlas`; el migrador crea las tablas con ese usuario.
+
+Nueva migración:
+
+```bash
+dotnet tool restore
+dotnet ef migrations add <Nombre> -p services/api/src/Flit.Atlas.Plataforma -o Datos/Migraciones
+```
+
+Una prueba falla si el modelo cambia sin su migración.

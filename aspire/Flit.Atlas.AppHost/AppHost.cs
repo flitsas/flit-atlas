@@ -62,7 +62,12 @@ var docs = builder.AddUvicornApp("docs", "../../services/docs", "atlas_docs.main
     .WithHttpHealthCheck("/health/ready")
     .WaitFor(s3);
 
+// Aplica las migraciones y termina; atlas-api arranca solo si terminó bien.
+var migrador = builder.AddProject<Projects.Flit_Atlas_Migrador>("migrador")
+    .WithReference(atlasDb).WaitFor(atlasDb);
+
 var api = builder.AddProject<Projects.Flit_Atlas_Api>("api")
+    .WaitForCompletion(migrador)
     .WithReference(atlasDb).WaitFor(atlasDb)
     .WithReference(redis).WaitFor(redis)
     .WithReference(rabbitmq).WaitFor(rabbitmq)

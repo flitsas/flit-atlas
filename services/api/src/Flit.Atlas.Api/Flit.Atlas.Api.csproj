@@ -4,11 +4,12 @@
     <UserSecretsId>flit-atlas-api</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Aspire.Npgsql" />
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Aspire.RabbitMQ.Client" />
     <PackageReference Include="Aspire.StackExchange.Redis" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
     <ProjectReference Include="..\Flit.Atlas.ServiceDefaults\Flit.Atlas.ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>
