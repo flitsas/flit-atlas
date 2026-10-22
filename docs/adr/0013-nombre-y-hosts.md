@@ -7,12 +7,14 @@ decisores: [Jorman Copete (líder técnico)]
 ambito: atlas
 elementos: []
 reemplaza: []
-reemplazado_por: []
+reemplazado_por: ["ATLAS-ADR-0019 (solo la tabla de hosts)"]
 alias: []
 fuentes: [prompt maestro A-12, plan 00 D-13 y §18 P-05]
 ---
 
 # ATLAS-ADR-0013 · Nombre «Flit Atlas» y hosts por ambiente
+
+> **22/10/2026:** la tabla de hosts quedó reemplazada por [ATLAS-ADR-0019](0019-ambientes-qa-y-pdn.md): solo qa (`qa.atlas.flitsas.com`) y pdn (`atlas.flitsas.com`), sin dev desplegado. El nombre sigue vigente.
 
 ## Contexto y problema
 

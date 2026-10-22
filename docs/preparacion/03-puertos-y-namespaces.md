@@ -57,24 +57,25 @@ La cookie del BFF es `SameSite=Strict` (ATLAS-ADR-0008), así que la PWA y la AP
 
 | Ambiente | Clúster | Namespace | Application de Argo CD | Raíz que la lee |
 |---|---|---|---|---|
-| dev | k3s 177 | `atlas-dev` | `atlas-dev` | `clusters/vps-177/` |
 | qa | k3s 177 | `atlas-qa` | `atlas-qa` | `clusters/vps-177/` |
 | pdn | k3s 169 | `atlas-pdn` | `atlas-pdn` | `clusters/vps-169/` |
 | sandbox (Microcks, F4) | k3s 177 | `atlas-sandbox` | `atlas-sandbox` | `clusters/vps-177/` |
+
+**Confirmado el 22/10/2026 (ATLAS-ADR-0019):** namespaces propios y sin ambiente dev desplegado; `develop` solo corre el CI.
 
 Recomendación: **namespaces propios**, no los `flit2-*`.
 
 - Es el patrón vigente en `flit-gitops`: cada producto tiene el suyo (FLITO, Firmas, file-manager).
 - Cuota de recursos, `LimitRange` y `NetworkPolicy` propias. Importa en la 169, que ya va justa de CPU (manual de operación, 12/10/2026): una cuota evita que un exporte o una indexación de Atlas le quite CPU a FLIT 2.0 en pdn.
 - La `NetworkPolicy` deja entrar a `atlas-render`, `atlas-ia` y `atlas-docs` solo desde `atlas-api` y desde el mismo namespace, y permite la salida de `atlas-ia` hacia `ia-gateway` (LiteLLM) y `python-ml`.
-- Un SealedSecret de `atlas-dev` no se puede leer desde `flit2-dev`, y al revés.
+- Un SealedSecret de `atlas-qa` no se puede leer desde `flit2-qa`, y al revés.
 - El costo es que Atlas debe pedir acceso explícito a lo que vive en `flit2-*` (RabbitMQ de dev, `python-ml`, `core-notificaciones` si se usa). Se resuelve con reglas de salida en la `NetworkPolicy` y DNS de servicio entre namespaces.
 
 Secretos: en la 177, sellados con su llave propia. En la 169, con la llave compartida (regla del manual de operación del 10/09/2026) solo si el secreto debe abrirse también en el respaldo. Si no, con la llave de la 169.
 
 ## 5. Hosts
 
-Sin cambios frente a ATLAS-ADR-0013: `dev.atlas.flitsas.online`, `qa.atlas.flitsas.online` y `atlas.flitsas.com` **[por confirmar el dominio .com]**.
+ATLAS-ADR-0019 (22/10/2026): `qa.atlas.flitsas.com` (177) y `atlas.flitsas.com` (169). No hay host de dev.
 
 ## 6. Qué se hace al confirmar
 

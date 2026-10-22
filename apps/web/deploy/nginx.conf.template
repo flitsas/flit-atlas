@@ -1,0 +1,49 @@
+# atlas-web (HU 1.8): sirve la PWA y reenvía a atlas-api las rutas del BFF, para que la PWA y la API compartan host
+# (cookie SameSite=Strict, ATLAS-ADR-0008 y F0.3 §3). El nginx del host termina TLS y apunta solo aquí.
+# Las variables ${ATLAS_*} las sustituye la imagen de nginx al arrancar (envsubst sobre /etc/nginx/templates).
+
+map $http_upgrade $atlas_connection {
+    default upgrade;
+    ''      '';
+}
+
+server {
+    listen ${ATLAS_WEB_PORT};
+    listen [::]:${ATLAS_WEB_PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    server_tokens off;
+    client_max_body_size 25m;
+
+    # Sonda propia de atlas-web; /health/ es de atlas-api.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    # Rutas del BFF: las mismas que el proxy de Vite en local (apps/web/vite.config.ts).
+    location ~ ^/(api|hubs|connect|\.well-known|health)/ {
+        proxy_pass ${ATLAS_API_URL};
+        include /etc/nginx/atlas-proxy.conf;
+    }
+    location ~ ^/(signin-oidc|signout-callback-oidc)$ {
+        proxy_pass ${ATLAS_API_URL};
+        include /etc/nginx/atlas-proxy.conf;
+    }
+
+    # Archivos con hash en el nombre: caché de un año.
+    location /assets/ {
+        include /etc/nginx/atlas-seguridad.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # La PWA: index.html (y el service worker, cuando llegue en la HU 1.6) nunca se cachean, así se ve la versión
+    # nueva apenas se publica.
+    location / {
+        include /etc/nginx/atlas-seguridad.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri $uri/ /index.html;
+    }
+}

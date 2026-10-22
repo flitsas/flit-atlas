@@ -32,7 +32,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
-| 3.1 | CPU y RAM libres en la 177 para `atlas-dev`, `atlas-qa` y `atlas-sandbox` | ⏳ | Medir peticiones contra capacidad asignable del nodo. Presupuesto inicial de Atlas por ambiente **[por estimar en HU 1.8]** | Daniel Mejía | HU 1.8 |
+| 3.1 | CPU y RAM libres en la 177 para `atlas-qa` y `atlas-sandbox` | ⏳ | Medir peticiones contra capacidad asignable del nodo. Presupuesto inicial de Atlas por ambiente **[por estimar en HU 1.8]** | Daniel Mejía | HU 1.8 |
 | 3.2 | CPU en la 169 para `atlas-pdn` | 🔶 | Manual de operación (12/10/2026): presión de CPU del 30 %, 7,3 de 10,5 CPU asignables ya pedidas, CPU de un hilo 2,2 veces más lenta que la 177. Atlas en pdn necesita cuota propia y una medición nueva antes de F4 | Daniel Mejía | F4 |
 | 3.3 | Latencia desde Colombia a la 169 (~190 ms) | 🔶 | Afecta el LCP < 2,5 s en 4G de la PWA (§11). Mitigación en el diseño: shell precargado y caché offline. La decisión estructural (Cloudflare o VPS en América) sigue abierta en `flit-gitops` | Jorman Copete | F4 (Lighthouse en pdn) |
 | 3.4 | Sondas con tiempos holgados | 📋 | Copiar el patrón del 16/10/2026: liveness `timeoutSeconds: 5`, `failureThreshold: 6` y `startupProbe` de 5 min | Jorman Copete | HU 1.8 |
@@ -51,7 +51,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
-| 5.1 | Aplicación «Flit Atlas» registrada **por ambiente** (dev, qa, pdn), tenant único | 🔶 | Registro de dev creado (21/10/2026); faltan qa y pdn. Tres registros, para que un secreto de dev nunca sirva en pdn. Redirect URIs: `https://<host>/signin-oidc` y `https://<host>/signout-callback-oidc`. Para local, `https://localhost:4032/signin-oidc` y `https://localhost:4032/signout-callback-oidc` solo en el registro de dev (la web hace de proxy de la API en el mismo origen). Los identificadores van en los user secrets del AppHost, no en el repo | Samuel Cárdenas | HU 1.3 |
+| 5.1 | Aplicación «Flit Atlas» registrada **por ambiente** (dev, qa, pdn), tenant único | 🔶 | Registro de dev creado (21/10/2026); desde ATLAS-ADR-0019 se usa solo en local. Faltan qa (`https://qa.atlas.flitsas.com/signin-oidc`) y pdn (`https://atlas.flitsas.com/signin-oidc`). Tres registros, para que un secreto de dev nunca sirva en pdn. Redirect URIs: `https://<host>/signin-oidc` y `https://<host>/signout-callback-oidc`. Para local, `https://localhost:4032/signin-oidc` y `https://localhost:4032/signout-callback-oidc` solo en el registro de dev (la web hace de proxy de la API en el mismo origen). Los identificadores van en los user secrets del AppHost, no en el repo | Samuel Cárdenas | HU 1.3 |
 | 5.2 | Credencial de cliente: certificado (no secreto) en SealedSecret | 📋 | Un certificado por ambiente, con fecha de vencimiento anotada y recordatorio | Samuel Cárdenas | HU 1.3 |
 | 5.3 | Permisos delegados para el login | 📋 | `openid`, `profile`, `email`, `offline_access`, `User.Read` | Samuel Cárdenas | HU 1.3 |
 | 5.4 | Permisos de aplicación para la sincronización diaria | 📋 | `User.Read.All` y `GroupMember.Read.All` (foto, cargo, área, estado y grupos). Consentimiento de administrador documentado | Samuel Cárdenas | HU 1.3 (JIT y mapeo de grupos) |
@@ -85,7 +85,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
-| 8.1 | `dev.atlas.flitsas.online` y `qa.atlas.flitsas.online` → 177 | 📋 | Registro DNS, certificado con certbot en el nginx del host y sitio hacia la ClusterIP del Ingress de Atlas | Daniel Mejía | HU 1.8 |
+| 8.1 | `qa.atlas.flitsas.com` → 177 (ATLAS-ADR-0019) | 📋 | Registro `A`, certificado con certbot en el nginx del host y sitio hacia la ClusterIP fija de `atlas-web` (`/`) y de `atlas-api` (rutas de F0.3 §3). Si `flitsas.com` tiene CAA, debe permitir `letsencrypt.org` | Daniel Mejía | HU 1.8 |
 | 8.2 | `atlas.flitsas.com` → 169 | 📋 | Agregar al mapa SNI del borde de la 169, como los dominios de FLIT 2.0 (11/10/2026). Depende de confirmar el dominio (N-01) | Daniel Mejía | F4 |
 | 8.3 | Reglas de borde equivalentes a las de FLIT 2.0 (WAF, ModSecurity, límites) | ⏳ | ATLAS-ADR-0008: Atlas no pasa por `Flit.Gateway`. Listar qué aplica hoy el borde y replicarlo en el Ingress de Atlas | Daniel Mejía | HU 1.8 |
 
