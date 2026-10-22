@@ -1,0 +1,139 @@
+name: cd
+
+# HU 1.8 · ATLAS-ADR-0006 y ATLAS-ADR-0019: `staging` despliega en qa (atlas-qa, VPS 177) y `release` en pdn
+# (atlas-pdn, VPS 169). `develop` no despliega. Las imágenes van a GHCR y se fijan por digest en flit-gitops, que
+# Argo CD sincroniza.
+
+on:
+  push:
+    branches: [staging, release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRO: ghcr.io/flitsas/flit-atlas
+
+jobs:
+  ambiente:
+    runs-on: ubuntu-latest
+    outputs:
+      nombre: ${{ steps.mapa.outputs.nombre }}
+      entorno: ${{ steps.mapa.outputs.entorno }}
+    steps:
+      - id: mapa
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            staging) echo "nombre=qa" >> "$GITHUB_OUTPUT"; echo "entorno=staging" >> "$GITHUB_OUTPUT" ;;
+            release) echo "nombre=pdn" >> "$GITHUB_OUTPUT"; echo "entorno=production" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::La rama ${GITHUB_REF_NAME} no despliega (ATLAS-ADR-0019)"; exit 1 ;;
+          esac
+
+  imagen:
+    needs: ambiente
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - nombre: atlas-api
+            contexto: .
+            dockerfile: services/api/Dockerfile
+            target: api
+          - nombre: atlas-migrador
+            contexto: .
+            dockerfile: services/api/Dockerfile
+            target: migrador
+          - nombre: atlas-web
+            contexto: apps/web
+            dockerfile: apps/web/Dockerfile
+            target: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRO }}/${{ matrix.nombre }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=${{ needs.ambiente.outputs.nombre }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.contexto }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=0.1.0+${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.nombre }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.nombre }}
+      # Un archivo por imagen: las salidas de un job con matriz no sirven para juntar un valor por pierna.
+      - name: Guardar el digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: mkdir -p digests && printf '%s' "$DIGEST" > "digests/${{ matrix.nombre }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.nombre }}
+          path: digests/
+          retention-days: 7
+
+  gitops:
+    needs: [ambiente, imagen]
+    runs-on: ubuntu-latest
+    # El GITOPS_TOKEN (escritura solo en flitsas/flit-gitops) vive en el GitHub Environment del ambiente.
+    environment: ${{ needs.ambiente.outputs.entorno }}
+    env:
+      CARPETA: services/atlas-${{ needs.ambiente.outputs.nombre }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - name: Fijar los digests en flit-gitops
+        env:
+          GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+        run: |
+          set -euo pipefail
+          for nombre in atlas-api atlas-migrador atlas-web; do
+            d="$(cat "digests/${nombre}")"
+            [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Digest inválido de ${nombre}: «$d»"; exit 1; }
+          done
+          git clone --depth 1 "https://x-access-token:${GITOPS_TOKEN}@github.com/flitsas/flit-gitops.git" gitops
+          k="gitops/${CARPETA}/kustomization.yaml"
+          [ -f "$k" ] || { echo "::error::No existe ${CARPETA}/kustomization.yaml en flit-gitops: el ambiente aún no está dado de alta"; exit 1; }
+          for nombre in atlas-api atlas-migrador atlas-web; do
+            digest="$(cat "digests/${nombre}")"
+            img="${REGISTRO}/${nombre}" d="$digest" yq -i \
+              '(.images[] | select(.name == strenv(img))) |= (.digest = strenv(d) | del(.newTag))' "$k"
+            grep -q "$digest" "$k" || { echo "::error::${CARPETA}/kustomization.yaml no declara la imagen ${REGISTRO}/${nombre}"; exit 1; }
+          done
+          cd gitops
+          if git diff --quiet; then echo "Sin cambios de digest."; exit 0; fi
+          git config user.name "flit-atlas-ci"
+          git config user.email "ci@flitsas.com"
+          git commit -qam "atlas-${{ needs.ambiente.outputs.nombre }}: despliegue ${GITHUB_SHA::7} (flitsas/flit-atlas ${GITHUB_REF_NAME})"
+          for _ in 1 2 3; do
+            git push -q origin HEAD:main && exit 0
+            git pull -q --rebase origin main
+          done
+          echo "::error::No se pudo empujar a flit-gitops después de 3 intentos"; exit 1

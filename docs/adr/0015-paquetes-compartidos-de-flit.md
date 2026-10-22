@@ -1,13 +1,13 @@
 ---
 id: ATLAS-ADR-0015
 titulo: Consumo de paquetes compartidos de flit — NuGet publicado para el SDK y réplica de los tokens de marca
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas
 elementos: []
 reemplaza: []
-reemplazado_por: []
+reemplazado_por: ["ATLAS-ADR-0018 (solo la parte NuGet de Flit.Platform.Sdk)"]
 alias: []
 fuentes: [prompt maestro A-01, plan 00 D-01]
 ---

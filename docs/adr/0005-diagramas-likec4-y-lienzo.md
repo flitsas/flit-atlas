@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0005
 titulo: Diagramas — LikeC4 como código, lienzo propio, Mermaid, BPMN y D2
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

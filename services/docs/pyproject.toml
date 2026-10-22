@@ -1,0 +1,35 @@
+[project]
+name = "atlas-docs"
+version = "0.1.0"
+description = "Flit Atlas: exportes (PDF, Word, Excel, HTML, Postman) e importadores (servicio interno)."
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.142.4,<0.143",
+    "uvicorn>=0.54.0,<0.55",
+    "pydantic-settings>=2.15.0,<3",
+    "boto3>=1.43.109,<1.44",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1,<2.14",
+    "pytest>=9.1.1,<10",
+    "ruff>=0.16.10,<0.17",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.0,<0.12"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

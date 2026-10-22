@@ -24,6 +24,7 @@ Aplicación central de conocimiento de FLIT S.A.S.: catálogo de aplicativos, eq
 | `deploy/` | Base kustomize/helm que consume `flit-gitops` |
 | `docs/adr/` | ADR de Atlas (serie `ATLAS-ADR-NNNN`) |
 | `docs/arquitectura/` | Modelo LikeC4 de Atlas |
+| `docs/preparacion/` | Entregables de F0: puertos, prerrequisitos y preguntas abiertas |
 | `docs/atlas/` | Planes, prompts e insumos del proyecto |
 
 ## Ramas
@@ -34,7 +35,7 @@ Aplicación central de conocimiento de FLIT S.A.S.: catálogo de aplicativos, eq
 | `staging` | qa |
 | `release` | pdn |
 
-Las tres están protegidas: se entra solo por PR, con revisión de CODEOWNERS y CI en verde. Cada PR lleva **una** historia de usuario, con su evidencia (ver la plantilla de PR).
+Las tres están protegidas: se entra solo por PR, con revisión de CODEOWNERS y CI en verde. El líder técnico puede integrar sus propios PR sin una segunda aprobación, pero nunca sin el CI ([ATLAS-ADR-0017](docs/adr/0017-aprobacion-del-lider-tecnico.md)). Cada PR lleva **una** historia de usuario, con su evidencia (ver la plantilla de PR).
 
 ## Configuración del clon
 
