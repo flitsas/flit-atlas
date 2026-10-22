@@ -9,6 +9,7 @@
     <PackageReference Include="Aspire.StackExchange.Redis" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Flit.Atlas.Identidad\Flit.Atlas.Identidad.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
     <ProjectReference Include="..\Flit.Atlas.ServiceDefaults\Flit.Atlas.ServiceDefaults.csproj" />
   </ItemGroup>

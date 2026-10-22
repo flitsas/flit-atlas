@@ -2,8 +2,10 @@
 // En local lo corre el AppHost antes de atlas-api; en dev/qa/pdn corre como Job o initContainer (HU 1.8).
 // Usa el usuario del servicio (flit_atlas), dueño del esquema atlas según el script de flit.
 
+using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.ServiceDefaults;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -15,18 +17,27 @@ const string ClaveConexion = "ConnectionStrings:atlas";
 ConfiguracionRequerida.Validar(builder.Configuration, ClaveConexion);
 
 builder.AddServiceDefaults();
-builder.Services.AddDbContext<PlataformaDbContext>(o => PlataformaDbContext.Configurar(o, builder.Configuration[ClaveConexion]!));
+var cadena = builder.Configuration[ClaveConexion]!;
+builder.Services.AddDbContext<PlataformaDbContext>(o => PlataformaDbContext.Configurar(o, cadena));
+// Identity arma su modelo según IdentityOptions (esquema v3, con passkeys).
+builder.Services.Configure<IdentityOptions>(IdentidadDbContext.ConfigurarIdentity);
+builder.Services.AddDbContext<IdentidadDbContext>(o => IdentidadDbContext.Configurar(o, cadena));
 
 using var host = builder.Build();
 var log = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.Atlas.Migrador");
 
-using (var alcance = host.Services.CreateScope())
+// Orden por dependencia (ATLAS-ADR-0016): primero el núcleo, después cada módulo.
+await MigrarAsync<PlataformaDbContext>("plataforma");
+await MigrarAsync<IdentidadDbContext>("identidad");
+
+async Task MigrarAsync<TContexto>(string nombre) where TContexto : DbContext
 {
-    var contexto = alcance.ServiceProvider.GetRequiredService<PlataformaDbContext>();
+    using var alcance = host.Services.CreateScope();
+    var contexto = alcance.ServiceProvider.GetRequiredService<TContexto>();
     var pendientes = (await contexto.Database.GetPendingMigrationsAsync()).ToList();
-    Registro.Pendientes(log, "plataforma", pendientes.Count);
+    Registro.Pendientes(log, nombre, pendientes.Count);
     await contexto.Database.MigrateAsync();
-    Registro.AlDia(log, "plataforma");
+    Registro.AlDia(log, nombre);
 }
 
 internal static partial class Registro
