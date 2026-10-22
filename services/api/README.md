@@ -35,6 +35,8 @@ En `src/Flit.Atlas.ServiceDefaults/` está: telemetría, sondas `/health/live` y
 | `Identidad__Entra__ClientCredentials__0__*` | Credencial de cliente (certificado en qa y pdn, F0.4 ítem 5.2) |
 | `Identidad__ProteccionDatos__Certificado` | Certificado que cifra las llaves de Data Protection en Redis; obligatorio en qa y pdn |
 | `Identidad__Simulado__Habilitado` | Proveedor simulado; solo se acepta en `local` y `dev` |
+| `Atlas__Proxy__RedesConfiables` | Redes CIDR (separadas por coma) de los proxies cuyo `X-Forwarded-*` se acepta; en el clúster, la red de pods. Sin valor, solo loopback |
+| `Atlas__Proxy__Limite` | Proxies delante de la API (por defecto 2: nginx del host y `atlas-web`) |
 
 ## Identidad de empleados (HU 1.3)
 

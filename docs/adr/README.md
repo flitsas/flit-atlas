@@ -16,11 +16,12 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0010](0010-validacion-contratos-oasdiff-vacuum.md) | Validación de contratos con oasdiff y vacuum | aceptado | A-09 |
 | [ATLAS-ADR-0011](0011-ia-litellm-y-atlas-ia.md) | IA a través de LiteLLM y orquestador en atlas-ia | aceptado | A-10 |
 | [ATLAS-ADR-0012](0012-alcance-mvp.md) | Alcance del MVP: fases F0 a F4 | aceptado | A-11 |
-| [ATLAS-ADR-0013](0013-nombre-y-hosts.md) | Nombre «Flit Atlas» y hosts por ambiente | aceptado | A-12 |
+| [ATLAS-ADR-0013](0013-nombre-y-hosts.md) | Nombre «Flit Atlas» y hosts por ambiente | aceptado (los hosts, reemplazados por ATLAS-ADR-0019) | A-12 |
 | [ATLAS-ADR-0014](0014-mensajeria-outbox.md) | Mensajería: outbox e inbox del SDK de plataforma sobre RabbitMQ | reemplazado por ATLAS-ADR-0018 | F0.2 |
 | [ATLAS-ADR-0015](0015-paquetes-compartidos-de-flit.md) | Paquetes compartidos de flit: NuGet del SDK y réplica de tokens de marca | aceptado (la parte NuGet, reemplazada por ATLAS-ADR-0018) | F0.2 |
 | [ATLAS-ADR-0016](0016-contrato-de-modulo.md) | Contrato de módulo: IModuloAtlas y ModuloAtlas con banderas | aceptado | §10 |
 | [ATLAS-ADR-0017](0017-aprobacion-del-lider-tecnico.md) | El líder técnico puede integrar sus propios PR sin una segunda aprobación | aceptado | ATLAS-ADR-0002 |
 | [ATLAS-ADR-0018](0018-outbox-propio-y-broker-por-ambiente.md) | Outbox e inbox propios de Atlas y RabbitMQ propio por ambiente | aceptado | N-04, N-08 |
+| [ATLAS-ADR-0019](0019-ambientes-qa-y-pdn.md) | Solo dos ambientes desplegados (qa y pdn) con hosts bajo flitsas.com | aceptado | N-01, N-02 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).

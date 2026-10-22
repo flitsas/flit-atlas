@@ -25,11 +25,20 @@ builder.AddRedisClient(Dependencias.Redis);
 builder.AddRabbitMQClient(Dependencias.RabbitMq);
 builder.AgregarIdentidad(ambiente, cadenaAtlas);
 
-// Detrás del proxy de Vite (local) o del Ingress (dev/qa/pdn) el esquema real llega en X-Forwarded-Proto: la
-// redirect_uri de Entra y las cookies Secure dependen de él. Por defecto solo se confía en proxies de loopback; la
-// red del Ingress se agrega en la HU 1.8.
+// Detrás del proxy de Vite (local) o del nginx del host y el de atlas-web (qa y pdn) el esquema real llega en
+// X-Forwarded-Proto: la redirect_uri de Entra, el chequeo de Origin y las cookies Secure dependen de él. Por defecto
+// solo se confía en proxies de loopback; en el clúster, la red de pods llega por Atlas__Proxy__RedesConfiables
+// (desde el ConfigMap de flit-gitops, nunca desde este repo).
+var redesConfiables = Dependencias.RedesConfiables(builder.Configuration);
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
-    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.ForwardLimit = builder.Configuration.GetValue(Dependencias.ProxyLimite, 2);
+    foreach (var red in redesConfiables)
+    {
+        o.KnownIPNetworks.Add(red);
+    }
+});
 
 var app = builder.Build();
 

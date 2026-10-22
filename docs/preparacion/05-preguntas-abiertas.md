@@ -28,8 +28,8 @@
 
 | ID | Pregunta | Recomendación | Bloquea |
 |---|---|---|---|
-| **N-01** | ¿El host de pdn es `atlas.flitsas.com`? | Sí, coherente con `app.flitsas.com` y `api.flitsas.com` | F4 (DNS) |
-| **N-02** | ¿Namespaces propios `atlas-{dev,qa,pdn}` o dentro de `flit2-*`? | **Propios** (F0.3 §4): cuota y `NetworkPolicy` aisladas, sobre todo en la 169 | HU 1.8 |
+| **N-01** | ¿El host de pdn es `atlas.flitsas.com`? | **Respondida el 22/10/2026: sí**, y qa pasa a `qa.atlas.flitsas.com`; no habrá ambiente dev desplegado (ATLAS-ADR-0019) | — |
+| **N-02** | ¿Namespaces propios `atlas-{dev,qa,pdn}` o dentro de `flit2-*`? | **Propios** (F0.3 §4): `atlas-qa` en la 177 y `atlas-pdn` en la 169 (ATLAS-ADR-0019) | HU 1.8 |
 | **N-03** | ¿Confirmas los puertos `x031`–`x035` y gRPC `8087`–`8089`? ¿Y registro de paso `4027`/`8085` de core-notificaciones, que usa el clúster pero no está en `docs/despliegue-y-puertos.md`? | Sí a ambos. Es un PR pequeño en `flit` que requiere tu visto bueno | HU 1.1 (local), HU 1.8 |
 | **N-08** | ¿Redis, MinIO y RabbitMQ propios de Atlas o compartidos? | **RabbitMQ respondido el 21/10/2026: propio por ambiente**, con las convenciones de `flit/deploy/rabbitmq` (ATLAS-ADR-0018). Redis y S3: sigue la recomendación de propios en `atlas-*`; el S3 de dev y qa depende de N-18 | HU 1.8 |
 | **N-09** | ¿`flit-atlas` usa los runners propios de la 177? | Sí, por costo. Mientras tanto, `ubuntu-latest` | HU 1.1 |
