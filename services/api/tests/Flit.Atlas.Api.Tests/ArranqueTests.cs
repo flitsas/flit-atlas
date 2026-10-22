@@ -16,6 +16,7 @@ public class ArranqueTests
             b.UseSetting("ConnectionStrings:atlas", "");
             b.UseSetting("ConnectionStrings:redis", "");
             b.UseSetting("ConnectionStrings:rabbitmq", "");
+            b.UseSetting("Atlas:Ambiente", "");
         });
 
         var ex = Assert.Throws<ConfiguracionFaltanteException>(() => factory.CreateClient());
@@ -32,6 +33,7 @@ public class ArranqueTests
             b.UseSetting("ConnectionStrings:atlas", "Host=127.0.0.1;Port=1;Database=atlas;Username=x;Password=x");
             b.UseSetting("ConnectionStrings:redis", "127.0.0.1:1,abortConnect=false");
             b.UseSetting("ConnectionStrings:rabbitmq", "amqp://x:x@127.0.0.1:1");
+            b.UseSetting("Atlas:Ambiente", "local");
         });
         using var client = factory.CreateClient();
 

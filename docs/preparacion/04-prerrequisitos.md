@@ -51,7 +51,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
-| 5.1 | Aplicación «Flit Atlas» registrada **por ambiente** (dev, qa, pdn), tenant único | 📋 | Tres registros, para que un secreto de dev nunca sirva en pdn. Redirect URIs: `https://<host>/signin-oidc` y `https://<host>/signout-callback-oidc`. Para local, `http://localhost:4031/signin-oidc` solo en el registro de dev | Samuel Cárdenas | HU 1.3 |
+| 5.1 | Aplicación «Flit Atlas» registrada **por ambiente** (dev, qa, pdn), tenant único | 🔶 | Registro de dev creado (21/10/2026); faltan qa y pdn. Tres registros, para que un secreto de dev nunca sirva en pdn. Redirect URIs: `https://<host>/signin-oidc` y `https://<host>/signout-callback-oidc`. Para local, `https://localhost:4032/signin-oidc` y `https://localhost:4032/signout-callback-oidc` solo en el registro de dev (la web hace de proxy de la API en el mismo origen). Los identificadores van en los user secrets del AppHost, no en el repo | Samuel Cárdenas | HU 1.3 |
 | 5.2 | Credencial de cliente: certificado (no secreto) en SealedSecret | 📋 | Un certificado por ambiente, con fecha de vencimiento anotada y recordatorio | Samuel Cárdenas | HU 1.3 |
 | 5.3 | Permisos delegados para el login | 📋 | `openid`, `profile`, `email`, `offline_access`, `User.Read` | Samuel Cárdenas | HU 1.3 |
 | 5.4 | Permisos de aplicación para la sincronización diaria | 📋 | `User.Read.All` y `GroupMember.Read.All` (foto, cargo, área, estado y grupos). Consentimiento de administrador documentado | Samuel Cárdenas | HU 1.3 (JIT y mapeo de grupos) |

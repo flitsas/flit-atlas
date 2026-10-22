@@ -1,4 +1,6 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs';
+
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
@@ -19,6 +21,13 @@ export function urlDeLaApi(entorno: Record<string, string | undefined>): string 
   return url;
 }
 
+/** Certificado de desarrollo que pasa el AppHost; sin él, Vite sirve http (pruebas y uso sin Aspire). */
+export function certificadoHttps(entorno: Record<string, string | undefined>): { cert: Buffer; key: Buffer } | undefined {
+  const certificado = entorno.ATLAS_WEB_CERTIFICADO?.trim();
+  const llave = entorno.ATLAS_WEB_LLAVE?.trim();
+  return certificado && llave ? { cert: readFileSync(certificado), key: readFileSync(llave) } : undefined;
+}
+
 export default defineConfig(({ command, mode }) => {
   const servidor = command === 'serve' && mode !== 'test';
   const api = servidor ? urlDeLaApi(process.env) : '';
@@ -28,8 +37,10 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: Number(process.env.PORT ?? 4032),
       strictPort: true,
+      https: servidor ? certificadoHttps(process.env) : undefined,
+      // xfwd: la API recibe X-Forwarded-Proto/For y arma la redirect_uri de Entra con https, como detrás del Ingress.
       proxy: servidor
-        ? Object.fromEntries(RUTAS_DE_LA_API.map((ruta) => [ruta, { target: api, changeOrigin: false, ws: true }]))
+        ? Object.fromEntries(RUTAS_DE_LA_API.map((ruta) => [ruta, { target: api, changeOrigin: false, ws: true, xfwd: true }]))
         : undefined,
     },
     build: {

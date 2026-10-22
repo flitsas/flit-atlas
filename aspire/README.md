@@ -32,6 +32,46 @@ El panel de Aspire queda en `http://localhost:15031` (el enlace con el token sal
 
 Los puertos de los servicios son los de la propuesta F0.3 (`docs/preparacion/03-puertos-y-namespaces.md`).
 
+## HTTPS local
+
+La web sirve `https://localhost:4032` con el certificado de desarrollo de .NET, porque la cookie de sesión `__Host-atlas` es `Secure` y WebKit (iOS) no la guarda en `http`. Una sola vez por máquina:
+
+```bash
+dotnet dev-certs https --trust
+```
+
+Sin un certificado de confianza, Aspire avisa «No trusted Aspire development certificate was found» y la web queda en `http`.
+
+## Ingreso de empleados
+
+- **Proveedor simulado** (solo local y dev): botón «Entrar (simulado)» con cualquier correo de prueba, p. ej. `ana@ejemplo.com`. La API se niega a arrancar si se habilita en qa o pdn.
+- **Microsoft (Entra ID)**: usa el registro de **dev**. Los valores van en los user secrets del AppHost, que quedan en tu perfil y nunca en el repo:
+
+```bash
+dotnet user-secrets set "Entra:TenantId" "<id del directorio>" --project aspire/Flit.Atlas.AppHost
+dotnet user-secrets set "Entra:ClientId" "<id de la aplicación>" --project aspire/Flit.Atlas.AppHost
+
+# Credencial: un certificado .pfx (recomendado)...
+dotnet user-secrets set "Entra:CertificadoRuta" "<ruta del .pfx>" --project aspire/Flit.Atlas.AppHost
+dotnet user-secrets set "Parameters:entra-clave-certificado" "<clave del .pfx>" --project aspire/Flit.Atlas.AppHost
+# ...o un secreto de cliente
+dotnet user-secrets set "Parameters:entra-secreto" "<secreto>" --project aspire/Flit.Atlas.AppHost
+```
+
+El registro de dev necesita las redirect URI `https://localhost:4032/signin-oidc` y `https://localhost:4032/signout-callback-oidc`. Sin `Entra:TenantId`, solo aparece el proveedor simulado.
+
+## Pruebas de extremo a extremo
+
+Con el AppHost corriendo:
+
+```bash
+cd apps/web
+pnpm exec playwright install chromium webkit   # una vez
+pnpm e2e
+```
+
+Corren en escritorio (Chromium), Pixel 7 (Chromium) e iPhone 14 (WebKit), y verifican que la sesión vive solo en la cookie `HttpOnly`, sin nada en `localStorage` ni `sessionStorage`.
+
 ## Notas
 
 - Postgres usa la imagen `pgvector/pgvector` con Postgres 16, como las VPS. `postgres-init/01-atlas.sql` crea la base `atlas` y las extensiones `vector` y `unaccent`, que en dev, qa y pdn crea el administrador. El volumen `flit-atlas-postgres` guarda los datos entre corridas; bórralo con `docker volume rm flit-atlas-postgres` para volver a ejecutar el script.
