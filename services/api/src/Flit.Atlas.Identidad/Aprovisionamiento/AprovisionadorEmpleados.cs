@@ -43,16 +43,34 @@ public sealed class AprovisionadorEmpleados(
     public async Task<ClaimsPrincipal> AprovisionarAsync(CuentaEmpleado cuenta, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(cuenta);
+
+        // Los ingresos de una misma cuenta (dos pestañas) van en fila, con un candado consultivo de Postgres sobre la
+        // conexión: sin él, el segundo veía la persona recién creada sin su login y respondía «correo en uso».
+        var clave = $"atlas.identidad.ingreso:{cuenta.Proveedor}:{cuenta.IdExterno}";
+        await plataforma.Database.OpenConnectionAsync(ct);
         try
         {
-            return await IntentarAsync(cuenta, ct);
+            await plataforma.Database.ExecuteSqlAsync($"SELECT pg_advisory_lock(hashtextextended({clave}, 0))", ct);
+            try
+            {
+                return await IntentarAsync(cuenta, ct);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                // Dos cuentas distintas entraron a la vez el primer día y crearon lo mismo (la organización interna):
+                // se descarta lo pendiente y se reintenta una vez; esta vez se encuentra lo que creó el otro.
+                plataforma.ChangeTracker.Clear();
+                return await IntentarAsync(cuenta, ct);
+            }
+            finally
+            {
+                await plataforma.Database.ExecuteSqlAsync(
+                    $"SELECT pg_advisory_unlock(hashtextextended({clave}, 0))", CancellationToken.None);
+            }
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        finally
         {
-            // Dos ingresos a la vez (el primer día, o el mismo empleado en dos pestañas) crearon lo mismo: se descarta
-            // lo pendiente y se reintenta una vez; esta vez se encuentra lo que creó el otro.
-            plataforma.ChangeTracker.Clear();
-            return await IntentarAsync(cuenta, ct);
+            await plataforma.Database.CloseConnectionAsync();
         }
     }
 

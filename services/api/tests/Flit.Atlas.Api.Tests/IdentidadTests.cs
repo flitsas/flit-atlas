@@ -66,11 +66,12 @@ public class IdentidadTests(EntornoApi entorno)
     [Fact]
     public async Task Varios_primeros_ingresos_a_la_vez_no_fallan_ni_duplican_la_organizacion_interna()
     {
+        // En el CI (Linux) el mismo correo en dos pestañas respondía 409: el candado por cuenta lo evita.
         var baseNueva = await entorno.BaseNuevaAsync();
         await using var api = entorno.Api(baseDeDatos: baseNueva);
         var correos = Enumerable.Range(0, 6).Select(_ => CorreoNuevo()).ToList();
-        // Además de seis personas distintas, la primera entra dos veces a la vez (dos pestañas).
-        correos.Add(correos[0]);
+        // Además de seis personas distintas, la primera entra tres veces a la vez (varias pestañas).
+        correos.AddRange([correos[0], correos[0]]);
 
         var respuestas = await Task.WhenAll(correos.Select(async correo =>
         {
