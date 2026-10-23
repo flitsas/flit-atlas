@@ -62,6 +62,7 @@ paths:
       description: 'La PWA envía aquí los errores de la pantalla «Algo salió mal» (salvo los de descarga de un módulo tras un despliegue, que se resuelven recargando). Se escriben como advertencia en el log estructurado con la referencia que la persona ve; no se guardan en la base. No requiere sesión, tiene límite de tasa por IP y un cuerpo de máximo 8 KB. El servidor recorta los campos y tacha correos, números largos y cadenas con forma de token.'
       operationId: ReportarErrorDeCliente
       requestBody:
+        description: Error de la PWA que la persona vio en la pantalla «Algo salió mal». Solo datos técnicos.
         content:
           application/json:
             schema:

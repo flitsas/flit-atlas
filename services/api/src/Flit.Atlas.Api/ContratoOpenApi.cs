@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Reflection;
 using System.Text.Json.Nodes;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Seguridad;
@@ -6,6 +8,7 @@ using Flit.Atlas.Identidad.Tokens;
 using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
@@ -59,7 +62,10 @@ internal static class ContratoOpenApi
                 return Task.CompletedTask;
             });
             o.AddOperationTransformer(async (operacion, contexto, _) =>
-                DescribirSeguridad(operacion, contexto, await PermisosAsync(contexto).ConfigureAwait(false)));
+            {
+                DescribirSeguridad(operacion, contexto, await PermisosAsync(contexto).ConfigureAwait(false));
+                DescribirCuerpo(operacion, contexto);
+            });
         });
 
     public static WebApplication MapContratoOpenApi(this WebApplication app, string ambiente)
@@ -159,6 +165,20 @@ internal static class ContratoOpenApi
     /// cookie (401 sin sesión), las que cambian estado exigen la cabecera antifalsificación (403 sin ella) y las que
     /// exigen permisos los declaran en <c>x-atlas-permisos</c> (403 sin ellos).
     /// </summary>
+    /// <summary>
+    /// Los endpoints que leen el cuerpo a mano (<c>.Accepts&lt;T&gt;</c>, p. ej. para limitar su tamaño) no traen la
+    /// descripción del cuerpo: se toma la del tipo (<see cref="DescriptionAttribute"/>).
+    /// </summary>
+    private static void DescribirCuerpo(OpenApiOperation operacion, OpenApiOperationTransformerContext contexto)
+    {
+        if (operacion.RequestBody is not OpenApiRequestBody cuerpo || !string.IsNullOrEmpty(cuerpo.Description))
+        {
+            return;
+        }
+        var tipo = contexto.Description.ActionDescriptor.EndpointMetadata.OfType<IAcceptsMetadata>().FirstOrDefault()?.RequestType;
+        cuerpo.Description = tipo?.GetCustomAttribute<DescriptionAttribute>()?.Description;
+    }
+
     private static void DescribirSeguridad(OpenApiOperation operacion, OpenApiOperationTransformerContext contexto, IReadOnlyList<string> permisos)
     {
         var metadata = contexto.Description.ActionDescriptor.EndpointMetadata;
