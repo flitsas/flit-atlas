@@ -14,6 +14,12 @@ public static class EndpointsIdentidad
     /// <summary>Cabecera que exigen las peticiones que cambian estado (ATLAS-ADR-0008).</summary>
     public const string CabeceraCsrf = "X-Atlas-Csrf";
 
+    /// <summary>
+    /// Redirect URI de Entra ID, la que quedó registrada en Azure para cada ambiente. Está bajo <c>/api/</c>, así que
+    /// los proxies de la web ya la reenvían a la API.
+    /// </summary>
+    public const string RutaRetornoEntra = "/api/auth/callback/azure-ad";
+
     public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos);
 
     public sealed record Yo(
@@ -32,7 +38,7 @@ public static class EndpointsIdentidad
 
         if (proveedores.Microsoft)
         {
-            // Navegación completa del navegador (no fetch): termina en /signin-oidc y vuelve a la PWA.
+            // Navegación completa del navegador (no fetch): termina en RutaRetornoEntra y vuelve a la PWA.
             identidad.MapGet("/entrar/microsoft", (string? volver) =>
                 Results.Challenge(new AuthenticationProperties { RedirectUri = RutaLocal(volver) }, [ClaimsAtlas.EsquemaEntra]));
         }
@@ -93,14 +99,17 @@ public static class EndpointsIdentidad
     /// <summary>
     /// Antifalsificación de la API (ATLAS-ADR-0008), además de SameSite=Strict: toda petición a <c>/api/</c> que
     /// cambia estado trae la cabecera propia (un formulario de otro sitio no puede ponerla sin CORS, y Atlas no habilita
-    /// CORS) y, si el navegador manda <c>Origin</c>, debe ser el mismo host.
+    /// CORS) y, si el navegador manda <c>Origin</c>, debe ser el mismo host. Se exceptúa <see cref="RutaRetornoEntra"/>:
+    /// Microsoft la llama con un POST desde su propio origen, y la protegen el <c>state</c>, el <c>nonce</c> y la cookie
+    /// de correlación de OIDC.
     /// </summary>
     public static IApplicationBuilder UseAntifalsificacionApi(this IApplicationBuilder app) =>
         app.Use(async (http, siguiente) =>
         {
             var peticion = http.Request;
             var cambia = !(HttpMethods.IsGet(peticion.Method) || HttpMethods.IsHead(peticion.Method) || HttpMethods.IsOptions(peticion.Method));
-            if (cambia && peticion.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+            if (cambia && peticion.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
+                && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase))
             {
                 var origen = peticion.Headers.Origin.ToString();
                 var mismoOrigen = string.IsNullOrEmpty(origen)
