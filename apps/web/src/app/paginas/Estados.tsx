@@ -1,6 +1,8 @@
 import { Compass, ShieldAlert, TriangleAlert } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { isRouteErrorResponse, Link, useRouteError } from 'react-router';
+
+import { debeRecargarPorCarga, esErrorDeCarga, pagina, referenciaCorta, reportarError, yaSeIntentoRecarga } from '../errores';
 
 function Estado({ icono, titulo, children }: { icono: ReactNode; titulo: string; children: ReactNode }) {
   return (
@@ -34,15 +36,54 @@ export function SinAcceso({ modulo }: { modulo: string }) {
   );
 }
 
-/** Error inesperado al pintar una ruta (p. ej. no se pudo descargar un chunk tras publicar una versión nueva). */
+/**
+ * Error inesperado al pintar una ruta. Si es un chunk que no se descargó (lo normal tras publicar una versión nueva),
+ * recarga sola una vez; si ya lo intentó, ofrece recargar. Cualquier otro error se reporta a atlas-api y la persona ve
+ * una referencia para citarla (`errores.ts`).
+ */
 export function ErrorDeRuta() {
   const error = useRouteError();
+  const carga = esErrorDeCarga(error);
+  const [recargando, setRecargando] = useState(() => carga && !yaSeIntentoRecarga());
+  const [referencia] = useState(referenciaCorta);
   const detalle = isRouteErrorResponse(error) ? `${error.status} ${error.statusText}` : null;
+
+  useEffect(() => {
+    if (!carga) reportarError(error, referencia);
+    else if (debeRecargarPorCarga()) pagina.recargar();
+    else setRecargando(false);
+  }, [carga, error, referencia]);
+
+  if (recargando) {
+    return (
+      <main className="px-4">
+        <p role="status" className="py-16 text-center text-atlas-texto-suave">
+          Hay una versión nueva de Atlas. Recargando…
+        </p>
+      </main>
+    );
+  }
   return (
     <main className="px-4">
       <Estado icono={<TriangleAlert className="size-8" aria-hidden="true" />} titulo="Algo salió mal">
-        <p>No pudimos mostrar esta pantalla. Recarga la página; si sigue pasando, avísale al equipo de Atlas.</p>
+        <p>
+          {carga
+            ? 'No pudimos descargar esta pantalla. Puede que se haya publicado una versión nueva o que no tengas conexión: recarga la página.'
+            : 'No pudimos mostrar esta pantalla. Recarga la página; si sigue pasando, avísale al equipo de Atlas con esta referencia.'}
+        </p>
         {detalle && <p className="mt-2 text-sm">{detalle}</p>}
+        {!carga && (
+          <p className="mt-3 text-sm">
+            Referencia: <code className="font-semibold text-foreground select-all">{referencia}</code>
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => pagina.recargar()}
+          className="mt-4 inline-flex min-h-toque items-center rounded-xl border border-border bg-card px-5 text-sm font-medium text-foreground hover:bg-atlas-activo"
+        >
+          Recargar la página
+        </button>
       </Estado>
     </main>
   );

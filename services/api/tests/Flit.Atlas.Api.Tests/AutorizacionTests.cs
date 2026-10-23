@@ -59,6 +59,10 @@ public class AutorizacionTests(EntornoApi entorno)
         "POST /api/v1/identidad/emergencia/passkey/opciones",
         "POST /api/v1/identidad/emergencia/totp/clave",
         "POST /api/v1/identidad/emergencia/activar",
+        // Errores de la pantalla «Algo salió mal» de la PWA, que puede salir antes de tener sesión (invitación,
+        // ingreso). Solo escribe una advertencia en el log, sin datos personales; límite de tasa propio por IP y
+        // cuerpo de máximo 8 KB.
+        "POST /api/v1/plataforma/errores-cliente",
         // Protocolo OAuth/OIDC (HU 1.3c, ATLAS-ADR-0024): OpenIddict autentica al cliente (secreto, PKCE, código o
         // refresh) antes de dejar pasar la petición; authorize toma al usuario de la sesión del BFF si la hay.
         "GET /connect/authorize",

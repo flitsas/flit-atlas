@@ -182,6 +182,7 @@ public static class EndpointsIdentidad
 
         rutas.MapRoles();
         rutas.MapAdministracionExternos();
+        rutas.MapErroresCliente();
         return rutas;
     }
 

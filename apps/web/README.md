@@ -35,6 +35,7 @@ En desarrollo, Vite hace de proxy de `/api`, `/hubs`, `/connect`, `/.well-known`
 - **Centro de notificaciones** (`/notificaciones`) y **Ajustes** (`/ajustes`: tema, push en este dispositivo, preferencias por tipo y cuenta).
 - **Sin conexión**: aviso con la fecha de lo último guardado; la sesión y las banderas se guardan 24 h en IndexedDB.
 - **Nueva versión**: el service worker nuevo espera; el aviso «Hay una nueva versión» lo activa cuando la persona acepta.
+- **«Algo salió mal»** (`ErrorDeRuta`, `src/app/errores.ts`): si no se pudo descargar el chunk de una pantalla (lo normal tras un despliegue), recarga sola una vez por pestaña (marca en `sessionStorage`, 10 minutos) y, si vuelve a fallar, ofrece recargar. Los demás errores se envían a `POST /api/v1/plataforma/errores-cliente` (solo datos técnicos y la ruta sin consulta ni fragmento) y la persona ve una referencia de ocho caracteres para buscarla en el log.
 - **Cerrar sesión** quita la suscripción push del dispositivo, borra IndexedDB y las cachés, y revoca la sesión.
 
 ## Módulos
