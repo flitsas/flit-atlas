@@ -84,7 +84,7 @@ public static class EndpointsSesiones
             .WithSummary("Cerrar las demás sesiones")
             .WithDescription("Cierra todas las sesiones del usuario salvo la actual. Exige reautenticación.");
 
-        // Administración (provisional hasta la HU 1.4: ver PoliticasIdentidad).
+        // Administración: permiso atlas.identidad.administrar (PoliticasIdentidad, ATLAS-ADR-0023).
         var personas = identidad.MapGroup("/admin/personas/{personaId:guid}")
             .RequireAuthorization(PoliticasIdentidad.Administrar)
             .RequiereReautenticacion();
@@ -103,7 +103,7 @@ public static class EndpointsSesiones
             .WithName("CerrarSesionesDePersona")
             .WithSummary("Cerrar todas las sesiones de una persona")
             .WithDescription(
-                "Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Cambia el sello de seguridad de la " +
+                "Administración: requiere atlas.identidad.administrar. Cambia el sello de seguridad de la " +
                 "persona y revoca todas sus sesiones, sin suspenderla. Exige reautenticación.")
             .Produces<ResultadoCierre>()
             .Produces(StatusCodes.Status404NotFound);
@@ -141,7 +141,7 @@ public static class EndpointsSesiones
             .WithName("SuspenderPersona")
             .WithSummary("Suspender a una persona")
             .WithDescription(
-                "Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Marca la persona como suspendida, " +
+                "Administración: requiere atlas.identidad.administrar. Marca la persona como suspendida, " +
                 "invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige " +
                 "reautenticación.")
             .Produces(StatusCodes.Status204NoContent)
@@ -172,7 +172,7 @@ public static class EndpointsSesiones
             .WithName("ReactivarPersona")
             .WithSummary("Reactivar a una persona")
             .WithDescription(
-                "Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Devuelve a activa una persona " +
+                "Administración: requiere atlas.identidad.administrar. Devuelve a activa una persona " +
                 "suspendida; vuelve a entrar con un ingreso nuevo. Exige reautenticación.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);

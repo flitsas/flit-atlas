@@ -98,14 +98,21 @@ public class MigracionesTests(Contenedores contenedores)
             """);
         Assert.Equal(["correo", "nombre", "telefono"], pii.Order(StringComparer.Ordinal));
 
-        var tipo = await ConsultarAsync(bd.Servicio, "SELECT tipo FROM atlas.plataforma_organizacion");
+        // Con RLS (ATLAS-ADR-0023) el usuario del servicio solo ve filas con el alcance fijado en la sesión.
+        var tipo = await ConsultarAsync(bd.Servicio, "SELECT tipo FROM atlas.plataforma_organizacion", comoSistema: true);
         Assert.Equal(["cliente"], tipo);
     }
 
-    internal static async Task<List<string>> ConsultarAsync(string cadena, string sql)
+    /// <param name="comoSistema">Fija antes <c>atlas.alcance_total = on</c>, como lo hace la app para el sistema (RLS).</param>
+    internal static async Task<List<string>> ConsultarAsync(string cadena, string sql, bool comoSistema = false)
     {
         await using var conexion = new NpgsqlConnection(cadena);
         await conexion.OpenAsync();
+        if (comoSistema)
+        {
+            await using var alcance = new NpgsqlCommand("SELECT set_config('atlas.alcance_total', 'on', false)", conexion);
+            await alcance.ExecuteNonQueryAsync();
+        }
         await using var comando = new NpgsqlCommand(sql, conexion);
         await using var lector = await comando.ExecuteReaderAsync();
         var filas = new List<string>();

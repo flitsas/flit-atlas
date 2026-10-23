@@ -1,6 +1,7 @@
 using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Mensajeria;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 
@@ -10,7 +11,9 @@ namespace Flit.Atlas.Plataforma.Datos;
 /// Tablas <c>plataforma_*</c> del núcleo (prompt maestro §9), con su historial de migraciones
 /// <c>__ef_migraciones_plataforma</c> (ATLAS-ADR-0016).
 /// </summary>
-public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> opciones) : ContextoAtlas(opciones)
+/// <param name="alcance">Alcance de datos de la petición (lo registra la identidad); sin él, el del sistema.</param>
+public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> opciones, IAlcanceDatos? alcance = null)
+    : ContextoAtlas(opciones, alcance)
 {
     public const string Prefijo = "plataforma_";
     public const string TablaHistorial = "__ef_migraciones_plataforma";
@@ -21,6 +24,8 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
     public DbSet<Organizacion> Organizaciones => Set<Organizacion>();
     public DbSet<Persona> Personas => Set<Persona>();
     public DbSet<Rol> Roles => Set<Rol>();
+    public DbSet<Permiso> Permisos => Set<Permiso>();
+    public DbSet<RolPermiso> RolesPermisos => Set<RolPermiso>();
     public DbSet<AsignacionRol> AsignacionesRol => Set<AsignacionRol>();
     public DbSet<MapeoGrupoEntra> MapeosGrupoEntra => Set<MapeoGrupoEntra>();
     public DbSet<Invitacion> Invitaciones => Set<Invitacion>();
@@ -34,13 +39,20 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
     public DbSet<MensajeOutbox> Outbox => Set<MensajeOutbox>();
     public DbSet<MensajeInbox> Inbox => Set<MensajeInbox>();
 
-    /// <summary>Opciones comunes: Npgsql, snake_case y el historial de migraciones propio.</summary>
+    /// <summary>
+    /// Opciones comunes: Npgsql, snake_case, el historial de migraciones propio y el interceptor que fija el alcance de
+    /// datos de RLS en cada conexión (ATLAS-ADR-0023).
+    /// </summary>
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion)
     {
         ArgumentNullException.ThrowIfNull(opciones);
         opciones
             .UseNpgsql(cadenaConexion, ConfigurarNpgsql)
-            .UseSnakeCaseNamingConvention();
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(InterceptorAlcanceDatos.Instancia)
+            // Las tablas por persona (notificaciones, términos…) no llevan organizacion_id: las filtra persona_id. No hay
+            // navegaciones que carguen una persona oculta por el predicado de organización.
+            .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning));
     }
 
     public static void ConfigurarNpgsql(NpgsqlDbContextOptionsBuilder npgsql)
@@ -88,13 +100,34 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
             Enum(e.Property(r => r.Tipo));
         });
 
+        modelBuilder.Entity<Permiso>(e =>
+        {
+            e.ToTable(Prefijo + "permiso", t => t.HasComment("Proyección de los manifiestos de permisos del código; la escribe el migrador."));
+            e.HasKey(p => p.Codigo);
+            e.Property(p => p.Codigo).HasMaxLength(100);
+            e.Property(p => p.Modulo).HasMaxLength(50);
+            e.Property(p => p.Descripcion).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<RolPermiso>(e =>
+        {
+            e.ToTable(Prefijo + "rol_permiso", t => t.HasComment("Proyección de la matriz rol × permiso del código; la escribe el migrador."));
+            e.HasKey(rp => new { rp.RolId, rp.PermisoCodigo });
+            e.Property(rp => rp.PermisoCodigo).HasMaxLength(100);
+            e.HasIndex(rp => rp.PermisoCodigo);
+            e.HasOne<Rol>().WithMany().HasForeignKey(rp => rp.RolId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Permiso>().WithMany().HasForeignKey(rp => rp.PermisoCodigo).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<AsignacionRol>(e =>
         {
             e.ToTable(Prefijo + "asignacion_rol");
-            Enum(e.Property(a => a.AlcanceTipo));
+            e.Property(a => a.AlcanceTipo).HasMaxLength(50);
             Enum(e.Property(a => a.Origen));
             e.Property(a => a.AlcanceId).HasMaxLength(200);
             e.HasIndex(a => a.PersonaId);
+            // El vigilante de vencimientos busca las vencidas que aún no procesó.
+            e.HasIndex(a => a.VigenteHasta).HasFilter("vigente_hasta IS NOT NULL AND vencimiento_procesado_en IS NULL");
             e.HasIndex(a => a.OrganizacionId);
             e.HasOne<Persona>().WithMany().HasForeignKey(a => a.PersonaId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Rol>().WithMany().HasForeignKey(a => a.RolId).OnDelete(DeleteBehavior.Restrict);
@@ -205,6 +238,9 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
         });
 
         modelBuilder.AgregarMensajeria(excluirDeMigraciones: false);
+
+        // Predicado obligatorio por organización (persona, asignación, invitación, auditoría y la organización misma).
+        AplicarPredicadoDeOrganizacion(modelBuilder, typeof(Organizacion));
 
         // Las claves uuid v7 las genera la aplicación (Entidad.Id); la base no las inventa.
         foreach (var entidad in modelBuilder.Model.GetEntityTypes())

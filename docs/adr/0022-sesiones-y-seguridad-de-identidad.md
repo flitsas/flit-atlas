@@ -54,7 +54,7 @@ En las rutas que inician sesión (retorno de Entra y proveedor simulado) un midd
 
 - `GET /api/v1/identidad/sesiones` (marca la actual), `DELETE /api/v1/identidad/sesiones/{id}` (la actual equivale a salir) y `POST /api/v1/identidad/sesiones/cerrar-otras`.
 - `POST /api/v1/identidad/admin/personas/{personaId}/sesiones/cerrar`, `…/suspender` y `…/reactivar`.
-- **Autorización provisional**: la política `PoliticasIdentidad.Administrar` (`identidad.administrar`) exige hoy el rol `atlas.superadmin`. La HU 1.4 la redefine con el mismo nombre (otra `AddPolicy` reemplaza la anterior) para exigir el permiso del manifiesto, sin tocar los endpoints. Queda como **[por decidir en la HU 1.4]** el nombre del permiso (p. ej. `atlas.personas.suspender` o `atlas.roles.gestionar`).
+- **Autorización provisional**: la política `PoliticasIdentidad.Administrar` (`identidad.administrar`) exige hoy el rol `atlas.superadmin`. La HU 1.4 la redefine con el mismo nombre (otra `AddPolicy` reemplaza la anterior) para exigir el permiso del manifiesto, sin tocar los endpoints. La HU 1.4 lo resolvió con el permiso `atlas.identidad.administrar` (ATLAS-ADR-0023).
 
 ### 4. Reautenticación
 

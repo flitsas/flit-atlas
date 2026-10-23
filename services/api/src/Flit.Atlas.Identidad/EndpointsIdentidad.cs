@@ -1,9 +1,11 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Aprovisionamiento;
+using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -25,10 +27,15 @@ public static class EndpointsIdentidad
     /// <param name="Reautenticar">La PWA vuelve a pedir el ingreso porque una acción sensible lo exigió.</param>
     public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos, bool Reautenticar = false);
 
-    [Description("Usuario de la sesión actual: persona, organización, proveedor con el que entró y roles de Atlas.")]
+    /// <param name="Roles">Roles vigentes en este momento (incluye atlas.lector de todo empleado y los implícitos).</param>
+    /// <param name="Permisos">Permisos efectivos en este momento, calculados en el servidor (ATLAS-ADR-0023).</param>
+    [Description("Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.")]
     public sealed record Yo(
         Guid Sub, Guid PersonaId, string Nombre, string TipoPrincipal, Guid OrganizacionId, string Proveedor,
-        IReadOnlyList<string> Roles);
+        [property: Description("Códigos de los roles vigentes en este momento, ordenados; incluye atlas.lector de todo empleado.")]
+        IReadOnlyList<string> Roles,
+        [property: Description("Permisos efectivos (atlas.<modulo>.<accion>) en este momento, ordenados: la PWA filtra la navegación con ellos. Se recalculan en cada petición.")]
+        IReadOnlyList<string> Permisos);
 
     public static IEndpointRouteBuilder MapIdentidad(this IEndpointRouteBuilder rutas)
     {
@@ -123,21 +130,30 @@ public static class EndpointsIdentidad
 
         identidad.MapSesiones();
 
-        rutas.MapGet("/api/v1/plataforma/yo", (ClaimsPrincipal usuario) => new Yo(
-                Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.Sub)!),
-                Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.PersonaId)!),
-                usuario.FindFirstValue(ClaimsAtlas.Nombre) ?? string.Empty,
-                usuario.FindFirstValue(ClaimsAtlas.TipoPrincipal)!,
-                Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.OrganizacionId)!),
-                usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
-                usuario.FindAll(ClaimsAtlas.Rol).Select(c => c.Value).ToList()))
+        rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, CancellationToken ct) =>
+            {
+                var permisos = await permisosDeSesion.ObtenerAsync(usuario, ct);
+                return new Yo(
+                    Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.Sub)!),
+                    Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.PersonaId)!),
+                    usuario.FindFirstValue(ClaimsAtlas.Nombre) ?? string.Empty,
+                    usuario.FindFirstValue(ClaimsAtlas.TipoPrincipal)!,
+                    Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.OrganizacionId)!),
+                    usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
+                    permisos.Roles,
+                    permisos.Permisos);
+            })
             .RequireAuthorization()
             .WithMetadata(new MetadatoLimiteTasa())
             .WithName("ObtenerUsuarioActual")
             .WithTags("Plataforma")
             .WithSummary("Usuario en sesión")
-            .WithDescription("Persona, organización, proveedor de ingreso y roles de la sesión actual.");
+            .WithDescription(
+                "Persona, organización, proveedor de ingreso, roles vigentes y permisos efectivos de la sesión actual. Roles " +
+                "y permisos se calculan en el servidor en cada petición con las asignaciones vigentes: un rol vencido o retirado " +
+                "ya no aparece (ATLAS-ADR-0023).");
 
+        rutas.MapRoles();
         return rutas;
     }
 

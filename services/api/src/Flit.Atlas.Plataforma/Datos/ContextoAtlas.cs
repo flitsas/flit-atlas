@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Atlas.Plataforma.Datos;
@@ -6,12 +8,59 @@ namespace Flit.Atlas.Plataforma.Datos;
 /// Base de los <see cref="DbContext"/> de Atlas (núcleo y módulos). Todos viven en el esquema <c>atlas</c>
 /// (prompt maestro A-06) y cada uno tiene su propio historial de migraciones (ATLAS-ADR-0016).
 /// </summary>
-public abstract class ContextoAtlas(DbContextOptions opciones) : DbContext(opciones)
+/// <param name="alcance">Alcance de datos de la petición; sin él (migrador, pruebas, diseño) es <see cref="AlcanceDatos.Sistema"/>.</param>
+public abstract class ContextoAtlas(DbContextOptions opciones, IAlcanceDatos? alcance = null) : DbContext(opciones)
 {
     public const string Esquema = "atlas";
 
+    /// <summary>Columna que marca los datos de una organización: predicado obligatorio y RLS (ATLAS-ADR-0023).</summary>
+    public const string PropiedadOrganizacion = "OrganizacionId";
+
     /// <summary>Hora actual en UTC; las pruebas la pueden fijar.</summary>
     protected internal TimeProvider Reloj { get; set; } = TimeProvider.System;
+
+    /// <summary>Organizaciones que puede ver quien usa este contexto; se lee en cada consulta y al abrir la conexión.</summary>
+    public AlcanceDatos Alcance => alcance?.Actual ?? AlcanceDatos.Sistema;
+
+    // EF Core evalúa estos miembros con el contexto de cada consulta (los filtros globales los parametrizan).
+    private bool AlcanceTotal => Alcance.Total;
+
+    private Guid[] OrganizacionesVisibles => Alcance.ComoArreglo();
+
+    /// <summary>
+    /// Predicado obligatorio: toda entidad con <see cref="PropiedadOrganizacion"/> (y la propia organización, por su id)
+    /// solo devuelve filas de las organizaciones del <see cref="Alcance"/>. Las filas sin organización solo las ve un
+    /// alcance total. Es la primera capa; RLS en PostgreSQL es la segunda (defensa en profundidad).
+    /// </summary>
+    protected void AplicarPredicadoDeOrganizacion(ModelBuilder modelo, params Type[] organizacionPorId)
+    {
+        ArgumentNullException.ThrowIfNull(modelo);
+        ArgumentNullException.ThrowIfNull(organizacionPorId);
+        var contexto = Expression.Constant(this);
+        var total = Expression.Property(contexto, typeof(ContextoAtlas).GetProperty(nameof(AlcanceTotal), BindingFlags.NonPublic | BindingFlags.Instance)!);
+        var visibles = Expression.Property(contexto, typeof(ContextoAtlas).GetProperty(nameof(OrganizacionesVisibles), BindingFlags.NonPublic | BindingFlags.Instance)!);
+        var contiene = typeof(Enumerable).GetMethods()
+            .Single(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(Guid));
+
+        foreach (var entidad in modelo.Model.GetEntityTypes().Where(e => e.BaseType is null && !e.IsOwned()))
+        {
+            var nombre = organizacionPorId.Contains(entidad.ClrType) ? "Id" : PropiedadOrganizacion;
+            var propiedad = entidad.ClrType.GetProperty(nombre);
+            if (propiedad is null || (propiedad.PropertyType != typeof(Guid) && propiedad.PropertyType != typeof(Guid?)))
+            {
+                continue;
+            }
+            var fila = Expression.Parameter(entidad.ClrType, "fila");
+            var columna = Expression.Property(fila, propiedad);
+            Expression visible = propiedad.PropertyType == typeof(Guid)
+                ? Expression.Call(contiene, visibles, columna)
+                : Expression.AndAlso(
+                    Expression.Property(columna, nameof(Nullable<Guid>.HasValue)),
+                    Expression.Call(contiene, visibles, Expression.Property(columna, nameof(Nullable<Guid>.Value))));
+            modelo.Entity(entidad.ClrType).HasQueryFilter(Expression.Lambda(Expression.OrElse(total, visible), fila));
+        }
+    }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

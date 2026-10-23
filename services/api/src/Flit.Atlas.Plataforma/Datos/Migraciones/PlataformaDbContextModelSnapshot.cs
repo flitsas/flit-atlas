@@ -88,8 +88,8 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 
                     b.Property<string>("AlcanceTipo")
                         .IsRequired()
-                        .HasMaxLength(12)
-                        .HasColumnType("character varying(12)")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("alcance_tipo");
 
                     b.Property<Guid?>("AsignadoPor")
@@ -118,6 +118,10 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .HasColumnType("uuid")
                         .HasColumnName("rol_id");
 
+                    b.Property<DateTimeOffset?>("VencimientoProcesadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("vencimiento_procesado_en");
+
                     b.Property<DateTimeOffset>("VigenteDesde")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("vigente_desde");
@@ -140,6 +144,10 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 
                     b.HasIndex("RolId")
                         .HasDatabaseName("ix_plataforma_asignacion_rol_rol_id");
+
+                    b.HasIndex("VigenteHasta")
+                        .HasDatabaseName("ix_plataforma_asignacion_rol_vigente_hasta")
+                        .HasFilter("vigente_hasta IS NOT NULL AND vencimiento_procesado_en IS NULL");
 
                     b.ToTable("plataforma_asignacion_rol", "atlas");
                 });
@@ -512,6 +520,38 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                     b.ToTable("plataforma_organizacion", "atlas");
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.Permiso", b =>
+                {
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("codigo");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Descripcion")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("Modulo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("modulo");
+
+                    b.HasKey("Codigo")
+                        .HasName("pk_plataforma_permiso");
+
+                    b.ToTable("plataforma_permiso", "atlas", t =>
+                        {
+                            t.HasComment("Proyección de los manifiestos de permisos del código; la escribe el migrador.");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.Persona", b =>
                 {
                     b.Property<Guid>("Id")
@@ -657,8 +697,8 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 
                     b.Property<string>("Tipo")
                         .IsRequired()
-                        .HasMaxLength(7)
-                        .HasColumnType("character varying(7)")
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)")
                         .HasColumnName("tipo");
 
                     b.HasKey("Id")
@@ -669,6 +709,29 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .HasDatabaseName("ix_plataforma_rol_codigo");
 
                     b.ToTable("plataforma_rol", "atlas");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.RolPermiso", b =>
+                {
+                    b.Property<Guid>("RolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rol_id");
+
+                    b.Property<string>("PermisoCodigo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("permiso_codigo");
+
+                    b.HasKey("RolId", "PermisoCodigo")
+                        .HasName("pk_plataforma_rol_permiso");
+
+                    b.HasIndex("PermisoCodigo")
+                        .HasDatabaseName("ix_plataforma_rol_permiso_permiso_codigo");
+
+                    b.ToTable("plataforma_rol_permiso", "atlas", t =>
+                        {
+                            t.HasComment("Proyección de la matriz rol × permiso del código; la escribe el migrador.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.SuscripcionPush", b =>
@@ -922,6 +985,23 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_plataforma_preferencia_notificacion_plataforma_persona_pers");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.RolPermiso", b =>
+                {
+                    b.HasOne("Flit.Atlas.Plataforma.Entidades.Permiso", null)
+                        .WithMany()
+                        .HasForeignKey("PermisoCodigo")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_plataforma_rol_permiso_plataforma_permiso_permiso_codigo");
+
+                    b.HasOne("Flit.Atlas.Plataforma.Entidades.Rol", null)
+                        .WithMany()
+                        .HasForeignKey("RolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_plataforma_rol_permiso_plataforma_rol_rol_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.SuscripcionPush", b =>

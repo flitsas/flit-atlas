@@ -1,12 +1,18 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using Flit.Atlas.Identidad;
+using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
-using Flit.Atlas.Identidad.Seguridad;
+using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Permisos;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -58,8 +64,11 @@ public sealed class EntornoApi : IAsyncLifetime
             .AddDbContext<IdentidadDbContext>(o => IdentidadDbContext.Configurar(o, cadena))
             .BuildServiceProvider();
         await using var alcance = servicios.CreateAsyncScope();
-        await alcance.ServiceProvider.GetRequiredService<PlataformaDbContext>().Database.MigrateAsync();
+        var plataforma = alcance.ServiceProvider.GetRequiredService<PlataformaDbContext>();
+        await plataforma.Database.MigrateAsync();
         await alcance.ServiceProvider.GetRequiredService<IdentidadDbContext>().Database.MigrateAsync();
+        // Lo mismo que hace el migrador después de las migraciones (ATLAS-ADR-0023).
+        await SembradorPermisos.SembrarAsync(plataforma, CatalogoPermisos.Crear(PermisosIdentidad.ManifiestosDelNucleo));
     }
 
     public async ValueTask DisposeAsync()
@@ -85,6 +94,7 @@ public sealed class EntornoApi : IAsyncLifetime
             {
                 // TestServer no trae IP remota: se simula un proxy de loopback para que X-Forwarded-For valga.
                 s.AddSingleton<IStartupFilter, IpDeLoopback>();
+                s.AddSingleton<IStartupFilter, IngresoDePrueba>();
                 if (reloj is not null)
                 {
                     s.AddSingleton(reloj);
@@ -98,32 +108,54 @@ public sealed class EntornoApi : IAsyncLifetime
             b.UseSetting(ExtensionesIdentidad.ClaveSimulado, simulado ? "true" : "false");
         });
 
-    /// <summary>
-    /// Grupo de Entra nuevo que otorga el rol provisional de administración de identidad (ATLAS-ADR-0022). Las
-    /// pruebas de varias clases lo piden a la vez: el rol se crea una sola vez.
-    /// </summary>
-    public async Task<Guid> GrupoAdministradorAsync(string? baseDeDatos = null)
+    /// <summary>Grupo de Entra nuevo que otorga <see cref="RolesAtlas.Superadmin"/> (administración de identidad y de roles).</summary>
+    public Task<Guid> GrupoAdministradorAsync(string? baseDeDatos = null) => GrupoConRolAsync(RolesAtlas.Superadmin, baseDeDatos);
+
+    /// <summary>Grupo de Entra nuevo que otorga un rol interno sembrado.</summary>
+    public async Task<Guid> GrupoConRolAsync(string rol, string? baseDeDatos = null)
     {
         var grupo = Guid.NewGuid();
         await using var plataforma = Plataforma(baseDeDatos);
-        var rol = await plataforma.Roles.FirstOrDefaultAsync(r => r.Codigo == PoliticasIdentidad.RolProvisional);
-        if (rol is null)
-        {
-            rol = new Rol { Codigo = PoliticasIdentidad.RolProvisional, Nombre = "Superadministrador", Tipo = TipoRol.Interno };
-            plataforma.Roles.Add(rol);
-            try
-            {
-                await plataforma.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                plataforma.ChangeTracker.Clear();
-                rol = await plataforma.Roles.SingleAsync(r => r.Codigo == PoliticasIdentidad.RolProvisional);
-            }
-        }
-        plataforma.MapeosGrupoEntra.Add(new MapeoGrupoEntra { GrupoId = grupo, GrupoNombre = "FLIT-Admin-Prueba", RolId = rol.Id });
+        var rolId = await plataforma.Roles.Where(r => r.Codigo == rol).Select(r => r.Id).SingleAsync();
+        plataforma.MapeosGrupoEntra.Add(new MapeoGrupoEntra { GrupoId = grupo, GrupoNombre = $"FLIT-Prueba-{rol}", RolId = rolId });
         await plataforma.SaveChangesAsync();
         return grupo;
+    }
+
+    /// <summary>
+    /// Persona externa de una organización cliente nueva, con su usuario y una asignación del rol externo (las cuentas
+    /// locales y la invitación llegan en la HU 1.5). Entra con <see cref="Navegador.EntrarComoAsync"/>.
+    /// </summary>
+    public async Task<Externo> ExternoAsync(
+        WebApplicationFactory<Program> api, string rol, DateTimeOffset vigenteHasta, string? baseDeDatos = null)
+    {
+        await using var plataforma = Plataforma(baseDeDatos);
+        var organizacion = new Organizacion { Nombre = $"Organismo Demo {Guid.NewGuid():N}", Tipo = TipoOrganizacion.Cliente };
+        var persona = new Persona
+        {
+            Tipo = TipoPersona.Externo,
+            OrganizacionId = organizacion.Id,
+            Nombre = "Externa Demo",
+            Correo = $"externa.{Guid.NewGuid():N}@ejemplo.com",
+        };
+        var rolId = await plataforma.Roles.Where(r => r.Codigo == rol).Select(r => r.Id).SingleAsync();
+        var asignacion = new AsignacionRol
+        {
+            PersonaId = persona.Id,
+            RolId = rolId,
+            OrganizacionId = organizacion.Id,
+            VigenteDesde = DateTimeOffset.UtcNow.AddMinutes(-1),
+            VigenteHasta = vigenteHasta,
+        };
+        plataforma.AddRange(organizacion, persona, asignacion);
+        await plataforma.SaveChangesAsync();
+
+        await using var alcance = api.Services.CreateAsyncScope();
+        var usuarios = alcance.ServiceProvider.GetRequiredService<UserManager<UsuarioAtlas>>();
+        var usuario = new UsuarioAtlas { PersonaId = persona.Id, UserName = persona.Correo, Email = persona.Correo, CreadoEn = DateTimeOffset.UtcNow };
+        var creado = await usuarios.CreateAsync(usuario);
+        Assert.True(creado.Succeeded);
+        return new Externo(usuario.Id, persona.Id, organizacion.Id, asignacion.Id);
     }
 
     public IdentidadDbContext Identidad(string? baseDeDatos = null)
@@ -142,6 +174,45 @@ public sealed class EntornoApi : IAsyncLifetime
             {
                 http.Connection.RemoteIpAddress ??= IPAddress.Loopback;
                 return siguiente(http);
+            });
+            next(app);
+        };
+    }
+
+    /// <summary>
+    /// Solo en pruebas: <c>POST /pruebas/entrar</c> con <c>{ usuarioId }</c> abre una sesión real del BFF (cookie y fila
+    /// en <c>identidad_sesion</c>) para un usuario existente, empleado o externo. Los externos aún no tienen cómo entrar
+    /// (HU 1.5).
+    /// </summary>
+    private sealed class IngresoDePrueba : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (http, siguiente) =>
+            {
+                if (!http.Request.Path.Equals(Navegador.RutaIngresoPrueba, StringComparison.Ordinal) || !HttpMethods.IsPost(http.Request.Method))
+                {
+                    await siguiente(http);
+                    return;
+                }
+                var pedido = await http.Request.ReadFromJsonAsync<PedidoIngresoPrueba>();
+                var usuarios = http.RequestServices.GetRequiredService<UserManager<UsuarioAtlas>>();
+                var usuario = (await usuarios.FindByIdAsync(pedido!.UsuarioId.ToString()))!;
+                var plataforma = http.RequestServices.GetRequiredService<PlataformaDbContext>();
+                var persona = await plataforma.Personas.SingleAsync(p => p.Id == usuario.PersonaId);
+                var ahora = http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+                var identidad = new ClaimsIdentity(ClaimsAtlas.EsquemaCookie, ClaimsAtlas.Nombre, ClaimsAtlas.Rol);
+                identidad.AddClaim(new Claim(ClaimsAtlas.Sub, usuario.Id.ToString()));
+                identidad.AddClaim(new Claim(ClaimsAtlas.PersonaId, persona.Id.ToString()));
+                identidad.AddClaim(new Claim(ClaimsAtlas.TipoPrincipal,
+                    persona.Tipo == TipoPersona.Externo ? ClaimsAtlas.TipoExterno : ClaimsAtlas.TipoEmpleado));
+                identidad.AddClaim(new Claim(ClaimsAtlas.OrganizacionId, persona.OrganizacionId.ToString()));
+                identidad.AddClaim(new Claim(ClaimsAtlas.Nombre, persona.Nombre));
+                identidad.AddClaim(new Claim(ClaimsAtlas.Proveedor, "prueba"));
+                identidad.AddClaim(new Claim(ClaimsAtlas.AuthTime, ahora.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
+                identidad.AddClaim(new Claim(ClaimsAtlas.SelloSeguridad, usuario.SecurityStamp ?? string.Empty));
+                await http.SignInAsync(ClaimsAtlas.EsquemaCookie, new ClaimsPrincipal(identidad), new AuthenticationProperties { IsPersistent = true });
+                http.Response.StatusCode = StatusCodes.Status204NoContent;
             });
             next(app);
         };
@@ -188,6 +259,13 @@ public sealed class Navegador(HttpClient http) : IDisposable
 
     public Task<HttpResponseMessage> GetAsync(string ruta) => EnviarAsync(HttpMethod.Get, ruta);
 
+    /// <summary>Ruta del ingreso de prueba (solo existe en <see cref="EntornoApi.Api"/>).</summary>
+    public const string RutaIngresoPrueba = "/pruebas/entrar";
+
+    /// <summary>Abre una sesión para un usuario existente (empleado o externo) con el ingreso de prueba.</summary>
+    public Task<HttpResponseMessage> EntrarComoAsync(Guid usuarioId) =>
+        EnviarAsync(HttpMethod.Post, RutaIngresoPrueba, JsonContent.Create(new PedidoIngresoPrueba(usuarioId)));
+
     public async Task<HttpResponseMessage> EnviarAsync(HttpMethod metodo, string ruta, HttpContent? cuerpo = null, bool csrf = true, string? origen = null)
     {
         using var peticion = new HttpRequestMessage(metodo, ruta) { Content = cuerpo };
@@ -227,6 +305,10 @@ public sealed class Navegador(HttpClient http) : IDisposable
 
     public void Dispose() => http.Dispose();
 }
+
+public sealed record PedidoIngresoPrueba(Guid UsuarioId);
+
+public sealed record Externo(Guid UsuarioId, Guid PersonaId, Guid OrganizacionId, Guid AsignacionId);
 
 /// <summary>Reloj real con un desfase que la prueba puede adelantar (p. ej. para vencer la ventana de reautenticación).</summary>
 public sealed class RelojDePrueba : TimeProvider

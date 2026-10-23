@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Permisos;
 using Flit.Atlas.ServiceDefaults;
 using Microsoft.EntityFrameworkCore;
 
@@ -88,15 +89,7 @@ public class IdentidadTests(EntornoApi entorno)
     [Fact]
     public async Task Los_roles_salen_de_los_grupos_de_Entra_y_se_quitan_al_salir_del_grupo()
     {
-        var grupo = Guid.NewGuid();
-        var codigo = $"atlas.prueba_{Guid.NewGuid():N}";
-        await using (var plataforma = entorno.Plataforma())
-        {
-            var rol = new Rol { Codigo = codigo, Nombre = "Rol de prueba", Tipo = TipoRol.Interno };
-            plataforma.Roles.Add(rol);
-            plataforma.MapeosGrupoEntra.Add(new MapeoGrupoEntra { GrupoId = grupo, GrupoNombre = "FLIT-Prueba", RolId = rol.Id });
-            await plataforma.SaveChangesAsync(Ct);
-        }
+        var grupo = await entorno.GrupoConRolAsync(RolesAtlas.Desarrollador);
         await using var api = entorno.Api();
         using var navegador = Navegador.De(api);
         var correo = CorreoNuevo();
@@ -106,8 +99,12 @@ public class IdentidadTests(EntornoApi entorno)
         await navegador.EntrarSimuladoAsync(correo, "Con Grupo");
         var sinGrupo = await (await navegador.GetAsync("/api/v1/plataforma/yo")).Content.ReadFromJsonAsync<EndpointsIdentidad.Yo>(Ct);
 
-        Assert.Equal([codigo], conGrupo!.Roles);
-        Assert.Empty(sinGrupo!.Roles);
+        // Todo empleado tiene atlas.lector; el grupo suma atlas.desarrollador y sus permisos (ATLAS-ADR-0023).
+        Assert.Equal([RolesAtlas.Desarrollador, RolesAtlas.Lector], conGrupo!.Roles);
+        Assert.Contains("atlas.contratos.ver_internos", conGrupo.Permisos);
+        Assert.Equal([RolesAtlas.Lector], sinGrupo!.Roles);
+        Assert.DoesNotContain("atlas.contratos.ver_internos", sinGrupo.Permisos);
+        Assert.Contains("atlas.catalogo.ver", sinGrupo.Permisos);
     }
 
     [Fact]

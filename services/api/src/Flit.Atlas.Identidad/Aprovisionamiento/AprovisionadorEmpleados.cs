@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
@@ -252,22 +253,38 @@ public sealed class AprovisionadorEmpleados(
             .Where(a => a.PersonaId == personaId && a.Origen == OrigenAsignacion.GrupoEntra)
             .ToListAsync(ct);
 
-        foreach (var sobrante in actuales.Where(a => !rolesDeGrupos.Contains(a.RolId)))
+        var sobrantes = actuales.Where(a => !rolesDeGrupos.Contains(a.RolId)).ToList();
+        var nuevas = rolesDeGrupos.Where(r => actuales.All(a => a.RolId != r)).Select(rolId => new AsignacionRol
+        {
+            PersonaId = personaId,
+            RolId = rolId,
+            OrganizacionId = organizacionId,
+            VigenteDesde = ahora,
+            Origen = OrigenAsignacion.GrupoEntra,
+        }).ToList();
+        if (sobrantes.Count == 0 && nuevas.Count == 0)
+        {
+            return;
+        }
+
+        // Los cambios que vienen de Entra también quedan en la auditoría (HU 1.4), con el sistema como actor.
+        var ids = sobrantes.Concat(nuevas).Select(a => a.RolId).ToList();
+        var codigos = await plataforma.Roles.Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Codigo, ct);
+        foreach (var sobrante in sobrantes)
         {
             plataforma.AsignacionesRol.Remove(sobrante);
+            plataforma.Auditoria.Add(EventoGrupo(AccionesAuditoriaRoles.AsignacionRetirada, sobrante, codigos, ahora));
         }
-        foreach (var rolId in rolesDeGrupos.Where(r => actuales.All(a => a.RolId != r)))
+        foreach (var nueva in nuevas)
         {
-            plataforma.AsignacionesRol.Add(new AsignacionRol
-            {
-                PersonaId = personaId,
-                RolId = rolId,
-                OrganizacionId = organizacionId,
-                VigenteDesde = ahora,
-                Origen = OrigenAsignacion.GrupoEntra,
-            });
+            plataforma.AsignacionesRol.Add(nueva);
+            plataforma.Auditoria.Add(EventoGrupo(AccionesAuditoriaRoles.AsignacionCreada, nueva, codigos, ahora));
         }
     }
+
+    private static EventoAuditoria EventoGrupo(string accion, AsignacionRol asignacion, Dictionary<Guid, string> codigos, DateTimeOffset ahora) =>
+        AdministracionRoles.CrearEvento(ahora, accion, "asignacion_rol", asignacion.Id, asignacion.OrganizacionId, null,
+            AdministracionRoles.DatosAsignacion(asignacion, codigos.GetValueOrDefault(asignacion.RolId, "?")));
 
     private Task<List<string>> RolesVigentesAsync(Guid personaId, DateTimeOffset ahora, CancellationToken ct) =>
         plataforma.AsignacionesRol

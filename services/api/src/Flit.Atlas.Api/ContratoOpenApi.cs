@@ -1,6 +1,8 @@
+using System.Text.Json.Nodes;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -37,7 +39,8 @@ internal static class ContratoOpenApi
     private static readonly (string Nombre, string Descripcion)[] Etiquetas =
     [
         ("Identidad", "Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022)."),
-        ("Plataforma", "Datos del usuario en sesión y de la propia API."),
+        ("Plataforma", "Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API."),
+        ("Permisos", "Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023)."),
     ];
 
     public static IServiceCollection AgregarContratoOpenApi(this IServiceCollection servicios) =>
@@ -49,11 +52,8 @@ internal static class ContratoOpenApi
                 DescribirDocumento(documento);
                 return Task.CompletedTask;
             });
-            o.AddOperationTransformer((operacion, contexto, _) =>
-            {
-                DescribirSeguridad(operacion, contexto);
-                return Task.CompletedTask;
-            });
+            o.AddOperationTransformer(async (operacion, contexto, _) =>
+                DescribirSeguridad(operacion, contexto, await PermisosAsync(contexto).ConfigureAwait(false)));
         });
 
     public static WebApplication MapContratoOpenApi(this WebApplication app, string ambiente)
@@ -101,11 +101,26 @@ internal static class ContratoOpenApi
         };
     }
 
+    /// <summary>Permisos del manifiesto que exigen las políticas de la operación (ATLAS-ADR-0023).</summary>
+    private static async Task<IReadOnlyList<string>> PermisosAsync(OpenApiOperationTransformerContext contexto)
+    {
+        var proveedor = contexto.ApplicationServices.GetRequiredService<IAuthorizationPolicyProvider>();
+        var permisos = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var politica in contexto.Description.ActionDescriptor.EndpointMetadata.OfType<IAuthorizeData>()
+            .Select(a => a.Policy).Where(p => !string.IsNullOrEmpty(p)))
+        {
+            var definida = await proveedor.GetPolicyAsync(politica!).ConfigureAwait(false);
+            permisos.UnionWith(definida?.Requirements.OfType<RequisitoPermiso>().Select(r => r.Permiso) ?? []);
+        }
+        return [.. permisos];
+    }
+
     /// <summary>
     /// Seguridad y respuestas comunes de cada operación, deducidas de su metadata: las que piden autorización exigen la
-    /// cookie (401 sin sesión) y las que cambian estado exigen la cabecera antifalsificación (403 sin ella).
+    /// cookie (401 sin sesión), las que cambian estado exigen la cabecera antifalsificación (403 sin ella) y las que
+    /// exigen permisos los declaran en <c>x-atlas-permisos</c> (403 sin ellos).
     /// </summary>
-    private static void DescribirSeguridad(OpenApiOperation operacion, OpenApiOperationTransformerContext contexto)
+    private static void DescribirSeguridad(OpenApiOperation operacion, OpenApiOperationTransformerContext contexto, IReadOnlyList<string> permisos)
     {
         var metadata = contexto.Description.ActionDescriptor.EndpointMetadata;
         var requiereSesion = metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any();
@@ -129,6 +144,13 @@ internal static class ContratoOpenApi
         var reautenticacion = metadata.OfType<MetadatoReautenticacion>().Any();
         var conPolitica = metadata.OfType<IAuthorizeData>().Any(a => !string.IsNullOrEmpty(a.Policy) || !string.IsNullOrEmpty(a.Roles));
 
+        if (permisos.Count > 0)
+        {
+            // La PWA y la matriz leen aquí qué permiso pide cada operación.
+            operacion.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+            operacion.Extensions["x-atlas-permisos"] = new JsonNodeExtension(new JsonArray([.. permisos.Select(p => (JsonNode)p)]));
+        }
+
         operacion.Responses ??= [];
         if (requiereSesion)
         {
@@ -146,7 +168,11 @@ internal static class ContratoOpenApi
             {
                 motivos.Add($"falta la cabecera {EndpointsIdentidad.CabeceraCsrf} o el Origin no es el mismo host");
             }
-            if (conPolitica)
+            if (permisos.Count > 0)
+            {
+                motivos.Add($"la sesión no tiene el permiso {string.Join(" ni ", permisos)}");
+            }
+            else if (conPolitica)
             {
                 motivos.Add("la sesión no tiene el permiso que exige la operación");
             }

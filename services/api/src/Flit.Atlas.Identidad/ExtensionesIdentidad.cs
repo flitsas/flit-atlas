@@ -1,10 +1,13 @@
 using System.ComponentModel;
 using System.Security.Cryptography.X509Certificates;
 using Flit.Atlas.Identidad.Aprovisionamiento;
+using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Plataforma.Datos;
+using Flit.Atlas.Plataforma.Permisos;
 using Flit.Atlas.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -85,6 +88,7 @@ public static class ExtensionesIdentidad
         servicios.AddScoped<VerificadorContrasena>();
         LimitacionTasa.Agregar(servicios);
         servicios.AddSingleton(new ProveedoresHabilitados(entraHabilitado, simulado));
+        AgregarAutorizacion(servicios);
 
         var autenticacion = servicios
             .AddAuthentication(o =>
@@ -107,6 +111,22 @@ public static class ExtensionesIdentidad
 
         PoliticasIdentidad.Configurar(servicios.AddAuthorizationBuilder());
         return builder;
+    }
+
+    /// <summary>
+    /// Roles y permisos (HU 1.4, ATLAS-ADR-0023): manifiesto de la identidad, permisos efectivos de la sesión calculados en
+    /// el servidor en cada petición, alcance de datos de la sesión (predicado obligatorio y RLS), administración de roles y
+    /// el vigilante de vencimientos.
+    /// </summary>
+    private static void AgregarAutorizacion(IServiceCollection servicios)
+    {
+        servicios.AgregarManifiestoPermisos(PermisosIdentidad.Manifiesto);
+        servicios.AddScoped<IPermisosDeSesion, PermisosDeSesion>();
+        servicios.Replace(ServiceDescriptor.Scoped<IAlcanceDatos, AlcanceDatosDeSesion>());
+        servicios.AddScoped<AdministracionRoles>();
+        servicios.AddOptions<OpcionesVencimientos>().BindConfiguration(OpcionesVencimientos.Seccion);
+        servicios.AddSingleton<VigilanteVencimientos>();
+        servicios.AddHostedService(sp => sp.GetRequiredService<VigilanteVencimientos>());
     }
 
     /// <summary>

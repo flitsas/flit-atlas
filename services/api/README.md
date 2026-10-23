@@ -58,13 +58,41 @@ dotnet test --solution Flit.Atlas.slnx      # las pruebas de Plataforma necesita
 
 - **Dispositivos conectados**: cada sesión guarda el navegador resumido, la última IP (`inet`, `@pii`, nunca en los logs), cuándo se creó y su último uso. `GET /api/v1/identidad/sesiones` las lista y marca la actual; `DELETE /api/v1/identidad/sesiones/{id}` cierra una (la actual equivale a salir); `POST /api/v1/identidad/sesiones/cerrar-otras` cierra las demás.
 - **Sello de seguridad**: cada sesión guarda el `SecurityStamp` del usuario y se compara en cada petición; si cambió, la sesión se revoca. Para cambiar roles o vencer accesos (HU 1.4) se llama a `IInvalidadorSesiones.InvalidarSesionesAsync(personaId, MotivosInvalidacion.CambioDeRoles, actorPersonaId)` **después** de guardar el cambio.
-- **Administración** (provisional: rol `atlas.superadmin` en la política `PoliticasIdentidad.Administrar` hasta la HU 1.4): `POST /api/v1/identidad/admin/personas/{personaId}/sesiones/cerrar`, `…/suspender` y `…/reactivar`. Una persona suspendida no vuelve a entrar.
+- **Administración** (permiso `atlas.identidad.administrar` en la política `PoliticasIdentidad.Administrar`, HU 1.4): `POST /api/v1/identidad/admin/personas/{personaId}/sesiones/cerrar`, `…/suspender` y `…/reactivar`. Una persona suspendida no vuelve a entrar.
 - **Reautenticación**: `.RequiereReautenticacion()` exige un ingreso de menos de 10 minutos; si no, 401 problem+json con `codigo = "reautenticacion_requerida"`. La PWA lleva a `GET /api/v1/identidad/entrar/microsoft?reautenticar=true&volver=<ruta>` (Entra pide las credenciales con `prompt=login`). Se aplica a cerrar otros dispositivos y a toda la administración.
 - **Sesión nueva en cada ingreso**: volver a entrar desde un navegador con sesión crea otra y revoca la anterior (`reemplazada_por_ingreso`).
 - **Bloqueo progresivo** (cuentas locales, HU 1.5): `VerificadorContrasena.VerificarAsync` usa el bloqueo de Identity: 10 fallos seguidos bloquean 15 min, y cada bloqueo en 24 h duplica la duración (hasta 24 h). Una cuenta bloqueada tampoco entra por Microsoft.
 - **Límite de tasa** en `/api/v1/identidad/**`, `/api/auth/**` y `/api/v1/plataforma/yo`, por IP del cliente (tras los proxies confiables) y por usuario: 429 con `Retry-After`. Por réplica y en memoria. Variables: `Identidad__LimiteTasa__IngresoPorIp` (20), `Identidad__LimiteTasa__PorIp` (120), `Identidad__LimiteTasa__PorUsuario` (60), `Identidad__LimiteTasa__Ventana` (`00:01:00`).
 - **Eventos de seguridad**: `atlas.identidad_evento_seguridad` (solo inserción) y, en la misma transacción, `atlas.plataforma_auditoria` como `identidad.<tipo>`: inicio, rechazo, fallo, bloqueo, cierre, cierre remoto, invalidación, suspensión, reactivación, reautenticación (pedida y hecha) y límite de tasa.
 - Las sesiones abiertas antes de la migración `SesionesYSeguridad` no tienen sello: cada persona entra de nuevo una vez.
+
+## Roles y permisos (HU 1.4, ATLAS-ADR-0023)
+
+- **Fuente única en el código**: cada módulo declara un `ManifiestoPermisos` con sus permisos `atlas.<modulo>.<accion>` y los roles que reciben cada uno; los roles del §7 están en `RolesAtlas`. La lista base del §7.4 ya está en `ManifiestosNucleo`. `atlas.superadmin` recibe todo; todo empleado activo tiene `atlas.lector`. El migrador aplica roles y matriz a `plataforma_rol`, `plataforma_permiso` y `plataforma_rol_permiso` (idempotente).
+- **Matriz**: `GET /api/v1/plataforma/permisos/matriz` (requiere `atlas.roles.ver`) y [`docs/permisos/matriz-rol-permiso.md`](../../docs/permisos/matriz-rol-permiso.md), generado; `MatrizPermisosTests` falla si no coincide. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.MatrizPermisosTests`.
+- **Permisos efectivos**: se calculan en el servidor en cada petición con las asignaciones vigentes (hora actual), nunca en la cookie. `GET /api/v1/plataforma/yo` trae `roles` y `permisos` (listas ordenadas de códigos); la PWA filtra la navegación con `permisos`. Un rol vencido deja de valer en la petición siguiente; el `VigilanteVencimientos` (cada minuto, `Identidad__Vencimientos__Intervalo`) lo audita e invalida las sesiones.
+- **Asignaciones** con organización, alcance (`global`, `organizacion`, `ambiente` y los que agreguen los manifiestos: `aplicativo`, `paquete`, `documento`) y vigencia; manuales, de grupos de Entra (se suman) o de invitación (HU 1.5). Un rol externo exige persona externa de la misma organización y vencimiento de máximo 90 días.
+- **Administración** (`atlas.roles.ver` para leer; `atlas.roles.gestionar` y reautenticación para cambiar; todo auditado): `GET /api/v1/plataforma/roles`, `GET|POST /api/v1/plataforma/personas/{personaId}/asignaciones`, `DELETE /api/v1/plataforma/asignaciones/{id}` (invalida las sesiones de la persona; las de grupo responden 409), `GET|POST /api/v1/plataforma/mapeos-grupos-entra`, `DELETE /api/v1/plataforma/mapeos-grupos-entra/{id}`.
+- **Aislamiento**: predicado obligatorio (filtro global de EF Core en toda entidad con `OrganizacionId`) y RLS forzada en `plataforma_organizacion`, `plataforma_persona`, `plataforma_asignacion_rol`, `plataforma_invitacion` y `plataforma_auditoria`, con las variables `atlas.alcance_total` y `atlas.organizaciones` que fija `InterceptorAlcanceDatos` en cada conexión. Un externo ve solo su organización. Sin las variables (p. ej. `psql` como `flit_atlas`) no se ve ninguna fila: fija antes `SELECT set_config('atlas.alcance_total', 'on', false);`.
+
+Un módulo nuevo declara sus permisos así (y lo registra en atlas-api y en el migrador):
+
+```csharp
+public static class PermisosHola
+{
+    public const string Ver = "atlas.hola.ver";
+
+    public static ManifiestoPermisos Manifiesto { get; } = new("hola", "Hola",
+    [
+        new(Ver, "Ver los saludos.", RolesAtlas.Lector, RolesAtlas.Integrador),
+    ], tiposAlcance: ["saludo"]);
+}
+
+servicios.AgregarManifiestoPermisos(PermisosHola.Manifiesto);          // en el registro del módulo
+rutas.MapGet("/api/v1/hola", ...).RequierePermiso(PermisosHola.Ver);  // en cada endpoint
+```
+
+Sus tablas con `organizacion_id` llaman a `AplicarPredicadoDeOrganizacion` en `OnModelCreating` y, en su migración, activan RLS con `FORCE` y la política `atlas.plataforma_organizacion_visible(organizacion_id)`. `AutorizacionTests` falla si un endpoint nuevo no declara permiso (salvo que se agregue a la lista de públicos o de solo sesión).
 
 ## Contratos (HU 1.7)
 

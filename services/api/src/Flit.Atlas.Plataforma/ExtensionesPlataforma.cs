@@ -1,6 +1,7 @@
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Mensajeria;
 using Flit.Atlas.Plataforma.Notificaciones;
+using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -11,9 +12,10 @@ namespace Flit.Atlas.Plataforma;
 public static class ExtensionesPlataforma
 {
     /// <summary>
-    /// Registra el <see cref="PlataformaDbContext"/>, el publicador de la outbox y el centro de notificaciones con Web
-    /// Push. Requiere un <c>IConnection</c> de RabbitMQ en el contenedor (lo registra <c>AddRabbitMQClient</c> en
-    /// atlas-api).
+    /// Registra el <see cref="PlataformaDbContext"/>, el publicador de la outbox, el centro de notificaciones con Web
+    /// Push y los permisos (manifiestos del núcleo, catálogo, políticas por permiso y calculadora de permisos efectivos,
+    /// ATLAS-ADR-0023). Requiere un <c>IConnection</c> de RabbitMQ en el contenedor (lo registra <c>AddRabbitMQClient</c>
+    /// en atlas-api).
     /// </summary>
     public static IServiceCollection AgregarPlataforma(
         this IServiceCollection servicios, string cadenaConexion, Action<OpcionesMensajeria>? configurar = null)
@@ -44,6 +46,9 @@ public static class ExtensionesPlataforma
         // el envío no duplica el aviso: el service worker usa el id de la notificación como tag.
         servicios.AddHttpClient<EnviadorPush>();
         servicios.AddScoped<ServicioNotificaciones>();
+
+        // Roles y permisos (HU 1.4).
+        servicios.AgregarPermisos();
         return servicios;
     }
 }

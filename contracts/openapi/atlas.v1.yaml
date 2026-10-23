@@ -14,7 +14,7 @@ paths:
       tags:
         - Plataforma
       summary: Usuario en sesión
-      description: 'Persona, organización, proveedor de ingreso y roles de la sesión actual.'
+      description: 'Persona, organización, proveedor de ingreso, roles vigentes y permisos efectivos de la sesión actual. Roles y permisos se calculan en el servidor en cada petición con las asignaciones vigentes: un rol vencido o retirado ya no aparece (ATLAS-ADR-0023).'
       operationId: ObtenerUsuarioActual
       responses:
         '200':
@@ -352,7 +352,7 @@ paths:
       tags:
         - Identidad
       summary: Cerrar todas las sesiones de una persona
-      description: 'Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Cambia el sello de seguridad de la persona y revoca todas sus sesiones, sin suspenderla. Exige reautenticación.'
+      description: 'Administración: requiere atlas.identidad.administrar. Cambia el sello de seguridad de la persona y revoca todas sus sesiones, sin suspenderla. Exige reautenticación.'
       operationId: CerrarSesionesDePersona
       parameters:
         - name: personaId
@@ -374,7 +374,7 @@ paths:
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
-          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso que exige la operación.'
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
         '429':
           description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
           headers:
@@ -405,12 +405,14 @@ paths:
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
   '/api/v1/identidad/admin/personas/{personaId}/suspender':
     post:
       tags:
         - Identidad
       summary: Suspender a una persona
-      description: 'Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Marca la persona como suspendida, invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige reautenticación.'
+      description: 'Administración: requiere atlas.identidad.administrar. Marca la persona como suspendida, invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige reautenticación.'
       operationId: SuspenderPersona
       parameters:
         - name: personaId
@@ -430,7 +432,7 @@ paths:
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
-          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso que exige la operación.'
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
         '429':
           description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
           headers:
@@ -461,12 +463,14 @@ paths:
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
   '/api/v1/identidad/admin/personas/{personaId}/reactivar':
     post:
       tags:
         - Identidad
       summary: Reactivar a una persona
-      description: 'Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Devuelve a activa una persona suspendida; vuelve a entrar con un ingreso nuevo. Exige reautenticación.'
+      description: 'Administración: requiere atlas.identidad.administrar. Devuelve a activa una persona suspendida; vuelve a entrar con un ingreso nuevo. Exige reautenticación.'
       operationId: ReactivarPersona
       parameters:
         - name: personaId
@@ -484,7 +488,7 @@ paths:
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
-          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso que exige la operación.'
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
         '429':
           description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
           headers:
@@ -515,6 +519,285 @@ paths:
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
+  /api/v1/plataforma/roles:
+    get:
+      tags:
+        - Permisos
+      summary: Roles de Atlas
+      description: 'Roles internos, externos e implícitos con los permisos que concede cada uno. Requiere atlas.roles.ver.'
+      operationId: ListarRoles
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RolConPermisos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+  /api/v1/plataforma/permisos/matriz:
+    get:
+      tags:
+        - Permisos
+      summary: Matriz rol × permiso
+      description: 'Matriz generada desde los manifiestos de permisos del código: los roles (en el orden de las columnas) y, por módulo, cada permiso con los roles que lo conceden. atlas.superadmin los recibe todos. Es la misma de docs/permisos/matriz-rol-permiso.md. Requiere atlas.roles.ver.'
+      operationId: ObtenerMatrizDePermisos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatrizPermisos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+  '/api/v1/plataforma/asignaciones/{id}':
+    delete:
+      tags:
+        - Permisos
+      summary: Retirar una asignación de rol
+      description: 'Retira una asignación manual o de invitación, lo deja en la auditoría e invalida las sesiones de la persona. Las de grupos de Entra responden 409: se quitan en Entra o eliminando el mapeo. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: RetirarAsignacion
+      parameters:
+        - name: id
+          in: path
+          description: Id de la asignación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
+  '/api/v1/plataforma/personas/{personaId}/asignaciones':
+    get:
+      tags:
+        - Permisos
+      summary: Roles asignados a una persona
+      description: 'Asignaciones manuales, de grupos de Entra y de invitaciones, con alcance y vigencia. Por defecto solo las vigentes. No incluye atlas.lector (lo tiene todo empleado) ni los roles implícitos. Requiere atlas.roles.ver.'
+      operationId: ListarAsignacionesDePersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: todas
+          in: query
+          description: true para incluir las vencidas y las que aún no empiezan.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AsignacionVista'
+        '404':
+          description: Not Found
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+    post:
+      tags:
+        - Permisos
+      summary: Asignar un rol a una persona
+      description: 'Suma un rol con organización, alcance y vigencia a las asignaciones de la persona (las de grupos de Entra no cambian). Un rol externo solo va a una persona externa, en su organización y con vencimiento de máximo 90 días; un rol interno, a un empleado. Queda en la auditoría. Los permisos cambian desde la siguiente petición de la persona. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: AsignarRol
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Rol, organización, alcance y vigencia de la asignación.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAsignacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsignacionVista'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
+  /api/v1/plataforma/mapeos-grupos-entra:
+    get:
+      tags:
+        - Permisos
+      summary: Grupos de Entra que otorgan roles
+      description: Mapeos grupo de Entra → rol interno que se aplican en cada ingreso de un empleado. Requiere atlas.roles.ver.
+      operationId: ListarMapeosDeGruposEntra
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MapeoGrupoVista'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+    post:
+      tags:
+        - Permisos
+      summary: Mapear un grupo de Entra a un rol
+      description: 'Los miembros del grupo reciben el rol interno en su siguiente ingreso, sumado a sus asignaciones manuales. Queda en la auditoría. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: CrearMapeoDeGrupoEntra
+      requestBody:
+        description: Grupo de Entra y rol interno que otorga.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudMapeoGrupo'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapeoGrupoVista'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
+  '/api/v1/plataforma/mapeos-grupos-entra/{id}':
+    delete:
+      tags:
+        - Permisos
+      summary: Eliminar un mapeo de grupo de Entra
+      description: 'Si ningún otro grupo otorga el mismo rol, retira ya ese rol a quienes lo tenían por grupo e invalida sus sesiones; si otro grupo lo otorga, se resuelve en el siguiente ingreso. Queda en la auditoría. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: EliminarMapeoDeGrupoEntra
+      parameters:
+        - name: id
+          in: path
+          description: Id del mapeo.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
   /api/v1/plataforma/banderas:
     get:
       tags:
@@ -752,6 +1035,81 @@ paths:
           csrfAtlas: [ ]
 components:
   schemas:
+    AlcanceVista:
+      required:
+        - tipo
+        - id
+      type: object
+      properties:
+        tipo:
+          type: string
+          description: Tipo de alcance.
+        id:
+          type:
+            - 'null'
+            - string
+          description: Id del recurso; vacío si es global.
+      description: 'Alcance de una asignación: global o un recurso (organizacion, aplicativo, paquete, documento, ambiente…).'
+    AsignacionVista:
+      required:
+        - id
+        - personaId
+        - rol
+        - rolNombre
+        - tipoRol
+        - organizacionId
+        - alcance
+        - vigenteDesde
+        - vigenteHasta
+        - origen
+        - vigente
+        - asignadoPor
+        - creadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        personaId:
+          type: string
+          format: uuid
+        rol:
+          type: string
+        rolNombre:
+          type: string
+        tipoRol:
+          type: string
+          description: interno o externo.
+        organizacionId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        alcance:
+          $ref: '#/components/schemas/AlcanceVista'
+        vigenteDesde:
+          type: string
+          format: date-time
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        origen:
+          type: string
+          description: 'manual, grupo_entra o invitacion.'
+        vigente:
+          type: boolean
+          description: Si concede permisos en este momento (empezó y no ha vencido).
+        asignadoPor:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        creadoEn:
+          type: string
+          format: date-time
+      description: 'Asignación de un rol a una persona, con su organización, alcance y vigencia.'
     BajaSuscripcionDto:
       required:
         - endpoint
@@ -805,6 +1163,18 @@ components:
             - 'null'
             - string
       description: Llave pública VAPID para suscribir el dispositivo; habilitado es falso si el ambiente no tiene llaves.
+    ErrorRoles:
+      required:
+        - error
+        - mensaje
+      type: object
+      properties:
+        error:
+          type: string
+          description: Código estable del error.
+        mensaje:
+          type: string
+      description: Error de una operación de administración de roles.
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -837,6 +1207,60 @@ components:
             type: array
             items:
               type: string
+    MapeoGrupoVista:
+      required:
+        - id
+        - grupoId
+        - grupoNombre
+        - rol
+        - creadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        grupoId:
+          type: string
+          format: uuid
+        grupoNombre:
+          type: string
+        rol:
+          type: string
+        creadoEn:
+          type: string
+          format: date-time
+      description: Grupo de Entra ID que otorga un rol interno a sus miembros al entrar.
+    MatrizPermisos:
+      required:
+        - roles
+        - modulos
+      type: object
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RolMatriz'
+        modulos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuloMatriz'
+      description: Matriz rol × permiso generada desde los manifiestos de permisos del código (ATLAS-ADR-0023).
+    ModuloMatriz:
+      required:
+        - id
+        - nombre
+        - permisos
+      type: object
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        permisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermisoMatriz'
+      description: Módulo y los permisos que declara en su manifiesto.
     NotificacionDto:
       required:
         - id
@@ -870,6 +1294,22 @@ components:
             - string
           format: date-time
       description: Notificación del centro de notificaciones.
+    PermisoMatriz:
+      required:
+        - codigo
+        - descripcion
+        - roles
+      type: object
+      properties:
+        codigo:
+          type: string
+        descripcion:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+      description: Permiso atlas.<modulo>.<accion> y los roles que lo conceden.
     PreferenciaCanalDto:
       required:
         - canal
@@ -943,6 +1383,54 @@ components:
             - string
           format: int32
       description: Cuántas sesiones activas se cerraron.
+    RolConPermisos:
+      required:
+        - codigo
+        - nombre
+        - tipo
+        - descripcion
+        - asignable
+        - permisos
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: Código del rol (atlas.* o ext.*).
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'interno, externo o implicito.'
+        descripcion:
+          type: string
+        asignable:
+          type: boolean
+          description: Si se puede asignar a mano (los implícitos y atlas.lector no).
+        permisos:
+          type: array
+          items:
+            type: string
+      description: Rol de Atlas con los permisos que concede según los manifiestos del código.
+    RolMatriz:
+      required:
+        - codigo
+        - nombre
+        - tipo
+        - descripcion
+        - asignable
+      type: object
+      properties:
+        codigo:
+          type: string
+        nombre:
+          type: string
+        tipo:
+          type: string
+        descripcion:
+          type: string
+        asignable:
+          type: boolean
+      description: 'Rol de Atlas: interno (§7.2), externo (§7.3) o implícito por propiedad.'
     SesionDispositivo:
       required:
         - id
@@ -975,6 +1463,57 @@ components:
         actual:
           type: boolean
       description: Sesión activa del usuario en un dispositivo («dispositivos conectados»). La IP es un dato personal.
+    SolicitudAsignacion:
+      required:
+        - rol
+        - organizacionId
+        - alcance
+        - vigenteDesde
+        - vigenteHasta
+      type: object
+      properties:
+        rol:
+          type: string
+          description: Código del rol (atlas.* o ext.*).
+        organizacionId:
+          type:
+            - 'null'
+            - string
+          description: 'Organización de la asignación; por defecto, la de la persona.'
+          format: uuid
+        alcance:
+          oneOf:
+            - type: 'null'
+            - description: 'Alcance; por defecto, global.'
+              $ref: '#/components/schemas/AlcanceVista'
+        vigenteDesde:
+          type:
+            - 'null'
+            - string
+          description: 'Desde cuándo vale; por defecto, ahora.'
+          format: date-time
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo vale; obligatoria para roles externos.
+          format: date-time
+      description: Rol que se asigna a una persona. Un rol externo exige vencimiento (máximo 90 días) y queda en la organización de la persona.
+    SolicitudMapeoGrupo:
+      required:
+        - grupoId
+        - grupoNombre
+        - rol
+      type: object
+      properties:
+        grupoId:
+          type: string
+          format: uuid
+        grupoNombre:
+          type: string
+        rol:
+          type: string
+      description: Grupo de Entra ID (object id y nombre) y el rol interno que otorga.
     SuscripcionDto:
       required:
         - endpoint
@@ -1020,6 +1559,7 @@ components:
         - organizacionId
         - proveedor
         - roles
+        - permisos
       type: object
       properties:
         sub:
@@ -1041,7 +1581,13 @@ components:
           type: array
           items:
             type: string
-      description: 'Usuario de la sesión actual: persona, organización, proveedor con el que entró y roles de Atlas.'
+          description: 'Códigos de los roles vigentes en este momento, ordenados; incluye atlas.lector de todo empleado.'
+        permisos:
+          type: array
+          items:
+            type: string
+          description: 'Permisos efectivos (atlas.<modulo>.<accion>) en este momento, ordenados: la PWA filtra la navegación con ellos. Se recalculan en cada petición.'
+      description: 'Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.'
   securitySchemes:
     sesionAtlas:
       type: apiKey
@@ -1057,4 +1603,6 @@ tags:
   - name: Identidad
     description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022).'
   - name: Plataforma
-    description: Datos del usuario en sesión y de la propia API.
+    description: Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API.
+  - name: Permisos
+    description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'

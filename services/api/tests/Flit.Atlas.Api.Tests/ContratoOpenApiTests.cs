@@ -25,7 +25,7 @@ public class ContratoOpenApiTests
     /// Tiene el proveedor simulado encendido a propósito: no debe aparecer en el contrato. No toca la base, Redis ni
     /// RabbitMQ: generar el documento no abre conexiones.
     /// </summary>
-    private static WebApplicationFactory<Program> ApiComoQa(string ambiente = "local", Action<IWebHostBuilder>? extra = null) =>
+    internal static WebApplicationFactory<Program> ApiComoQa(string ambiente = "local", Action<IWebHostBuilder>? extra = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("ConnectionStrings:atlas", "Host=127.0.0.1;Port=1;Database=atlas;Username=x;Password=x");
