@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Aprovisionamiento;
 using Flit.Atlas.Identidad.Entra;
@@ -22,6 +23,7 @@ public static class EndpointsIdentidad
 
     public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos);
 
+    [Description("Usuario de la sesión actual: persona, organización, proveedor con el que entró y roles de Atlas.")]
     public sealed record Yo(
         Guid Sub, Guid PersonaId, string Nombre, string TipoPrincipal, Guid OrganizacionId, string Proveedor,
         IReadOnlyList<string> Roles);
@@ -32,15 +34,25 @@ public static class EndpointsIdentidad
         var proveedores = rutas.ServiceProvider.GetService(typeof(ProveedoresHabilitados)) as ProveedoresHabilitados
             ?? throw new InvalidOperationException("Falta AgregarIdentidad en el arranque.");
 
-        var identidad = rutas.MapGroup("/api/v1/identidad");
+        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad");
 
-        identidad.MapGet("/proveedores", () => new { microsoft = proveedores.Microsoft, simulado = proveedores.Simulado });
+        identidad.MapGet("/proveedores", () => proveedores)
+            .WithName("ListarProveedoresDeIngreso")
+            .WithSummary("Proveedores de ingreso habilitados")
+            .WithDescription("Qué botones de ingreso muestra la PWA en este ambiente. No requiere sesión.");
 
         if (proveedores.Microsoft)
         {
             // Navegación completa del navegador (no fetch): termina en RutaRetornoEntra y vuelve a la PWA.
-            identidad.MapGet("/entrar/microsoft", (string? volver) =>
-                Results.Challenge(new AuthenticationProperties { RedirectUri = RutaLocal(volver) }, [ClaimsAtlas.EsquemaEntra]));
+            identidad.MapGet("/entrar/microsoft", (
+                    [Description("Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).")] string? volver) =>
+                    Results.Challenge(new AuthenticationProperties { RedirectUri = RutaLocal(volver) }, [ClaimsAtlas.EsquemaEntra]))
+                .WithName("EntrarConMicrosoft")
+                .WithSummary("Iniciar sesión con Microsoft")
+                .WithDescription(
+                    "Navegación completa del navegador (no fetch). Redirige a Entra ID (OIDC con PKCE); al volver por " +
+                    $"{RutaRetornoEntra} crea la sesión y lleva a «volver», que solo puede ser una ruta local de la PWA.")
+                .Produces(StatusCodes.Status302Found);
         }
 
         if (proveedores.Simulado)
@@ -71,7 +83,9 @@ public static class EndpointsIdentidad
                 {
                     return Results.Conflict(new { error = "correo_en_uso" });
                 }
-            });
+            })
+            // Solo existe en local y dev: no es parte del contrato de qa y pdn (ATLAS-ADR-0021).
+            .ExcludeFromDescription();
         }
 
         identidad.MapPost("/salir", async (HttpContext http) =>
@@ -81,7 +95,13 @@ public static class EndpointsIdentidad
             // El navegador borra la caché, el almacenamiento (IndexedDB, service worker) y las cookies del origen.
             http.Response.Headers["Clear-Site-Data"] = "\"cache\", \"cookies\", \"storage\"";
             return Results.NoContent();
-        });
+        })
+            .WithName("CerrarSesion")
+            .WithSummary("Cerrar sesión")
+            .WithDescription(
+                "Revoca la sesión en el servidor, borra la cookie y envía Clear-Site-Data para que el navegador limpie " +
+                "caché, almacenamiento y cookies del origen. Responde 204 aunque no haya sesión.")
+            .Produces(StatusCodes.Status204NoContent);
 
         rutas.MapGet("/api/v1/plataforma/yo", (ClaimsPrincipal usuario) => new Yo(
                 Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.Sub)!),
@@ -91,7 +111,11 @@ public static class EndpointsIdentidad
                 Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.OrganizacionId)!),
                 usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
                 usuario.FindAll(ClaimsAtlas.Rol).Select(c => c.Value).ToList()))
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .WithName("ObtenerUsuarioActual")
+            .WithTags("Plataforma")
+            .WithSummary("Usuario en sesión")
+            .WithDescription("Persona, organización, proveedor de ingreso y roles de la sesión actual.");
 
         return rutas;
     }

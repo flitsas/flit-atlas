@@ -1,0 +1,181 @@
+asyncapi: 3.0.0
+info:
+  title: Flit Atlas · eventos
+  version: 1.0.0
+  description: |
+    Eventos que publica atlas-api en el exchange `flit.atlas` desde su outbox (ATLAS-ADR-0018). Todo mensaje viaja en el
+    mismo sobre (`SobreEvento`), el del contrato de plataforma de FLIT §7, y la llave de ruteo es su `type`.
+
+    Entrega al menos una vez: el consumidor registra `eventId` en su inbox (`(evento_id, consumidor)`) en la misma
+    transacción que su efecto y descarta los repetidos. Colas `atlas.<consumidor>.<proposito>`, con exchange de
+    reintentos `<cola>.reintentos` y cola de errores.
+
+    Este archivo se escribe a mano. Una prueba (`ContratoAsyncApiTests`) falla si el código declara un `TipoEvento` que
+    no está aquí, o si aquí hay un evento que el código no declara (ATLAS-ADR-0021).
+  contact:
+    name: Equipo de Flit Atlas
+    url: https://atlas.flitsas.com
+  license:
+    name: Propietaria (FLIT S.A.S.)
+  tags:
+    - name: atlas
+      description: Eventos propios de Flit Atlas.
+defaultContentType: application/json
+
+servers:
+  rabbitmq:
+    host: rabbitmq:5672
+    protocol: amqp
+    protocolVersion: 0.9.1
+    title: RabbitMQ de Atlas
+    description: |
+      RabbitMQ propio de Atlas en cada ambiente (local con Aspire, qa y pdn en k3s). Solo es accesible dentro del
+      clúster; el host real lo entrega la configuración de cada ambiente. Vhost propio y un usuario por servicio; solo
+      atlas-api publica en `flit.atlas`.
+    security:
+      - $ref: '#/components/securitySchemes/usuarioPorServicio'
+
+channels:
+  flitAtlas:
+    address: flit.atlas
+    title: Exchange flit.atlas
+    description: Exchange topic y durable del productor `atlas`. La llave de ruteo es el `type` del sobre (`atlas.<modulo>.<evento>`).
+    servers:
+      - $ref: '#/servers/rabbitmq'
+    messages:
+      sobreEvento:
+        $ref: '#/components/messages/sobreEvento'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: flit.atlas
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
+
+operations:
+  publicarEvento:
+    action: send
+    title: Publicar evento
+    summary: atlas-api publica un evento de la outbox.
+    description: |
+      El publicador de la outbox reclama los pendientes en orden, publica cada uno con confirmación del broker
+      (publisher confirms) y sella `publicado_en` solo cuando el broker lo acepta. Mensajes persistentes.
+    channel:
+      $ref: '#/channels/flitAtlas'
+    messages:
+      - $ref: '#/components/messages/sobreEvento'
+    bindings:
+      amqp:
+        deliveryMode: 2
+        mandatory: false
+        bindingVersion: 0.3.0
+    tags:
+      - name: atlas
+
+components:
+  securitySchemes:
+    usuarioPorServicio:
+      type: userPassword
+      description: Un usuario de RabbitMQ por servicio de Atlas; las credenciales viven en SealedSecrets de cada ambiente.
+
+  messages:
+    sobreEvento:
+      name: SobreEvento
+      title: Sobre de un evento de Atlas
+      summary: Forma común de todo evento publicado en flit.atlas.
+      description: |
+        Propiedades AMQP: `message_id` = `eventId`, `type` = `type`, `content_type` = `application/json`,
+        `content_encoding` = `utf-8`, `timestamp` = `occurredAt` en segundos Unix y `delivery_mode` = 2.
+        El esquema de `data` depende de `type` y `version`; cada evento se documenta abajo, en `components.messages`,
+        con `x-atlas-tipo` y `x-atlas-version`.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SobreEvento'
+      bindings:
+        amqp:
+          contentEncoding: utf-8
+          bindingVersion: 0.3.0
+      examples:
+        - name: eventoInterno
+          summary: Evento interno (sin organización externa), con datos ficticios.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d2e
+            type: atlas.ejemplo.algo_ocurrido
+            version: 1
+            occurredAt: '2026-10-22T15:30:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              nombre: Organismo Demo
+
+  schemas:
+    SobreEvento:
+      type: object
+      description: Sobre del contrato de plataforma de FLIT §7 (`EventEnvelope`), en JSON camelCase.
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - version
+        - occurredAt
+        - tenantId
+        - producer
+        - correlationId
+        - data
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: uuid v7. Llave de idempotencia del inbox y `message_id` de AMQP.
+        type:
+          type: string
+          pattern: '^atlas\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'
+          description: '`atlas.<modulo>.<evento>` en snake_case. Es también la llave de ruteo.'
+        version:
+          type: integer
+          minimum: 1
+          description: Versión del esquema de `data`. Un cambio incompatible sube la versión.
+        occurredAt:
+          type: string
+          format: date-time
+          description: Cuándo ocurrió el cambio, en UTC.
+        tenantId:
+          type: string
+          format: uuid
+          description: Organización externa dueña del evento; `00000000-0000-0000-0000-000000000000` si es interno.
+        producer:
+          type: string
+          const: atlas
+          description: Productor del evento.
+        correlationId:
+          type: string
+          pattern: '^([0-9a-f]{32})?$'
+          description: Id de la traza W3C de la petición que originó el evento; vacío si no había traza.
+        data:
+          type: object
+          description: Contenido del evento; su esquema depende de `type` y `version`.
+
+# Eventos publicados: hoy ninguno. Atlas aún no tiene módulos funcionales que publiquen (F2 en adelante). Cada evento
+# nuevo se agrega en el mismo PR que su TipoEvento, así:
+#
+#   components:
+#     messages:
+#       organizacionCreadaV1:
+#         name: atlas.plataforma.organizacion_creada
+#         x-atlas-tipo: atlas.plataforma.organizacion_creada
+#         x-atlas-version: 1
+#         title: Organización creada
+#         payload:
+#           allOf:
+#             - $ref: '#/components/schemas/SobreEvento'
+#             - properties:
+#                 type: { const: atlas.plataforma.organizacion_creada }
+#                 version: { const: 1 }
+#                 data: { $ref: '#/components/schemas/OrganizacionCreadaV1' }
+#
+# y se referencia (con $ref a '#/components/messages/organizacionCreadaV1') desde channels.flitAtlas.messages y
+# operations.publicarEvento.messages.

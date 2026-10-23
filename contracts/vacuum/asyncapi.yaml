@@ -1,0 +1,25 @@
+# Ruleset de vacuum para contracts/asyncapi/ (HU 1.7, ATLAS-ADR-0010 y ATLAS-ADR-0021). Va aparte del de OpenAPI:
+# en vacuum v0.32.0 un ruleset que extiende los dos conjuntos aplica solo las reglas de OpenAPI.
+# El CI falla con cualquier error.
+extends:
+  - [vacuum:asyncapi, recommended]
+
+rules:
+  # Falla en vacuum v0.32.0 con cualquier documento («`schema` function needs a `schema` property… allErrors»).
+  # Los servidores se siguen validando con asyncapi-3-document-*. Revisar al subir vacuum.
+  asyncapi-servers: off
+  # Busca `tags` en la raíz, que no existe en AsyncAPI 3.0 (van en info.tags); la reemplaza atlas-asyncapi-info-tags.
+  asyncapi-3-tags: off
+  atlas-asyncapi-info-tags:
+    description: El documento debe tener info.tags (AsyncAPI 3.0).
+    given: $.info
+    severity: error
+    formats: [asyncapi3]
+    then:
+      field: tags
+      function: truthy
+  # El equipo aún no tiene un buzón propio para publicar aquí [por verificar].
+  asyncapi-info-contact-properties: warn
+  # Atlas se queda en AsyncAPI 3.0.0 hasta verificar que el visor de la PWA (@asyncapi/react-component) y los
+  # consumidores en Go y Python soporten 3.1 [por verificar].
+  asyncapi-latest-version: off

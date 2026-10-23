@@ -44,12 +44,18 @@ En `src/Flit.Atlas.ServiceDefaults/` está: telemetría, sondas `/health/live` y
 - Primer ingreso (JIT): crea o reutiliza la persona por el `oid` de Entra, la enlaza a la organización interna y asigna los roles según los grupos de Entra (`plataforma_mapeo_grupo_entra`). Cargo, área y grupos se leen de Graph con permiso de aplicación (F0.4 ítem 5.4); si Graph falla, el ingreso sigue.
 - Sesión: cookie `__Host-atlas` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`) que solo lleva el id cifrado; el ticket vive en `atlas.identidad_sesion` (8 h deslizantes, 7 días como tope). Las llaves de Data Protection se guardan en Redis.
 - Las peticiones que cambian estado exigen la cabecera `X-Atlas-Csrf` y el mismo origen. Cerrar sesión revoca la sesión en el servidor y envía `Clear-Site-Data`.
-- Endpoints: `GET /api/v1/identidad/proveedores`, `GET /api/v1/identidad/entrar/microsoft`, `POST /api/v1/identidad/salir`, `GET /api/v1/plataforma/yo` y, solo en local y dev, `POST /api/v1/identidad/simulado/entrar`.
+- Endpoints: `GET /api/v1/identidad/proveedores`, `GET /api/v1/identidad/entrar/microsoft`, `POST /api/v1/identidad/salir`, `GET /api/v1/plataforma/yo` y, solo en local y dev, `POST /api/v1/identidad/simulado/entrar` (fuera del contrato OpenAPI, ATLAS-ADR-0021).
 
 ```bash
 dotnet build Flit.Atlas.slnx
 dotnet test --solution Flit.Atlas.slnx      # las pruebas de Plataforma necesitan Docker
 ```
+
+## Contratos (HU 1.7)
+
+- `contracts/openapi/atlas.v1.yaml` se genera desde los endpoints con `Microsoft.AspNetCore.OpenApi` (OpenAPI 3.1, `ContratoOpenApi.cs`) y `ContratoOpenApiTests` falla si no coincide con el código. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.ContratoOpenApiTests` (detalles en [`contracts/openapi/README.md`](../../contracts/openapi/README.md)).
+- `GET /openapi/v1.yaml` solo existe en local y dev; en qa y pdn no se sirve.
+- Los eventos se declaran como `TipoEvento` y se encolan con `EncolarEvento(TipoEvento, …)`; `ContratoAsyncApiTests` los compara con `contracts/asyncapi/atlas-events.v1.yaml` ([`contracts/asyncapi/README.md`](../../contracts/asyncapi/README.md)).
 
 ## Persistencia
 
