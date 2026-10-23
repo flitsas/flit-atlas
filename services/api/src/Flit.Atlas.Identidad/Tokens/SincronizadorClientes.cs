@@ -43,14 +43,28 @@ internal sealed partial class SincronizadorClientes(
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await _detener.CancelAsync();
+        try
+        {
+            await _detener.CancelAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Al cerrar, el host a veces desecha el servicio antes de detenerlo (se vio con WebApplicationFactory en el
+            // CI): ya no hay reintentos que detener.
+            return;
+        }
         if (_reintentos is not null)
         {
             await _reintentos.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
     }
 
-    public void Dispose() => _detener.Dispose();
+    public void Dispose()
+    {
+        // Si el host desecha sin detener antes, los reintentos en segundo plano igual terminan.
+        _detener.Cancel();
+        _detener.Dispose();
+    }
 
     private async Task ReintentarAsync(CancellationToken ct)
     {
