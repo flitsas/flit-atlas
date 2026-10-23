@@ -5,6 +5,7 @@ using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Externos;
+using Flit.Atlas.Identidad.Personas;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Identidad.Tokens;
@@ -50,7 +51,9 @@ public static class EndpointsIdentidad
         [property: Description("Permisos efectivos (atlas.<modulo>.<accion>) en este momento, ordenados: la PWA filtra la navegación con ellos. Se recalculan en cada petición.")]
         IReadOnlyList<string> Permisos,
         [property: Description("true si la sesión es de la cuenta de administrador de emergencia (ATLAS-ADR-0027): la PWA muestra el aviso.")]
-        bool Emergencia);
+        bool Emergencia,
+        [property: Description("URL relativa de la foto de la persona (sincronizada con Graph, ATLAS-ADR-0030), versionada por su hash; vacía si no tiene.")]
+        string? Foto);
 
     public static IEndpointRouteBuilder MapIdentidad(this IEndpointRouteBuilder rutas)
     {
@@ -156,19 +159,23 @@ public static class EndpointsIdentidad
         identidad.MapCuentasExternas();
         identidad.MapEmergencia();
 
-        rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, CancellationToken ct) =>
+        rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, PlataformaDbContext plataforma,
+                CancellationToken ct) =>
             {
                 var permisos = await permisosDeSesion.ObtenerAsync(usuario, ct);
+                var personaId = Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.PersonaId)!);
+                var fotoHash = await plataforma.Personas.AsNoTracking().Where(p => p.Id == personaId).Select(p => p.FotoHash).FirstOrDefaultAsync(ct);
                 return new Yo(
                     Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.Sub)!),
-                    Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.PersonaId)!),
+                    personaId,
                     usuario.FindFirstValue(ClaimsAtlas.Nombre) ?? string.Empty,
                     usuario.FindFirstValue(ClaimsAtlas.TipoPrincipal)!,
                     Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.OrganizacionId)!),
                     usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
                     permisos.Roles,
                     permisos.Permisos,
-                    usuario.FindFirstValue(ClaimsAtlas.Proveedor) == CuentaEmergencia.Proveedor);
+                    usuario.FindFirstValue(ClaimsAtlas.Proveedor) == CuentaEmergencia.Proveedor,
+                    EndpointsDirectorio.UrlFoto(personaId, fotoHash));
             })
             .RequireAuthorization()
             .WithMetadata(new MetadatoLimiteTasa())
@@ -181,6 +188,7 @@ public static class EndpointsIdentidad
                 "ya no aparece (ATLAS-ADR-0023).");
 
         rutas.MapRoles();
+        rutas.MapDirectorio();
         rutas.MapAdministracionExternos();
         rutas.MapErroresCliente();
         return rutas;

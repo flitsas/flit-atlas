@@ -61,6 +61,21 @@ Para el arranque de un ambiente (nadie tiene aún `atlas.superadmin` para crear 
 
 Volver a correr el comando invalida el enlace anterior y la cuenta queda sin factores: así se recupera o se corta si alguien más la usó.
 
+## Sincronización de personas con Microsoft Graph
+
+Atlas sincroniza a diario (05:00, hora de Bogotá) el nombre, cargo, área, teléfono, foto y estado de los empleados (ATLAS-ADR-0030). No pide permisos de Graph nuevos. Pasos del líder, por ambiente:
+
+1. En el registro de la app «Flit Atlas» de Entra ID, confirma que `User.Read.All` y `GroupMember.Read.All` son permisos **de aplicación** con consentimiento de administrador (los mismos que ya usa el ingreso para cargo, área y grupos).
+2. Sin configurar nada, el origen es `enlazadas`: solo se refresca a quien ya entró a Atlas. Para que el directorio muestre a todo el equipo, elige el grupo de Entra de los empleados y agrega al ConfigMap de atlas-api en `flit-gitops` (no son secretos):
+
+   ```yaml
+   Identidad__Personas__Origen: grupo
+   Identidad__Personas__GrupoEmpleados: "<object id del grupo en Entra>"
+   # Opcional: Identidad__Personas__Hora: "05:00"
+   ```
+
+3. Después del despliegue, entra como superadmin a **Equipo** (`/equipo`) y pulsa **Sincronizar ahora**; revisa los conteos en la tarjeta y en la auditoría (`identidad.personas_sincronizadas`). Si aparecen deshabilitaciones **retenidas** por el freno, revisa el tenant y el grupo antes de la corrida siguiente.
+
 ## Probar las imágenes en local
 
 ```bash

@@ -1,5 +1,6 @@
 // Migrador de Flit Atlas: aplica las migraciones de EF Core del núcleo y de cada módulo registrado, crea las banderas de
-// los módulos nuevos, aplica a la base los roles y la matriz rol × permiso del código (ATLAS-ADR-0023) y termina. Los
+// los módulos nuevos, aplica a la base los roles y la matriz rol × permiso del código (ATLAS-ADR-0023), corre la semilla
+// idempotente de cada módulo (IModuloAtlas.SembrarAsync, p. ej. el catálogo, ATLAS-ADR-0028) y termina. Los
 // módulos salen de la misma lista que usa atlas-api (ModulosAtlas, ATLAS-ADR-0026).
 // En local lo corre el AppHost antes de atlas-api; en dev/qa/pdn corre como Job o initContainer (HU 1.8).
 // Usa el usuario del servicio (flit_atlas), dueño del esquema atlas según el script de flit.
@@ -55,6 +56,9 @@ using (var alcance = host.Services.CreateScope())
     Registro.Permisos(log, sembrado.RolesCreados, sembrado.RolesActualizados, sembrado.PermisosCreados, sembrado.PermisosRetirados,
         sembrado.ConcesionesCreadas, sembrado.ConcesionesRetiradas);
 }
+
+// Datos iniciales de cada módulo (idempotentes: el migrador corre en cada despliegue).
+await ExtensionesModulos.SembrarModulosAsync(host.Services, ModulosAtlas.Registrados);
 
 async Task MigrarAsync(string nombre, Func<IServiceProvider, DbContext> resolver)
 {

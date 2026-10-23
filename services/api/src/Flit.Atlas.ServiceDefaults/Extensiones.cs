@@ -52,7 +52,9 @@ public static class Extensiones
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation())
+                .AddRuntimeInstrumentation()
+                // Métricas propias de Atlas (p. ej. la sincronización de personas, ATLAS-ADR-0030).
+                .AddMeter("Flit.Atlas.*"))
             .WithTracing(tracing => tracing
                 .AddSource(builder.Environment.ApplicationName)
                 // Las sondas de salud no generan trazas: son ruido cada pocos segundos.

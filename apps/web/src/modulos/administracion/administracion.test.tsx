@@ -32,6 +32,7 @@ const PERSONAS: PersonaEncontrada[] = [
     organizacion: { id: 'o', nombre: 'FLIT S.A.S.' },
     estado: 'activa',
     emergencia: false,
+    foto: `/api/v1/plataforma/personas/${PERSONA}/foto?v=0123456789abcdef`,
     roles: ['atlas.desarrollador'],
   },
   {
@@ -42,6 +43,7 @@ const PERSONAS: PersonaEncontrada[] = [
     organizacion: { id: 'c', nombre: 'Organismo Demo' },
     estado: 'suspendida',
     emergencia: false,
+    foto: null,
     roles: [],
   },
 ];
@@ -319,6 +321,8 @@ describe('buscador de personas', () => {
     expect(resultado).toHaveTextContent('jose.demo@ejemplo.com');
     expect(resultado).toHaveTextContent('Empleado');
     expect(await within(lista).findByText('Desarrollador')).toBeInTheDocument();
+    // Avatar con la foto de Graph (ATLAS-ADR-0030): decorativo, el nombre ya está en el botón.
+    expect(resultado.querySelector('img')).toHaveAttribute('src', PERSONAS[0]!.foto);
 
     fireEvent.click(resultado);
 

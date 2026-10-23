@@ -16,6 +16,8 @@ export interface Yo {
   permisos?: string[];
   /** Sesión de la cuenta de administrador de emergencia (ATLAS-ADR-0027): el shell muestra el aviso. */
   emergencia?: boolean;
+  /** URL de la foto de la persona (Graph, ATLAS-ADR-0030), versionada por su hash; `null` si no tiene. */
+  foto?: string | null;
 }
 
 export interface Proveedores {

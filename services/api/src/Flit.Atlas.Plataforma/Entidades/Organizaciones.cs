@@ -70,4 +70,36 @@ public sealed class Persona : Entidad
     public string? Telefono { get; set; }
 
     public EstadoPersona Estado { get; set; } = EstadoPersona.Activa;
+
+    /// <summary>
+    /// La sincronización con Graph la dejó <see cref="EstadoPersona.Inactiva"/> porque la cuenta está deshabilitada (o ya
+    /// no existe) en Entra ID: solo así la sincronización la vuelve a activar cuando se rehabilita (ATLAS-ADR-0030).
+    /// </summary>
+    public bool InactivaPorEntra { get; set; }
+
+    /// <summary>SHA-256 (hex) de la foto de <see cref="PersonaFoto"/>; versiona su URL. <c>null</c> sin foto.</summary>
+    public string? FotoHash { get; set; }
+
+    /// <summary>Última vez que la sincronización diaria con Graph leyó a esta persona.</summary>
+    public DateTimeOffset? SincronizadaEn { get; set; }
+}
+
+/// <summary>
+/// Foto de perfil de un empleado, leída de Microsoft Graph (ATLAS-ADR-0030). Va en su propia tabla para que las
+/// consultas de personas no la carguen; tiene un tope de tamaño y se sirve con caché por su hash.
+/// </summary>
+public sealed class PersonaFoto
+{
+    public required Guid PersonaId { get; init; }
+
+    /// <summary>Bytes de la imagen (dato personal).</summary>
+    public required byte[] Contenido { get; set; }
+
+    /// <summary><c>image/jpeg</c>, <c>image/png</c>, <c>image/gif</c> o <c>image/webp</c>.</summary>
+    public required string TipoContenido { get; set; }
+
+    /// <summary>SHA-256 (hex, minúsculas) de <see cref="Contenido"/>.</summary>
+    public required string Hash { get; set; }
+
+    public DateTimeOffset ActualizadaEn { get; set; }
 }

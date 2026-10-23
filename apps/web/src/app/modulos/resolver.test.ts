@@ -7,6 +7,7 @@ import {
   MAXIMO_BARRA_INFERIOR,
   moduloDeRuta,
   resolverNavegacion,
+  resolverPestanasFicha,
   tienePermiso,
   validarRegistro,
 } from './resolver';
@@ -131,7 +132,8 @@ describe('registro', () => {
     // «Roles y permisos» (HU 1.4), Invitaciones, Organizaciones (HU 1.5) y «Asignación de roles» también van en «Más»; «hola» (HU 1.9) está apagado por defecto.
     expect(nav.mas.map((e) => e.etiqueta)).toEqual(['Catálogo', 'Equipo', 'Contratos', 'Documentación', 'Roles y permisos', 'Invitaciones', 'Organizaciones', 'Asignación de roles']);
     const mvp = MODULOS_REGISTRADOS.filter((m) => !['permisos', 'hola', 'administracion'].includes(m.id));
-    expect(mvp.every((m) => m.estado === 'proximamente' && m.banderaPorDefecto)).toBe(true);
+    // Encendidos por defecto; cada uno pasa a «disponible» cuando llega su HU (equipo, con el directorio de la HU 2.2).
+    expect(mvp.every((m) => m.banderaPorDefecto)).toBe(true);
     // Sin el permiso, la administración no aparece.
     const lector = resolverNavegacion(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.catalogo.ver'] });
     expect(lector.mas.map((e) => e.etiqueta)).not.toContain('Invitaciones');
@@ -142,5 +144,37 @@ describe('registro', () => {
       for (const r of m.rutas) expect(r.cargar.toString()).toMatch(/import/);
       for (const w of m.widgetsInicio ?? []) expect(w.cargar.toString()).toMatch(/import/);
     }
+  });
+});
+
+describe('pestañas de la ficha del aplicativo (ATLAS-ADR-0028)', () => {
+  const pestana = async () => ({ default: () => null });
+
+  it('solo de módulos encendidos, con el permiso y para el tipo del aplicativo; el primer módulo gana un id repetido', () => {
+    const equipo = modulo('equipo', {
+      pestanasFicha: [
+        { id: 'responsables', titulo: 'Responsables', orden: 10, permiso: 'atlas.equipo.ver', cargar: pestana },
+        { id: 'carga', titulo: 'Carga', orden: 5, tipos: ['producto'], cargar: pestana },
+      ],
+    });
+    const soporte = modulo('soporte', {
+      pestanasFicha: [
+        { id: 'soporte', titulo: 'Soporte de turno', orden: 20, permiso: 'atlas.soporte.ver', cargar: pestana },
+        { id: 'responsables', titulo: 'Otro', orden: 1, cargar: pestana },
+      ],
+    });
+    const apagado = modulo('apagado', { banderaPorDefecto: false, pestanasFicha: [{ id: 'x', titulo: 'X', orden: 1, cargar: pestana }] });
+
+    const servicio = resolverPestanasFicha([equipo, soporte, apagado], { banderas: {}, permisos: ['atlas.equipo.ver'] }, 'servicio');
+    const producto = resolverPestanasFicha([equipo, soporte, apagado], { banderas: {}, permisos: ['atlas.equipo.ver'] }, 'producto');
+
+    expect(servicio.visibles.map((p) => [p.id, p.titulo, p.modulo.id])).toEqual([['responsables', 'Responsables', 'equipo']]);
+    expect([...servicio.sinPermiso]).toEqual(['soporte']);
+    expect(producto.visibles.map((p) => p.id)).toEqual(['carga', 'responsables']);
+  });
+
+  it('ningún módulo registrado hoy aporta pestañas: la ficha muestra sus espacios como «próximamente»', () => {
+    const { visibles } = resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {} });
+    expect(visibles).toEqual([]);
   });
 });

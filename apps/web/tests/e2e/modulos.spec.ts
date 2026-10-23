@@ -28,6 +28,11 @@ async function vigilarCsp(page: Page): Promise<string[]> {
 }
 
 async function sinErroresCriticosDeAxe(page: Page, pantalla: string) {
+  // A mitad de una animación (la hoja que sube con opacidad) axe mide colores más claros que los reales.
+  // Las infinitas (indicadores de carga) no se esperan.
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().endTime === Infinity),
+  );
   const resultado = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   const resumen = resultado.violations.map((v) => `${v.impact} ${v.id}: ${v.nodes.length} nodo(s) — ${v.help}`);
   test.info().annotations.push({ type: `axe ${pantalla}`, description: resumen.join('\n') || 'sin violaciones' });
@@ -149,6 +154,75 @@ test.describe('módulo de ejemplo «hola»', () => {
       await sinScrollHorizontal(page, '/hola a 360 px');
     }
     await sinErroresCriticosDeAxe(page, '/hola');
+    expect(violaciones).toEqual([]);
+  });
+});
+
+test.describe('catálogo de aplicativos (HU 2.1)', () => {
+  test('listado con filtros y ficha con pestañas: accesibles, sin scroll horizontal a 360 px y sin violar la CSP', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.catalogo.ver', 'atlas.catalogo.editar', 'atlas.catalogo.gestionar'] });
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Aplicativos de FLIT' }).getByText(/4 aplicativos en total/)).toBeVisible();
+
+    await abrirDesdeNavegacion(page, esMovil(info), 'Catálogo');
+    await expect(page).toHaveURL(/\/catalogo$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Catálogo de aplicativos' })).toBeVisible();
+    await expect(page.getByText('BackApiExternalTransactValiQueryExt')).toBeVisible();
+    if (esMovil(info)) {
+      await page.setViewportSize({ width: 360, height: 740 });
+      await sinScrollHorizontal(page, '/catalogo a 360 px');
+    }
+    await page.getByText(/^Filtros/).click();
+    await page.getByRole('group', { name: 'Grupo' }).getByText('Legados', { exact: true }).click();
+    await expect(page).toHaveURL(/grupo=legado/);
+    await expect(page.getByText('1 aplicativo', { exact: true })).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, '/catalogo con filtros a 360 px');
+    await sinErroresCriticosDeAxe(page, '/catalogo');
+
+    await page.goto('/catalogo/flit2');
+    await expect(page.getByRole('heading', { level: 1, name: 'FLIT 2.0' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Resumen' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: /Responsables/ }).click();
+    await expect(page.getByText(/Llega con el módulo Equipo y responsables/)).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, '/catalogo/flit2 a 360 px');
+    await sinErroresCriticosDeAxe(page, '/catalogo/flit2');
+
+    await page.getByRole('button', { name: 'Editar' }).click();
+    await expect(page.getByRole('form', { name: 'Datos del aplicativo' })).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, 'formulario a 360 px');
+    await sinErroresCriticosDeAxe(page, 'formulario del aplicativo');
+    expect(violaciones).toEqual([]);
+  });
+});
+
+test.describe('soporte de los sábados', () => {
+  test('calendario y gestión: lista en el móvil, filtro por equipo, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, {
+      permisos: ['atlas.lector', 'atlas.soporte.ver', 'atlas.soporte.gestionar', 'atlas.soporte.aprobar'],
+      roles: ['atlas.lider_tecnico'],
+    });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Soporte de los sábados' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: esMovil(info) ? 'Lista' : 'Mes' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Todos' })).toBeChecked();
+    // En la lista del móvil, la tarjeta con nombre y correo largos no debe desbordar.
+    if (esMovil(info)) await expect(page.getByText('Persona Demo Con Un Nombre Bastante Largo').first()).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte');
+    await sinErroresCriticosDeAxe(page, '/soporte');
+
+    await page.getByText('Mes', { exact: true }).click();
+    await expect(page.getByRole('grid')).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte (mes)');
+
+    await page.goto('/soporte/gestion');
+    await expect(page.getByRole('heading', { level: 1, name: 'Gestionar el soporte' })).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Configuración del soporte' })).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte/gestion');
+    await sinErroresCriticosDeAxe(page, '/soporte/gestion');
     expect(violaciones).toEqual([]);
   });
 });
