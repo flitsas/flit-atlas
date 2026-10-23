@@ -34,13 +34,6 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.organizaciones.gestionar` | Crear y editar organizaciones (interna, clientes y proveedores). | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.auditoria.ver` | Leer la auditoría y las evidencias. | ✔ |   |   |   |   |   | ✔ |   |   |   |   |   |   |   |
 
-## Catálogo (`catalogo`)
-
-| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.catalogo.ver` | Ver el catálogo de aplicativos y sus fichas. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
-| `atlas.catalogo.gestionar` | Crear y editar productos, módulos y servicios del catálogo. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
-
 ## Equipo y responsables (`equipo`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
@@ -48,15 +41,6 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.equipo.ver` | Ver personas, responsables y el mapa de carga. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
 | `atlas.equipo.gestionar` | Cambiar el reparto de responsables, traspasos y revisiones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.equipo.ver_contacto` | Ver el teléfono y los datos de contacto de las personas. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
-
-## Soporte de los sábados (`soporte`)
-
-| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.soporte.ver` | Ver el calendario de soporte de los sábados. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
-| `atlas.soporte.solicitar_cambio` | Solicitar un cambio de turno y proponer reemplazo. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
-| `atlas.soporte.aprobar` | Aprobar cambios de turno y compensaciones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
-| `atlas.soporte.gestionar` | Configurar la rotación, generar e importar turnos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 
 ## Contratos de integración (`contratos`)
 
@@ -106,7 +90,15 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla; ver y pedir la sincronización de personas con Graph. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
+
+## Catálogo (`catalogo`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.catalogo.ver` | Ver el catálogo de aplicativos y sus fichas. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
+| `atlas.catalogo.gestionar` | Crear y editar productos, módulos y servicios del catálogo. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.catalogo.editar` | Editar los datos de un aplicativo existente (descripción, repo, tecnología, ambientes, criticidad, estado, etiquetas) sin cambiar la jerarquía; el responsable, solo los suyos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 
 ## Hola (ejemplo) (`hola`)
 
@@ -114,3 +106,13 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.hola.ver` | Ver los saludos de tu organización (módulo de ejemplo). | ✔ |   |   |   |   |   |   | ✔ | ✔ |   |   |   |   |   |
 | `atlas.hola.gestionar` | Escribir saludos en tu organización (módulo de ejemplo). | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
+
+## Soporte de los sábados (`soporte`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.soporte.ver` | Ver el calendario de soporte de los sábados. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
+| `atlas.soporte.solicitar_cambio` | Solicitar un cambio de turno y proponer reemplazo. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.soporte.aprobar` | Aprobar cambios de turno y compensaciones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.soporte.gestionar` | Configurar la rotación, generar e importar turnos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.soporte.ver_canal` | Ver el canal de soporte del sábado configurado, sin nombres de personas. | ✔ |   |   |   |   |   |   |   | ✔ | ✔ | ✔ | ✔ | ✔ |   |

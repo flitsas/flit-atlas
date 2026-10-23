@@ -633,6 +633,15 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .HasColumnType("character varying(10)")
                         .HasColumnName("estado");
 
+                    b.Property<string>("FotoHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("foto_hash");
+
+                    b.Property<bool>("InactivaPorEntra")
+                        .HasColumnType("boolean")
+                        .HasColumnName("inactiva_por_entra");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -643,6 +652,10 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                     b.Property<Guid>("OrganizacionId")
                         .HasColumnType("uuid")
                         .HasColumnName("organizacion_id");
+
+                    b.Property<DateTimeOffset?>("SincronizadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sincronizada_en");
 
                     b.Property<string>("Telefono")
                         .HasMaxLength(50)
@@ -672,6 +685,43 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .HasDatabaseName("ix_plataforma_persona_organizacion_id");
 
                     b.ToTable("plataforma_persona", "atlas");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.PersonaFoto", b =>
+                {
+                    b.Property<Guid>("PersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_id");
+
+                    b.Property<DateTimeOffset>("ActualizadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizada_en");
+
+                    b.Property<byte[]>("Contenido")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("contenido")
+                        .HasComment("@pii");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("hash");
+
+                    b.Property<string>("TipoContenido")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tipo_contenido");
+
+                    b.HasKey("PersonaId")
+                        .HasName("pk_plataforma_persona_foto");
+
+                    b.ToTable("plataforma_persona_foto", "atlas", t =>
+                        {
+                            t.HasComment("Foto de perfil de los empleados leída de Graph (ATLAS-ADR-0030).");
+                        });
                 });
 
             modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.PreferenciaNotificacion", b =>
@@ -1027,6 +1077,16 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_plataforma_persona_plataforma_organizacion_organizacion_id");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.PersonaFoto", b =>
+                {
+                    b.HasOne("Flit.Atlas.Plataforma.Entidades.Persona", null)
+                        .WithMany()
+                        .HasForeignKey("PersonaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_plataforma_persona_foto_plataforma_persona_persona_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.PreferenciaNotificacion", b =>

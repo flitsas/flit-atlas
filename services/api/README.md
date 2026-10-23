@@ -73,7 +73,7 @@ dotnet test --solution Flit.Atlas.slnx      # las pruebas de Plataforma necesita
 
 ## Roles y permisos (HU 1.4, ATLAS-ADR-0023)
 
-- **Fuente única en el código**: cada módulo declara un `ManifiestoPermisos` con sus permisos `atlas.<modulo>.<accion>` y los roles que reciben cada uno; los roles del §7 están en `RolesAtlas`. La lista base del §7.4 ya está en `ManifiestosNucleo`. `atlas.superadmin` recibe todo; todo empleado activo tiene `atlas.lector`. El migrador aplica roles y matriz a `plataforma_rol`, `plataforma_permiso` y `plataforma_rol_permiso` (idempotente).
+- **Fuente única en el código**: cada módulo declara un `ManifiestoPermisos` con sus permisos `atlas.<modulo>.<accion>` y los roles que reciben cada uno; los roles del §7 están en `RolesAtlas`. La lista base del §7.4 está en `ManifiestosNucleo` hasta que llega su módulo, que la muda a su proyecto (el catálogo ya lo hizo, ATLAS-ADR-0028). `atlas.superadmin` recibe todo; todo empleado activo tiene `atlas.lector`. El migrador aplica roles y matriz a `plataforma_rol`, `plataforma_permiso` y `plataforma_rol_permiso` (idempotente).
 - **Matriz**: `GET /api/v1/plataforma/permisos/matriz` (requiere `atlas.roles.ver`) y [`docs/permisos/matriz-rol-permiso.md`](../../docs/permisos/matriz-rol-permiso.md), generado; `MatrizPermisosTests` falla si no coincide. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.MatrizPermisosTests`.
 - **Permisos efectivos**: se calculan en el servidor en cada petición con las asignaciones vigentes (hora actual), nunca en la cookie. `GET /api/v1/plataforma/yo` trae `roles` y `permisos` (listas ordenadas de códigos); la PWA filtra la navegación con `permisos`. Un rol vencido deja de valer en la petición siguiente; el `VigilanteVencimientos` (cada minuto, `Identidad__Vencimientos__Intervalo`) lo audita e invalida las sesiones.
 - **Asignaciones** con organización, alcance (`global`, `organizacion`, `ambiente` y los que agreguen los manifiestos: `aplicativo`, `paquete`, `documento`) y vigencia; manuales, de grupos de Entra (se suman) o de invitación (HU 1.5). Un rol externo exige persona externa de la misma organización y vencimiento dentro del máximo configurable (`Identidad__Externos__VigenciaMaximaAcceso`, 90 días).
@@ -156,6 +156,22 @@ curl -s https://qa.atlas.flitsas.com/api/v1/identidad/token/yo -H "Authorization
 | `Identidad__Emergencia__Correo` | Correo ficticio de la cuenta, solo al crearla (`admin.emergencia@atlas.local`) |
 | `Identidad__Emergencia__Nombre` | Nombre visible («Administrador de emergencia») |
 | `Identidad__Emergencia__VigenciaEnlace` | Vigencia del enlace de activación (`01:00:00`) |
+
+## Sincronización de personas (HU 2.2, ATLAS-ADR-0030)
+
+- Trabajo diario en atlas-api (solo con Entra configurado) que lee de Graph, con el token de aplicación de siempre (`User.Read.All` y `GroupMember.Read.All`), nombre, cargo, área, teléfono, foto y `accountEnabled` de los empleados. Una cuenta deshabilitada o borrada en Entra deja la persona `inactiva` (`inactiva_por_entra`) y le cierra sesiones y tokens; al rehabilitarse vuelve. Nunca toca externos, la cuenta de emergencia ni a una persona suspendida.
+- Un solo nodo a la vez (candado consultivo de PostgreSQL); reintenta con esperas si Graph o la base no responden; freno si una corrida fuera a deshabilitar a más de la mitad. Un evento `identidad.personas_sincronizadas` por corrida con conteos (sin datos personales) y métricas `atlas.personas.sincronizacion.*`.
+- Foto en `plataforma_persona_foto` (tope de tamaño), servida con ETag y caché privada en `GET /api/v1/plataforma/personas/{id}/foto`. Directorio: `GET /api/v1/plataforma/directorio[/{id}]` con `atlas.equipo.ver`; el teléfono solo con `atlas.equipo.ver_contacto`. «Sincronizar ahora»: `GET|POST /api/v1/plataforma/directorio/sincronizacion` con `atlas.identidad.administrar`.
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `Identidad__Personas__Origen` | `enlazadas` | `enlazadas` (solo quien ya entró; no crea personas), `grupo` o `tenant` (miembros, nunca invitados) |
+| `Identidad__Personas__GrupoEmpleados` | — | Object id del grupo de Entra; obligatorio con `grupo` |
+| `Identidad__Personas__Hora` | `05:00` | Hora del día, en la de Bogotá |
+| `Identidad__Personas__Habilitada` | `true` | `false` apaga la corrida diaria (el botón sigue) |
+| `Identidad__Personas__Reintentos`, `Identidad__Personas__EsperaReintento` | `4`, `00:02:00` | Reintentos con espera que se duplica |
+| `Identidad__Personas__TamanoMaximoFoto` | `102400` | Bytes |
+| `Identidad__Personas__FraccionMaximaDeshabilitadas`, `Identidad__Personas__MinimoFreno` | `0.5`, `3` | Freno de seguridad |
 
 ## Contratos (HU 1.7)
 

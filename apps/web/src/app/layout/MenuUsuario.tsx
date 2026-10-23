@@ -23,7 +23,7 @@ export function MenuUsuario() {
       <Menu.Trigger
         className="flex min-h-toque items-center gap-2 rounded-full py-1 pr-2 pl-1 hover:bg-atlas-activo"
       >
-        <Avatar iniciales={iniciales(yo.nombre)} />
+        <Avatar iniciales={iniciales(yo.nombre)} foto={yo.foto} />
         <span className="sr-only">Cuenta de</span>{' '}
         <span className="max-w-40 truncate text-sm font-medium max-lg:sr-only">{yo.nombre}</span>
         <ChevronDown className="size-4 text-atlas-texto-suave" aria-hidden="true" />
@@ -35,7 +35,7 @@ export function MenuUsuario() {
           className="z-50 w-72 animate-entrar rounded-2xl border border-border bg-popover p-2 text-popover-foreground shadow-xl"
         >
           <div className="flex items-center gap-3 px-3 py-2">
-            <Avatar iniciales={iniciales(yo.nombre)} className="size-10" />
+            <Avatar iniciales={iniciales(yo.nombre)} foto={yo.foto} className="size-10" />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{yo.nombre}</p>
               <p className="text-xs text-atlas-texto-suave">{yo.tipoPrincipal === 'empleado' ? 'Empleado de FLIT' : 'Externo'}</p>

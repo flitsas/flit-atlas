@@ -42,7 +42,7 @@ Las versiones de los paquetes viven en `Directory.Packages.props`; un paquete nu
 
 ### 1.2 Declara los permisos
 
-Usa `atlas.<x>.<accion>` y di qué roles los reciben (los roles son del núcleo, `RolesAtlas`; un módulo no crea roles). Si tu módulo es uno de la lista base del §7.4 (catálogo, equipo, soporte…), sus permisos ya existen en `ManifiestosNucleo`: úsalos y declara en tu manifiesto solo los nuevos.
+Usa `atlas.<x>.<accion>` y di qué roles los reciben (los roles son del núcleo, `RolesAtlas`; un módulo no crea roles). Si tu módulo es uno de la lista base del §7.4 (equipo, soporte…), sus permisos ya existen en `ManifiestosNucleo`: **muda** ese manifiesto a tu módulo con los mismos códigos y concesiones (son contrato), agrégale los permisos nuevos y quítalo de `ManifiestosNucleo.Todos`: dos manifiestos con el mismo id no conviven. El catálogo ya lo hizo (`PermisosCatalogo`, [ATLAS-ADR-0028](adr/0028-catalogo-de-aplicativos.md)).
 
 ```csharp
 public static class PermisosHola
@@ -82,7 +82,7 @@ public sealed class ModuloHola : IModuloAtlas
 }
 ```
 
-Opcionales (tienen valor por defecto vacío): `EventosPublicados` y `EventosConsumidos` (`TipoEvento` `atlas.<x>.<evento>`), `TiposNotificacion` (`<x>.<tipo>`) y `Scopes` (`ScopeModulo` `atlas.<x>` o `atlas.<x>.<accion>`, para los tokens de clientes que no son el navegador, ATLAS-ADR-0024). Un proveedor de búsqueda se registra en `RegistrarServicios` con `servicios.AgregarProveedorBusqueda<MiProveedor>()`. Si algo no lleva el prefijo del módulo, atlas-api no arranca y te dice qué.
+Opcionales (tienen valor por defecto vacío): `EventosPublicados` y `EventosConsumidos` (`TipoEvento` `atlas.<x>.<evento>`), `TiposNotificacion` (`<x>.<tipo>`) y `Scopes` (`ScopeModulo` `atlas.<x>` o `atlas.<x>.<accion>`, para los tokens de clientes que no son el navegador, ATLAS-ADR-0024). Un proveedor de búsqueda se registra en `RegistrarServicios` con `servicios.AgregarProveedorBusqueda<MiProveedor>()`. Los datos iniciales van en `SembrarAsync(IServiceProvider, CancellationToken)`: lo corre el migrador después de todas las migraciones, en cada despliegue, así que debe ser idempotente (mira la semilla del catálogo). Si algo no lleva el prefijo del módulo, atlas-api no arranca y te dice qué.
 
 ### 1.4 Datos: contexto, prefijo y RLS
 
@@ -177,6 +177,7 @@ export const moduloHola: ModuloAtlas = {
 };
 ```
 
+- Para mostrar algo en la ficha de cada aplicativo (`/catalogo/<slug>`), declara `pestanasFicha: [{ id: 'responsables', titulo: 'Responsables', orden: 10, permiso: 'atlas.<x>.ver', cargar: () => import('./pestanas/Responsables') }]`. El componente recibe `{ aplicativo: { id, slug, nombre, tipo, grupo } }` y pide sus datos a tu API. Los ids `responsables`, `soporte`, `contratos`, `versiones`, `documentos`, `diagramas` e `ia` ocupan su espacio en la ficha; otro id se agrega al final (ATLAS-ADR-0028).
 - Páginas y widgets siempre con `import()` diferido: el bundle inicial no crece (< 200 KB gzip, `pnpm bundle`).
 - `permiso` usa los mismos códigos del manifiesto del backend. La PWA solo oculta: el servidor responde 403 o 404.
 - La barra inferior del móvil tiene a lo sumo cinco botones: un módulo nuevo va en `movil: 'mas'` salvo que el líder diga otra cosa.
