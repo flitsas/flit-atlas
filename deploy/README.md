@@ -76,6 +76,14 @@ Atlas sincroniza a diario (05:00, hora de Bogotá) el nombre, cargo, área, tel�
 
 3. Después del despliegue, entra como superadmin a **Equipo** (`/equipo`) y pulsa **Sincronizar ahora**; revisa los conteos en la tarjeta y en la auditoría (`identidad.personas_sincronizadas`). Si aparecen deshabilitaciones **retenidas** por el freno, revisa el tenant y el grupo antes de la corrida siguiente.
 
+## Responsables: importar el documento (HU 2.3, ATLAS-ADR-0031)
+
+1. Asegúrate de que los empleados del documento existan en Atlas: con el origen `grupo` de la sincronización (arriba) y **Sincronizar ahora**, o pidiendo que cada uno entre una vez. Los productos y módulos los trae la semilla del catálogo.
+2. Entra con `atlas.equipo.gestionar` (líder técnico) a **Responsables → Importar** (`/equipo/responsables?vista=importar`), sube `docs/atlas/insumos/Responsables_Productos_FLIT_2026-10-20.md` y pulsa **Ver la vista previa**.
+3. Si algo quedó **sin enlazar** (una persona que no está en el directorio o un nombre distinto al de Entra, un producto que no está en el catálogo), resuélvelo (sincroniza, corrige el nombre en el documento o escribe el correo de la persona en su celda) y vuelve a revisar. Nada se inventa.
+4. Elige si los secundarios quedan **habilitados** o **en acompañamiento** y confirma: se crea la versión 5 con su fecha, quien la definió, las definiciones de los roles y la revisión del 20/01/2027. Revisa la auditoría (`equipo.reparto_importado`).
+5. Opcional, para comparar los CODEOWNERS reales: un token de solo lectura o la GitHub App en un SealedSecret (`Plataforma__GitHub__*`, ver `services/api/README.md`).
+
 ## Probar las imágenes en local
 
 ```bash

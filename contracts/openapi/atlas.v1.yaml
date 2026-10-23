@@ -3308,6 +3308,954 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.catalogo.gestionar
+  /api/v1/equipo/responsabilidades:
+    get:
+      tags:
+        - Equipo
+      summary: Reparto de responsables vigente
+      description: 'Definiciones de cada rol, reparto por persona, por producto, por módulo y por servicio, con dedicación, vigencia y traspaso. Requiere atlas.equipo.ver; el teléfono, atlas.equipo.ver_contacto.'
+      operationId: ObtenerRepartoResponsables
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepartoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+    put:
+      tags:
+        - Equipo
+      summary: Cambiar o asignar un responsable
+      description: Pone a la persona como principal o secundaria del aplicativo (reemplaza a la anterior) y crea la versión siguiente con autor y nota. Un secundario nuevo empieza en acompañamiento. Queda en la auditoría. Requiere atlas.equipo.gestionar.
+      operationId: CambiarResponsable
+      requestBody:
+        description: 'Aplicativo, tipo, persona, dedicación, vigencia y nota.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCambioResponsable'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResumenDto'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  /api/v1/equipo/responsabilidades/tablas:
+    get:
+      tags:
+        - Equipo
+      summary: Tablas del reparto en Markdown
+      description: 'Las tablas 2, 3.1 y 3.2 del documento de responsables reconstruidas desde los datos, con el mismo formato, para comparar o copiar. Requiere atlas.equipo.ver.'
+      operationId: ObtenerTablasReparto
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TablasRepartoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/equipo/personas/{personaId}/responsabilidades':
+    get:
+      tags:
+        - Equipo
+      summary: Responsabilidades de una persona
+      description: 'De qué aplicativos es principal y de cuáles secundaria, con su traspaso. 404 si la persona no es un empleado. Requiere atlas.equipo.ver.'
+      operationId: ObtenerResponsabilidadesDePersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Id de la persona.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponsabilidadesPersonaDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  /api/v1/equipo/yo/responsabilidades:
+    get:
+      tags:
+        - Equipo
+      summary: Mis responsabilidades
+      description: Las responsabilidades de la persona de la sesión y los traspasos que acompaña como principal (widget de Inicio). Requiere atlas.equipo.ver.
+      operationId: ObtenerMisResponsabilidades
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponsabilidadesPersonaDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/equipo/aplicativos/{slug}/responsables':
+    get:
+      tags:
+        - Equipo
+      summary: Responsables de un aplicativo
+      description: 'Principal y secundario del aplicativo (o, si no tiene, los del ancestro más cercano), las definiciones de cada rol y el traspaso del secundario. 404 si el aplicativo no existe. Requiere atlas.equipo.ver.'
+      operationId: ObtenerResponsablesDeAplicativo
+      parameters:
+        - name: slug
+          in: path
+          description: Slug del aplicativo en el catálogo.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponsablesAplicativoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/equipo/aplicativos/{slug}/a-quien-llamo':
+    get:
+      tags:
+        - Equipo
+      summary: ¿A quién llamo?
+      description: 'Si hoy es sábado (Bogotá), el soporte de turno de cada equipo; además, el principal y el secundario del aplicativo. El contacto completo solo con atlas.equipo.ver_contacto. 404 si el aplicativo no existe. Requiere atlas.equipo.ver.'
+      operationId: ObtenerAQuienLlamo
+      parameters:
+        - name: slug
+          in: path
+          description: Slug del aplicativo en el catálogo.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AQuienLlamoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  /api/v1/equipo/carga:
+    get:
+      tags:
+        - Equipo
+      summary: Mapa de carga
+      description: 'Cuántas responsabilidades tiene cada persona (principal cuenta 1; secundaria, su dedicación) y quién se sale de la media en más de un 30 %. Requiere atlas.equipo.ver.'
+      operationId: ObtenerMapaCarga
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapaCargaDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  /api/v1/equipo/versiones:
+    get:
+      tags:
+        - Equipo
+      summary: Historial del reparto
+      description: 'Las versiones del reparto, de la más reciente a la más antigua, con su origen, autor, nota y huella. Requiere atlas.equipo.ver.'
+      operationId: ListarVersionesReparto
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VersionResumenDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  /api/v1/equipo/versiones/comparacion:
+    get:
+      tags:
+        - Equipo
+      summary: Comparar dos versiones del reparto
+      description: 'Qué responsables se agregaron, se retiraron o cambiaron de persona o de datos de una versión a otra. 404 si alguna no existe. Requiere atlas.equipo.ver.'
+      operationId: CompararVersionesReparto
+      parameters:
+        - name: desde
+          in: query
+          description: Versión base.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+        - name: hasta
+          in: query
+          description: Versión a comparar con la base.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparacionDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/equipo/versiones/{numero}':
+    get:
+      tags:
+        - Equipo
+      summary: Una versión del reparto
+      description: 'La foto completa de una versión, con las definiciones de los roles y sus tablas en Markdown. 404 si no existe. Requiere atlas.equipo.ver.'
+      operationId: ObtenerVersionReparto
+      parameters:
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionDetalleDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/equipo/versiones/{numero}/restauracion':
+    post:
+      tags:
+        - Equipo
+      summary: Restaurar una versión del reparto
+      description: 'Deja el reparto como en esa versión y crea una versión nueva igual a ella (misma huella), con la nota. Un secundario que cambia empieza en acompañamiento. Queda en la auditoría. Requiere atlas.equipo.gestionar.'
+      operationId: RestaurarVersionReparto
+      parameters:
+        - name: numero
+          in: path
+          description: Número de la versión a restaurar.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      requestBody:
+        description: Nota de la restauración.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudNota'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResumenDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  '/api/v1/equipo/responsabilidades/{id}':
+    delete:
+      tags:
+        - Equipo
+      summary: Retirar un responsable
+      description: Quita la responsabilidad del reparto y crea la versión siguiente con la nota. Queda en la auditoría. Requiere atlas.equipo.gestionar.
+      operationId: RetirarResponsable
+      parameters:
+        - name: id
+          in: path
+          description: Id de la responsabilidad.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: nota
+          in: query
+          description: Por qué se retira (hasta 500).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResumenDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  /api/v1/equipo/importacion/vista-previa:
+    post:
+      tags:
+        - Equipo
+      summary: Vista previa de la importación del documento
+      description: 'Lee el documento de responsables (Markdown), lo enlaza con el catálogo y con las personas (nombre sin tildes ni mayúsculas, o correo) y dice qué quedaría, qué no se pudo enlazar y las inconsistencias. No guarda nada. Requiere atlas.equipo.gestionar.'
+      operationId: PrevisualizarImportacionResponsables
+      requestBody:
+        description: El documento de responsables en Markdown.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVistaPrevia'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VistaPreviaDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  /api/v1/equipo/importacion:
+    post:
+      tags:
+        - Equipo
+      summary: Importar el documento de responsables
+      description: 'Reemplaza el reparto por el del documento y crea la versión que dice el documento (debe ser mayor que la vigente), con sus definiciones y la próxima revisión. Exige la huella de la vista previa (409 si algo cambió) y que no quede nada sin enlazar. Queda en la auditoría. Requiere atlas.equipo.gestionar.'
+      operationId: ImportarResponsables
+      requestBody:
+        description: El mismo documento de la vista previa y su huella.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudImportacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResumenDto'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  /api/v1/equipo/traspasos:
+    get:
+      tags:
+        - Equipo
+      summary: Traspasos en acompañamiento
+      description: Los secundarios en acompañamiento con su checklist (al menos un despliegue y una guardia con el principal). Requiere atlas.equipo.ver.
+      operationId: ListarTraspasos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TraspasoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/equipo/responsabilidades/{id}/traspaso/actividades':
+    post:
+      tags:
+        - Equipo
+      summary: Registrar un despliegue o una guardia del traspaso
+      description: Anota una actividad del secundario con el principal en el checklist del traspaso. Solo para un secundario en acompañamiento. Queda en la auditoría. Requiere atlas.equipo.gestionar.
+      operationId: RegistrarActividadTraspaso
+      parameters:
+        - name: id
+          in: path
+          description: Id de la responsabilidad secundaria.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Tipo, día y nota de la actividad.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudActividad'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraspasoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  '/api/v1/equipo/responsabilidades/{id}/traspaso/habilitacion':
+    post:
+      tags:
+        - Equipo
+      summary: Habilitar al secundario
+      description: Pasa al secundario a habilitado si el checklist está completo (409 checklist_incompleto si falta un despliegue o una guardia). Queda en la auditoría. Requiere atlas.equipo.gestionar.
+      operationId: HabilitarSecundario
+      parameters:
+        - name: id
+          in: path
+          description: Id de la responsabilidad secundaria.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraspasoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  /api/v1/equipo/revisiones:
+    get:
+      tags:
+        - Equipo
+      summary: Revisiones trimestrales del reparto
+      description: 'La próxima revisión, las hechas y cuántos días antes sale el recordatorio al líder. Requiere atlas.equipo.ver.'
+      operationId: ListarRevisionesReparto
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionesDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  /api/v1/equipo/revisiones/proxima:
+    put:
+      tags:
+        - Equipo
+      summary: Programar la próxima revisión
+      description: Fija el día de la próxima revisión (la crea si no hay); el recordatorio vuelve a salir para la fecha nueva. Queda en la auditoría. Requiere atlas.equipo.gestionar.
+      operationId: ProgramarRevisionReparto
+      requestBody:
+        description: Día de la próxima revisión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudFechaRevision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  '/api/v1/equipo/revisiones/{id}/cierre':
+    post:
+      tags:
+        - Equipo
+      summary: Cerrar la revisión
+      description: Marca la revisión como hecha y programa la siguiente (tres meses después si no se dice). Queda en la auditoría. Requiere atlas.equipo.gestionar.
+      operationId: CerrarRevisionReparto
+      parameters:
+        - name: id
+          in: path
+          description: Id de la revisión.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Nota y, si se quiere, el día de la siguiente revisión.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCierreRevision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionesDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  '/api/v1/equipo/personas/{personaId}/github':
+    put:
+      tags:
+        - Equipo
+      summary: Usuario de GitHub de una persona
+      description: 'Guarda (o, vacío, quita) el usuario de GitHub de un empleado, para el CODEOWNERS sugerido. Queda en la auditoría. Requiere atlas.equipo.gestionar.'
+      operationId: GuardarUsuarioGitHub
+      parameters:
+        - name: personaId
+          in: path
+          description: Id del empleado.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Usuario de GitHub; vacío lo quita.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudUsuarioGitHub'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioGitHubDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  /api/v1/equipo/codeowners:
+    get:
+      tags:
+        - Equipo
+      summary: CODEOWNERS sugerido
+      description: 'Un bloque CODEOWNERS por repo, con el principal y el secundario de cada carpeta según el catálogo (repo y ruta) y el reparto vigente; marca a quien no tiene usuario de GitHub. Requiere atlas.equipo.ver.'
+      operationId: ObtenerCodeownersSugerido
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeownersDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  /api/v1/equipo/codeowners/diferencias:
+    get:
+      tags:
+        - Equipo
+      summary: Diferencias con el CODEOWNERS de GitHub
+      description: 'Lee el CODEOWNERS real del repo con la API de GitHub (solo lectura; Plataforma:GitHub) y lo compara con el sugerido, patrón por patrón. Si GitHub no está configurado, lo dice y no falla. Requiere atlas.equipo.gestionar.'
+      operationId: CompararCodeownersConGitHub
+      parameters:
+        - name: repo
+          in: query
+          description: Repo de GitHub como dueño/nombre (p. ej. flitsas/flit).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiferenciasCodeownersDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.gestionar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.gestionar
+  '/api/v1/equipo/aplicativos/{slug}/ficha-responsables':
+    get:
+      tags:
+        - Equipo
+      summary: Ficha de responsables en Markdown
+      description: 'La «Ficha de responsables» del aplicativo para su README: principal, secundario, cómo desplegar, a quién escalar y las definiciones de cada rol. 404 si el aplicativo no existe. Requiere atlas.equipo.ver.'
+      operationId: ObtenerFichaResponsables
+      parameters:
+        - name: slug
+          in: path
+          description: Slug del aplicativo en el catálogo.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaResponsablesDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.equipo).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEquipo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
   /api/v1/hola/saludos:
     get:
       tags:
@@ -5138,6 +6086,36 @@ components:
           type: string
           description: La versión vigente que se mostró.
       description: Versión de un documento legal que la persona acepta.
+    ActividadTraspasoDto:
+      required:
+        - id
+        - tipo
+        - fecha
+        - nota
+        - registradaEn
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la actividad.
+          format: uuid
+        tipo:
+          type: string
+          description: despliegue o guardia.
+        fecha:
+          type: string
+          description: Día de la actividad.
+          format: date
+        nota:
+          type:
+            - 'null'
+            - string
+          description: Nota.
+        registradaEn:
+          type: string
+          description: Cuándo se registró.
+          format: date-time
+      description: Una actividad del traspaso acompañado.
     AlcanceVista:
       required:
         - tipo
@@ -5153,6 +6131,28 @@ components:
             - string
           description: Id del recurso; vacío si es global.
       description: 'Alcance de una asignación: global o un recurso (organizacion, aplicativo, paquete, documento, ambiente…).'
+    AplicativoRefDto:
+      required:
+        - id
+        - slug
+        - nombre
+        - tipo
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id del aplicativo en el catálogo.
+          format: uuid
+        slug:
+          type: string
+          description: 'Slug del aplicativo: es la URL de su ficha.'
+        nombre:
+          type: string
+          description: Nombre del aplicativo.
+        tipo:
+          type: string
+          description: 'producto, modulo o servicio.'
+      description: 'Aplicativo del catálogo, para enlazar su ficha.'
     AplicativoResumen:
       required:
         - id
@@ -5226,6 +6226,52 @@ components:
           description: Cuántos hijos directos tiene.
           format: int32
       description: Aplicativo del catálogo en un listado.
+    AQuienLlamoDto:
+      required:
+        - aplicativo
+        - hoy
+        - esSabado
+        - soporte
+        - principal
+        - secundario
+        - heredadoDe
+        - veContacto
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        hoy:
+          type: string
+          description: Hoy en Bogotá.
+          format: date
+        esSabado:
+          type: boolean
+          description: Si hoy es sábado.
+        soporte:
+          oneOf:
+            - type: 'null'
+            - description: Soporte de turno de hoy; vacío si no es sábado o no hay módulo de soporte.
+              $ref: '#/components/schemas/SoporteHoyDto'
+        principal:
+          oneOf:
+            - type: 'null'
+            - description: Principal.
+              $ref: '#/components/schemas/ResponsableDto'
+        secundario:
+          oneOf:
+            - type: 'null'
+            - description: Secundario.
+              $ref: '#/components/schemas/ResponsableDto'
+        heredadoDe:
+          oneOf:
+            - type: 'null'
+            - description: Si los responsables son de un ancestro.
+              $ref: '#/components/schemas/AplicativoRefDto'
+        veContacto:
+          type: boolean
+          description: Si la persona ve teléfonos (atlas.equipo.ver_contacto).
+      description: '«¿A quién llamo?»: soporte de turno si hoy es sábado, y el principal y el secundario del aplicativo.'
     AsignacionVista:
       required:
         - id
@@ -5344,6 +6390,25 @@ components:
           items:
             $ref: '#/components/schemas/NotificacionDto'
       description: 'Bandeja de la persona: total sin leer y las más recientes primero.'
+    BloqueCodeownersDto:
+      required:
+        - repo
+        - texto
+        - lineas
+      type: object
+      properties:
+        repo:
+          type: string
+          description: Repo como dueño/nombre.
+        texto:
+          type: string
+          description: 'El bloque, listo para copiar.'
+        lineas:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineaCodeownersDto'
+          description: Sus líneas.
+      description: Bloque CODEOWNERS sugerido para un repo.
     CalendarioDto:
       required:
         - desde
@@ -5577,6 +6642,41 @@ components:
             - string
           description: Observación.
       description: Horario y observación de un turno que aún no está aplicado. Reemplaza los valores anteriores.
+    CambioVersionDto:
+      required:
+        - aplicativo
+        - tipo
+        - cambio
+        - antes
+        - despues
+        - campos
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        tipo:
+          type: string
+          description: principal o secundario.
+        cambio:
+          type: string
+          description: 'agregada, retirada, persona o datos.'
+        antes:
+          type:
+            - 'null'
+            - string
+          description: Persona antes.
+        despues:
+          type:
+            - 'null'
+            - string
+          description: Persona después.
+        campos:
+          type: array
+          items:
+            type: string
+          description: 'Campos que cambiaron (dedicacion, vigencia, orden).'
+      description: Un cambio entre dos versiones.
     CanalSoporteDto:
       required:
         - fecha
@@ -5679,6 +6779,43 @@ components:
             - string
           description: 'Cargo, si se conoce.'
       description: Persona interna que se puede agregar a la rotación.
+    CargaPersonaDto:
+      required:
+        - persona
+        - principales
+        - secundarias
+        - puntaje
+        - nivel
+      type: object
+      properties:
+        persona:
+          description: La persona.
+          $ref: '#/components/schemas/PersonaEquipoDto'
+        principales:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: De cuántos aplicativos es principal.
+          format: int32
+        secundarias:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: De cuántos es secundaria.
+          format: int32
+        puntaje:
+          pattern: '^-?(?:0|[1-9]\d*)(?:\.\d+)?$'
+          type:
+            - number
+            - string
+          description: 'Principales + la dedicación de cada secundaria (20 % = 0,2).'
+          format: double
+        nivel:
+          type: string
+          description: 'alta, normal o baja frente a la media.'
+      description: Carga de una persona en el reparto.
     ClavePushDto:
       required:
         - habilitado
@@ -5713,6 +6850,71 @@ components:
           type: string
           description: 'QR de la URI como imagen SVG en data URI (img-src data: de la CSP).'
       description: Clave TOTP nueva para registrar en la aplicación de autenticación.
+    CodeownersDto:
+      required:
+        - version
+        - gitHubConfigurado
+        - modoGitHub
+        - repos
+        - personasSinUsuario
+      type: object
+      properties:
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Versión vigente del reparto.
+          format: int32
+        gitHubConfigurado:
+          type: boolean
+          description: Si este ambiente puede leer GitHub (Plataforma:GitHub).
+        modoGitHub:
+          type: string
+          description: 'token, app o ninguno.'
+        repos:
+          type: array
+          items:
+            $ref: '#/components/schemas/BloqueCodeownersDto'
+          description: Un bloque por repo.
+        personasSinUsuario:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaEquipoDto'
+          description: Responsables sin usuario de GitHub.
+      description: 'CODEOWNERS sugerido por repo y carpeta, desde el catálogo y el reparto.'
+    ComparacionDto:
+      required:
+        - desde
+        - hasta
+        - iguales
+        - cambios
+      type: object
+      properties:
+        desde:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Versión base.
+          format: int32
+        hasta:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Versión comparada.
+          format: int32
+        iguales:
+          type: boolean
+          description: Si reparten igual (misma huella).
+        cambios:
+          type: array
+          items:
+            $ref: '#/components/schemas/CambioVersionDto'
+          description: Cambios de la base a la comparada.
+      description: Comparación de dos versiones del reparto.
     CompensacionDto:
       required:
         - id
@@ -5856,28 +7058,6 @@ components:
             - string
           description: 'Huella de la vista previa: si algo cambió desde entonces, la confirmación se rechaza.'
       description: 'Confirmación de una vista previa: el mismo equipo, la misma ventana y la huella que devolvió.'
-    ConteoPersonaDto:
-      required:
-        - personaId
-        - nombre
-        - turnos
-      type: object
-      properties:
-        personaId:
-          type: string
-          description: Id de la persona.
-          format: uuid
-        nombre:
-          type: string
-          description: Nombre.
-        turnos:
-          pattern: '^-?(?:0|[1-9]\d*)$'
-          type:
-            - integer
-            - string
-          description: Turnos en la ventana (fijos y nuevos).
-          format: int32
-      description: Turnos de una persona en la ventana.
     CuentaARecuperar:
       required:
         - correo
@@ -5915,6 +7095,81 @@ components:
           type: boolean
           description: true si ya quedó la sesión abierta.
       description: 'Cuenta creada o recuperada: los códigos de recuperación se muestran esta única vez.'
+    DefinicionRolDto:
+      required:
+        - rol
+        - titulo
+        - puntos
+      type: object
+      properties:
+        rol:
+          type: string
+          description: principal o secundario.
+        titulo:
+          type: string
+          description: Título del documento («Responsable principal»).
+        puntos:
+          type: array
+          items:
+            type: string
+          description: 'Cada punto, sin cambiar una letra.'
+      description: Definición de un rol tal como está en el §1 del documento de responsables.
+    DiferenciaDto:
+      required:
+        - patron
+        - estado
+        - enAtlas
+        - enGitHub
+      type: object
+      properties:
+        patron:
+          type: string
+          description: Patrón (carpeta o *).
+        estado:
+          type: string
+          description: 'igual, distinto, falta_en_github o solo_en_github.'
+        enAtlas:
+          type: array
+          items:
+            type: string
+          description: Propietarios según Atlas.
+        enGitHub:
+          type: array
+          items:
+            type: string
+          description: Propietarios en GitHub.
+      description: Diferencia de un patrón entre Atlas y GitHub.
+    DiferenciasCodeownersDto:
+      required:
+        - repo
+        - configurado
+        - mensaje
+        - archivo
+        - diferencias
+      type: object
+      properties:
+        repo:
+          type: string
+          description: Repo como dueño/nombre.
+        configurado:
+          type: boolean
+          description: Si GitHub está configurado en este ambiente.
+        mensaje:
+          type:
+            - 'null'
+            - string
+          description: Qué falló o qué falta configurar; vacío si se leyó bien.
+        archivo:
+          type:
+            - 'null'
+            - string
+          description: Ruta del CODEOWNERS en el repo; vacía si no tiene.
+        diferencias:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiferenciaDto'
+          description: Diferencias por patrón.
+      description: Diferencias entre el CODEOWNERS sugerido y el real de un repo (lectura de la API de GitHub).
     DocumentoVigente:
       required:
         - documento
@@ -5939,23 +7194,6 @@ components:
           type: string
           description: 'SHA-256 (hex) del texto: queda en la evidencia de la aceptación.'
       description: 'Documento legal vigente (términos de uso o aviso de privacidad, Ley 1581) con su versión y su texto en Markdown.'
-    EleccionPersona:
-      required:
-        - clave
-        - personaId
-      type: object
-      properties:
-        clave:
-          maxLength: 200
-          type:
-            - 'null'
-            - string
-          description: Nombre normalizado del Excel (la clave que devolvió la vista previa).
-        personaId:
-          type: string
-          description: Persona elegida entre las candidatas.
-          format: uuid
-      description: Persona elegida para un nombre del Excel que encaja con varias personas.
     EquipoDto:
       required:
         - id
@@ -6057,6 +7295,44 @@ components:
           type: string
           description: Nombre del equipo.
       description: Equipo de un turno.
+    EquipoTurnoDto:
+      required:
+        - id
+        - nombre
+        - area
+        - horaInicio
+        - horaFin
+        - personas
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id del equipo de soporte.
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre del equipo.
+        area:
+          type:
+            - 'null'
+            - string
+          description: Área del equipo.
+        horaInicio:
+          type:
+            - 'null'
+            - string
+          description: 'Hora de inicio (HH:mm, Bogotá).'
+        horaFin:
+          type:
+            - 'null'
+            - string
+          description: 'Hora de fin (HH:mm, Bogotá).'
+        personas:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaEquipoDto'
+          description: Personas de turno; vacío si nadie.
+      description: Un equipo de soporte con sus personas de turno.
     ErrorCatalogo:
       required:
         - codigo
@@ -6077,6 +7353,19 @@ components:
         referencia:
           type: string
       description: 'Reporte recibido: la referencia con la que quedó en el log.'
+    ErrorEquipo:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'Código: no_encontrado, version_no_valida, hay_pendientes, vista_previa_cambio, sin_reparto, checklist_incompleto, no_es_secundario, ya_habilitado, version_repetida.'
+        mensaje:
+          type: string
+          description: 'Qué pasó, en español.'
+      description: Error del módulo de equipo con un código estable.
     ErrorExternos:
       required:
         - error
@@ -6396,6 +7685,19 @@ components:
           type: string
           format: date-time
       description: 'Ficha de un aplicativo: sus datos, su ruta en la jerarquía y sus hijos. Las pestañas de los demás módulos las pinta la PWA.'
+    FichaResponsablesDto:
+      required:
+        - aplicativo
+        - markdown
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        markdown:
+          type: string
+          description: La ficha en Markdown.
+      description: Ficha de responsables en Markdown para el README del aplicativo.
     FilaImportacionDto:
       required:
         - fila
@@ -6476,6 +7778,58 @@ components:
             type: string
           description: 'Cada caso ambiguo de la fila (queda en la observación, para revisión).'
       description: 'Una fila del Excel, lo que se entendió de ella y lo que hará la importación.'
+    FilaRepartoDto:
+      required:
+        - aplicativo
+        - principal
+        - secundario
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        principal:
+          oneOf:
+            - type: 'null'
+            - description: Responsable principal; vacío si no tiene.
+              $ref: '#/components/schemas/ResponsableDto'
+        secundario:
+          oneOf:
+            - type: 'null'
+            - description: Responsable secundario; vacío si no tiene.
+              $ref: '#/components/schemas/ResponsableDto'
+      description: Un aplicativo con su principal y su secundario.
+    FilaVistaPreviaDto:
+      required:
+        - aplicativo
+        - tipo
+        - personaId
+        - persona
+        - dedicacion
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo enlazado.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        tipo:
+          type: string
+          description: principal o secundario.
+        personaId:
+          type: string
+          description: Id de la persona enlazada.
+          format: uuid
+        persona:
+          type: string
+          description: Nombre de la persona en Atlas.
+        dedicacion:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Dedicación orientativa.
+          format: int32
+      description: Una fila de la vista previa.
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -6781,6 +8135,37 @@ components:
           type: string
           format: date-time
       description: 'Invitación de una persona externa, con su estado calculado en este momento.'
+    LineaCodeownersDto:
+      required:
+        - patron
+        - aplicativo
+        - propietarios
+        - sinUsuario
+        - heredadoDe
+      type: object
+      properties:
+        patron:
+          type: string
+          description: '* (repo completo) o /carpeta/.'
+        aplicativo:
+          description: El aplicativo de esa carpeta.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        propietarios:
+          type: array
+          items:
+            type: string
+          description: '@usuario de principal y secundario.'
+        sinUsuario:
+          type: array
+          items:
+            type: string
+          description: Responsables sin usuario de GitHub en Atlas.
+        heredadoDe:
+          oneOf:
+            - type: 'null'
+            - description: Si los responsables son de un ancestro.
+              $ref: '#/components/schemas/AplicativoRefDto'
+      description: Una línea del CODEOWNERS sugerido.
     ListadoAplicativos:
       required:
         - total
@@ -6799,6 +8184,41 @@ components:
           items:
             $ref: '#/components/schemas/AplicativoResumen'
       description: 'Listado del catálogo filtrado, ordenado por grupo y por la ruta en la jerarquía.'
+    MapaCargaDto:
+      required:
+        - media
+        - umbralAlto
+        - umbralBajo
+        - personas
+      type: object
+      properties:
+        media:
+          pattern: '^-?(?:0|[1-9]\d*)(?:\.\d+)?$'
+          type:
+            - number
+            - string
+          description: Puntaje medio.
+          format: double
+        umbralAlto:
+          pattern: '^-?(?:0|[1-9]\d*)(?:\.\d+)?$'
+          type:
+            - number
+            - string
+          description: 'Por encima, la carga es alta.'
+          format: double
+        umbralBajo:
+          pattern: '^-?(?:0|[1-9]\d*)(?:\.\d+)?$'
+          type:
+            - number
+            - string
+          description: 'Por debajo, la carga es baja.'
+          format: double
+        personas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CargaPersonaDto'
+          description: 'Cada persona, de mayor a menor carga.'
+      description: 'Mapa de carga del equipo: resalta a quien se sale de la media (±30 %).'
     MapeoGrupoVista:
       required:
         - id
@@ -7331,6 +8751,27 @@ components:
           type: string
           description: Id del paso; vence en 5 minutos.
       description: Siguiente paso del ingreso.
+    PendienteDto:
+      required:
+        - tipo
+        - nombre
+        - motivo
+        - detalle
+      type: object
+      properties:
+        tipo:
+          type: string
+          description: aplicativo o persona.
+        nombre:
+          type: string
+          description: El nombre tal como está en el documento.
+        motivo:
+          type: string
+          description: no_encontrado o ambiguo.
+        detalle:
+          type: string
+          description: Qué hacer.
+      description: Algo del documento que no se pudo enlazar.
     PendientesPersonaDto:
       required:
         - persona
@@ -7497,6 +8938,54 @@ components:
             type: string
           description: 'Códigos de los roles asignados y vigentes, ordenados. No incluye atlas.lector (lo tiene todo empleado) ni los implícitos.'
       description: 'Persona encontrada: lo mínimo para elegirla y abrir sus asignaciones.'
+    PersonaEquipoDto:
+      required:
+        - id
+        - nombre
+        - correo
+        - cargo
+        - foto
+        - telefono
+        - usuarioGitHub
+        - activa
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la persona.
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre completo.
+        correo:
+          type:
+            - 'null'
+            - string
+          description: Correo corporativo.
+        cargo:
+          type:
+            - 'null'
+            - string
+          description: 'Cargo, de Microsoft 365.'
+        foto:
+          type:
+            - 'null'
+            - string
+          description: URL de la foto; vacía sin foto.
+        telefono:
+          type:
+            - 'null'
+            - string
+          description: Teléfono; vacío sin atlas.equipo.ver_contacto.
+        usuarioGitHub:
+          type:
+            - 'null'
+            - string
+          description: 'Usuario de GitHub, para CODEOWNERS.'
+        activa:
+          type: boolean
+          description: Si la persona está activa en Atlas.
+      description: Persona del equipo. El teléfono solo llega con atlas.equipo.ver_contacto.
     PersonaNuevaDto:
       required:
         - clave
@@ -7529,24 +9018,27 @@ components:
           type: boolean
           description: Si quien importa ya confirmó crearla.
       description: 'Persona del Excel que no existe en Atlas: se propone crearla inactiva (no entra en la generación).'
-    PersonaPreviaDto:
+    PersonaRepartoDto:
       required:
-        - personaId
-        - nombre
-        - nueva
+        - persona
+        - principalDe
+        - secundarioDe
       type: object
       properties:
-        personaId:
-          type: string
-          description: Id de la persona.
-          format: uuid
-        nombre:
-          type: string
-          description: Nombre.
-        nueva:
-          type: boolean
-          description: 'Si es un turno nuevo (falso: ya publicado y no cambia).'
-      description: Persona de un sábado de la vista previa.
+        persona:
+          description: La persona.
+          $ref: '#/components/schemas/PersonaEquipoDto'
+        principalDe:
+          type: array
+          items:
+            $ref: '#/components/schemas/AplicativoRefDto'
+          description: 'Aplicativos de los que es principal, en el orden del reparto.'
+        secundarioDe:
+          type: array
+          items:
+            $ref: '#/components/schemas/AplicativoRefDto'
+          description: 'Aplicativos de los que es secundaria, en el orden del reparto.'
+      description: Una persona con los aplicativos de los que es principal y secundaria.
     PersonaResumenDto:
       required:
         - id
@@ -7734,6 +9226,63 @@ components:
         nombre:
           type: string
       description: 'Aplicativo de la ruta de otro (un ancestro o un hijo), para enlazarlo.'
+    RepartoDto:
+      required:
+        - version
+        - definiciones
+        - porPersona
+        - productos
+        - modulos
+        - servicios
+        - huerfanas
+        - veContacto
+        - puedeGestionar
+      type: object
+      properties:
+        version:
+          oneOf:
+            - type: 'null'
+            - description: Versión vigente; vacía si aún no hay reparto.
+              $ref: '#/components/schemas/VersionResumenDto'
+        definiciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/DefinicionRolDto'
+          description: Definiciones de cada rol (§1 del documento).
+        porPersona:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaRepartoDto'
+          description: Reparto por persona (tabla 2).
+        productos:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilaRepartoDto'
+          description: Productos (tabla 3.1).
+        modulos:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilaRepartoDto'
+          description: Módulos (tabla 3.2).
+        servicios:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilaRepartoDto'
+          description: Servicios con responsables propios.
+        huerfanas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Responsabilidades de aplicativos que ya no están en el catálogo.
+          format: int32
+        veContacto:
+          type: boolean
+          description: Si la persona ve teléfonos (atlas.equipo.ver_contacto).
+        puedeGestionar:
+          type: boolean
+          description: Si la persona puede cambiar el reparto (atlas.equipo.gestionar).
+      description: 'El reparto vigente: definiciones de los roles, por persona, por producto, por módulo y por servicio.'
     ReporteCompensacionesDto:
       required:
         - equipoId
@@ -7829,6 +9378,186 @@ components:
           description: 'Cuándo la hizo la persona, si la hizo sin conexión.'
           format: date-time
       description: Decisión de quien aprueba.
+    ResponsabilidadDePersonaDto:
+      required:
+        - aplicativo
+        - responsable
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        responsable:
+          description: La responsabilidad.
+          $ref: '#/components/schemas/ResponsableDto'
+      description: Una responsabilidad vista desde la persona.
+    ResponsabilidadesPersonaDto:
+      required:
+        - persona
+        - principalDe
+        - secundarioDe
+      type: object
+      properties:
+        persona:
+          description: La persona.
+          $ref: '#/components/schemas/PersonaEquipoDto'
+        principalDe:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponsabilidadDePersonaDto'
+          description: Principal de.
+        secundarioDe:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponsabilidadDePersonaDto'
+          description: Secundaria de.
+      description: 'Responsabilidades de una persona: de qué es principal y de qué es secundaria.'
+    ResponsabilidadVersionDto:
+      required:
+        - aplicativo
+        - tipo
+        - personaId
+        - persona
+        - dedicacion
+        - vigenteDesde
+        - vigenteHasta
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo (nombre del momento de la versión).
+          $ref: '#/components/schemas/AplicativoRefDto'
+        tipo:
+          type: string
+          description: principal o secundario.
+        personaId:
+          type: string
+          description: Id de la persona.
+          format: uuid
+        persona:
+          type: string
+          description: Nombre de la persona en esa versión.
+        dedicacion:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Dedicación orientativa.
+          format: int32
+        vigenteDesde:
+          type: string
+          description: Desde cuándo.
+          format: date
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo.
+          format: date
+      description: Una responsabilidad dentro de una versión.
+    ResponsableDto:
+      required:
+        - id
+        - tipo
+        - persona
+        - dedicacion
+        - vigenteDesde
+        - vigenteHasta
+        - vigente
+        - estadoTraspaso
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la responsabilidad.
+          format: uuid
+        tipo:
+          type: string
+          description: principal o secundario.
+        persona:
+          description: La persona responsable.
+          $ref: '#/components/schemas/PersonaEquipoDto'
+        dedicacion:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Dedicación orientativa en porcentaje (el secundario ≈ 20 %); vacía si no se definió.
+          format: int32
+        vigenteDesde:
+          type: string
+          description: Desde cuándo (aaaa-mm-dd).
+          format: date
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: 'Hasta cuándo, incluido; vacío sin fin.'
+          format: date
+        vigente:
+          type: boolean
+          description: Si está vigente hoy (y da el rol implícito de editor).
+        estadoTraspaso:
+          type: string
+          description: en_acompanamiento o habilitado.
+      description: 'Un responsable de un aplicativo: la persona, su tipo, su dedicación, su vigencia y su traspaso.'
+    ResponsablesAplicativoDto:
+      required:
+        - aplicativo
+        - principal
+        - secundario
+        - heredadoDe
+        - definiciones
+        - traspaso
+        - version
+        - puedeGestionar
+        - veContacto
+      type: object
+      properties:
+        aplicativo:
+          description: El aplicativo.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        principal:
+          oneOf:
+            - type: 'null'
+            - description: Principal.
+              $ref: '#/components/schemas/ResponsableDto'
+        secundario:
+          oneOf:
+            - type: 'null'
+            - description: Secundario.
+              $ref: '#/components/schemas/ResponsableDto'
+        heredadoDe:
+          oneOf:
+            - type: 'null'
+            - description: Si los responsables son de un ancestro (un servicio sin responsables propios).
+              $ref: '#/components/schemas/AplicativoRefDto'
+        definiciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/DefinicionRolDto'
+          description: Definiciones de cada rol (§1 del documento).
+        traspaso:
+          oneOf:
+            - type: 'null'
+            - description: 'Traspaso del secundario, si está en acompañamiento.'
+              $ref: '#/components/schemas/TraspasoDto'
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Versión vigente del reparto.
+          format: int32
+        puedeGestionar:
+          type: boolean
+          description: Si la persona puede cambiar el reparto.
+        veContacto:
+          type: boolean
+          description: Si la persona ve teléfonos.
+      description: 'Responsables de un aplicativo: los propios o, si no tiene, los del ancestro más cercano.'
     RespuestaSolicitud:
       required:
         - acepta
@@ -8045,6 +9774,76 @@ components:
           description: Casos ambiguos (filas marcadas para revisión).
           format: int32
       description: Conteos de la vista previa o de la importación.
+    RevisionDto:
+      required:
+        - id
+        - fecha
+        - estado
+        - recordatorioEnviadoEn
+        - hechaEn
+        - hechaPor
+        - nota
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la revisión.
+          format: uuid
+        fecha:
+          type: string
+          description: Día de la revisión.
+          format: date
+        estado:
+          type: string
+          description: pendiente o hecha.
+        recordatorioEnviadoEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo salió el recordatorio.
+          format: date-time
+        hechaEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo se hizo.
+          format: date-time
+        hechaPor:
+          type:
+            - 'null'
+            - string
+          description: Quién la cerró.
+        nota:
+          type:
+            - 'null'
+            - string
+          description: Nota del cierre.
+      description: Una revisión trimestral del reparto.
+    RevisionesDto:
+      required:
+        - proxima
+        - historial
+        - diasAnticipacion
+      type: object
+      properties:
+        proxima:
+          oneOf:
+            - type: 'null'
+            - description: La próxima revisión; vacía si no hay una programada.
+              $ref: '#/components/schemas/RevisionDto'
+        historial:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevisionDto'
+          description: 'Revisiones hechas, de la más reciente a la más antigua.'
+        diasAnticipacion:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántos días antes sale el recordatorio.
+          format: int32
+      description: 'Revisiones del reparto: la próxima y las hechas.'
     RolConPermisos:
       required:
         - codigo
@@ -8107,48 +9906,6 @@ components:
         asignable:
           type: boolean
       description: 'Rol de Atlas: interno (§7.2), externo (§7.3) o implícito por propiedad.'
-    SabadoPreviaDto:
-      required:
-        - fecha
-        - decision
-        - personas
-        - festivo
-        - cambia
-        - ausenteEnFijo
-        - faltan
-      type: object
-      properties:
-        fecha:
-          type: string
-          description: El sábado.
-          format: date
-        decision:
-          type: string
-          description: 'asignado (con turnos nuevos), fijo (ya completo, no cambia), festivo (sin turno por la regla) o sin_disponibles (no se llega al mínimo).'
-        personas:
-          type: array
-          items:
-            $ref: '#/components/schemas/PersonaPreviaDto'
-          description: 'Personas de turno ese sábado: las que ya están y las nuevas.'
-        festivo:
-          type:
-            - 'null'
-            - string
-          description: 'Nombre del festivo, si lo es.'
-        cambia:
-          type: boolean
-          description: Si confirmar cambia lo que hoy está publicado para ese sábado.
-        ausenteEnFijo:
-          type: boolean
-          description: Un turno fijo es de alguien con una ausencia ese día (revisar a mano).
-        faltan:
-          pattern: '^-?(?:0|[1-9]\d*)$'
-          type:
-            - integer
-            - string
-          description: Personas que faltan para el mínimo del equipo.
-          format: int32
-      description: Un sábado de la vista previa.
     SaludoDto:
       required:
         - id
@@ -8237,6 +9994,29 @@ components:
         factor:
           $ref: '#/components/schemas/SolicitudFactor'
       description: Enlace de activación y el factor de la cuenta de emergencia.
+    SolicitudActividad:
+      required:
+        - tipo
+        - fecha
+        - nota
+      type: object
+      properties:
+        tipo:
+          type: string
+          description: despliegue o guardia.
+        fecha:
+          type:
+            - 'null'
+            - string
+          description: Día de la actividad; hoy si no se dice.
+          format: date
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Nota (hasta 500).
+      description: 'Una actividad del traspaso: despliegue o guardia con el principal.'
     SolicitudAplicativo:
       required:
         - slug
@@ -8439,6 +10219,73 @@ components:
           type: boolean
           description: Si la persona en sesión (quien la pidió) puede cancelarla.
       description: 'Solicitud de cambio de turno: la persona de turno propone un reemplazo, el reemplazo acepta y alguien con permiso aprueba.'
+    SolicitudCambioResponsable:
+      required:
+        - aplicativoId
+        - tipo
+        - personaId
+        - dedicacion
+        - vigenteDesde
+        - vigenteHasta
+        - nota
+      type: object
+      properties:
+        aplicativoId:
+          type: string
+          description: Aplicativo del catálogo.
+          format: uuid
+        tipo:
+          type: string
+          description: principal o secundario.
+        personaId:
+          type: string
+          description: La persona (empleado activo).
+          format: uuid
+        dedicacion:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Dedicación orientativa (1 a 100); en un secundario nuevo, 20 si no se dice.'
+          format: int32
+        vigenteDesde:
+          type:
+            - 'null'
+            - string
+          description: Desde cuándo; hoy si no se dice.
+          format: date
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo (incluido); vacío sin fin.
+          format: date
+        nota:
+          maxLength: 500
+          minLength: 1
+          type: string
+          description: Por qué cambia (hasta 500).
+      description: 'Cambio de un responsable (o alta de uno nuevo) con su nota: crea una versión.'
+    SolicitudCierreRevision:
+      required:
+        - nota
+        - siguiente
+      type: object
+      properties:
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Nota (hasta 500).
+        siguiente:
+          type:
+            - 'null'
+            - string
+          description: Siguiente revisión; tres meses después si no se dice.
+          format: date
+      description: 'Cierre de la revisión: queda hecha y se programa la siguiente.'
     SolicitudCompletarRecuperacion:
       required:
         - enlace
@@ -8505,6 +10352,16 @@ components:
             - string
           description: 'Con contraseña: el código de 6 dígitos que muestra la aplicación de autenticación.'
       description: 'Factor con el que se crea o se recupera una cuenta externa: passkey (preferida) o contraseña más TOTP.'
+    SolicitudFechaRevision:
+      required:
+        - fecha
+      type: object
+      properties:
+        fecha:
+          type: string
+          description: Día de la revisión (hoy o después).
+          format: date
+      description: Fecha de la próxima revisión.
     SolicitudGeneracion:
       required:
         - equipoId
@@ -8534,61 +10391,27 @@ components:
       description: Ventana de la generación automática de un equipo.
     SolicitudImportacion:
       required:
-        - equipoId
-        - nombreArchivo
-        - contenido
-        - crearInactivas
-        - elegidas
-        - agregarParticipantes
+        - markdown
         - huella
+        - traspaso
       type: object
       properties:
-        equipoId:
-          type:
-            - 'null'
-            - string
-          description: 'Equipo destino; vacío, Desarrollo TI (el del Excel).'
-          format: uuid
-        nombreArchivo:
-          maxLength: 200
-          type:
-            - 'null'
-            - string
-          description: 'Nombre del archivo, solo para el informe.'
-        contenido:
-          maxLength: 1398104
-          type:
-            - 'null'
-            - string
-          description: Contenido del .xlsx en base64 (máximo 1 MB antes de codificar).
-        crearInactivas:
-          maxItems: 100
-          type:
-            - 'null'
-            - array
-          items:
-            type: string
-          description: Claves de las personas que no existen en Atlas y que quien importa confirma crear como inactivas.
-        elegidas:
-          maxItems: 100
-          type:
-            - 'null'
-            - array
-          items:
-            $ref: '#/components/schemas/EleccionPersona'
-          description: Persona elegida para cada nombre ambiguo.
-        agregarParticipantes:
-          type:
-            - 'null'
-            - boolean
-          description: 'Si agrega al equipo a los responsables que aún no están en su rotación (activos o, los nuevos, inactivos); vacío, sí.'
+        markdown:
+          maxLength: 100000
+          minLength: 1
+          type: string
+          description: 'Contenido del documento (Markdown, hasta 100 KB).'
         huella:
           maxLength: 64
+          minLength: 64
+          type: string
+          description: 'Huella de la vista previa: si algo cambió, la importación se rechaza (409).'
+        traspaso:
           type:
             - 'null'
             - string
-          description: 'Solo al confirmar: la huella de la vista previa que se aplica.'
-      description: 'El .xlsx de la rotación (hoja «Rotacion Soporte»: Fecha, Responsable, Estado, Compensado, Observación) en base64 y las decisiones de quien importa. La vista previa y la confirmación reciben lo mismo; la confirmación, además, la huella.'
+          description: 'Estado de traspaso de los secundarios importados: habilitado (por defecto) o en_acompanamiento.'
+      description: 'Confirmación de la importación: el mismo Markdown y la huella de su vista previa.'
     SolicitudIngresoLocal:
       required:
         - correo
@@ -8660,6 +10483,17 @@ components:
         rol:
           type: string
       description: Grupo de Entra ID (object id y nombre) y el rol interno que otorga.
+    SolicitudNota:
+      required:
+        - nota
+      type: object
+      properties:
+        nota:
+          maxLength: 500
+          minLength: 1
+          type: string
+          description: Por qué se hace (hasta 500).
+      description: Nota de un cambio.
     SolicitudOpcionesInvitacion:
       required:
         - token
@@ -8753,6 +10587,51 @@ components:
         token:
           type: string
       description: Token del enlace de la invitación (el fragmento de la URL del correo).
+    SolicitudUsuarioGitHub:
+      required:
+        - usuario
+      type: object
+      properties:
+        usuario:
+          maxLength: 40
+          type:
+            - 'null'
+            - string
+          description: 'Usuario de GitHub, sin @ (hasta 39: letras, números y guiones).'
+      description: Usuario de GitHub de una persona; vacío lo quita.
+    SolicitudVistaPrevia:
+      required:
+        - markdown
+      type: object
+      properties:
+        markdown:
+          maxLength: 100000
+          minLength: 1
+          type: string
+          description: 'Contenido del documento (Markdown, hasta 100 KB).'
+      description: El Markdown del documento de responsables para la vista previa.
+    SoporteHoyDto:
+      required:
+        - fecha
+        - festivo
+        - equipos
+      type: object
+      properties:
+        fecha:
+          type: string
+          description: Hoy (aaaa-mm-dd).
+          format: date
+        festivo:
+          type:
+            - 'null'
+            - string
+          description: 'Nombre del festivo, si hoy lo es.'
+        equipos:
+          type: array
+          items:
+            $ref: '#/components/schemas/EquipoTurnoDto'
+          description: Equipos activos con sus personas de turno.
+      description: 'Soporte de turno de hoy, por equipo.'
     SuscripcionDto:
       required:
         - endpoint
@@ -8776,6 +10655,42 @@ components:
             - string
           description: 'Resumen del dispositivo, p. ej. «Chrome en Android».'
       description: Suscripción Web Push de un dispositivo (PushSubscription del navegador).
+    TablasRepartoDto:
+      required:
+        - version
+        - personas
+        - productos
+        - modulos
+        - servicios
+        - completo
+      type: object
+      properties:
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Versión vigente.
+          format: int32
+        personas:
+          type: string
+          description: 'Tabla 2: reparto por persona.'
+        productos:
+          type: string
+          description: 'Tabla 3.1: productos.'
+        modulos:
+          type: string
+          description: 'Tabla 3.2: módulos.'
+        servicios:
+          type:
+            - 'null'
+            - string
+          description: Servicios con responsables propios; vacío si no hay.
+        completo:
+          type: string
+          description: 'Las tablas con sus títulos, para copiar.'
+      description: 'Las tablas del documento reconstruidas desde los datos, en Markdown.'
     TerminosPendientes:
       required:
         - error
@@ -8794,6 +10709,60 @@ components:
           items:
             $ref: '#/components/schemas/DocumentoVigente'
       description: Antes de entrar hay que aceptar versiones nuevas de los documentos legales.
+    TraspasoDto:
+      required:
+        - responsabilidadId
+        - aplicativo
+        - secundario
+        - principal
+        - estado
+        - despliegues
+        - guardias
+        - completo
+        - actividades
+      type: object
+      properties:
+        responsabilidadId:
+          type: string
+          description: Id de la responsabilidad secundaria.
+          format: uuid
+        aplicativo:
+          description: El aplicativo.
+          $ref: '#/components/schemas/AplicativoRefDto'
+        secundario:
+          description: El secundario.
+          $ref: '#/components/schemas/PersonaEquipoDto'
+        principal:
+          oneOf:
+            - type: 'null'
+            - description: El principal que acompaña; vacío si no hay.
+              $ref: '#/components/schemas/PersonaEquipoDto'
+        estado:
+          type: string
+          description: en_acompanamiento o habilitado.
+        despliegues:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Despliegues hechos con el principal.
+          format: int32
+        guardias:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Guardias hechas con el principal.
+          format: int32
+        completo:
+          type: boolean
+          description: Si ya cumple el checklist (≥ 1 despliegue y ≥ 1 guardia).
+        actividades:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActividadTraspasoDto'
+          description: 'Actividades registradas, de la más reciente a la más antigua.'
+      description: 'Traspaso acompañado de un secundario: checklist de al menos un despliegue y una guardia con el principal.'
     TurnoDto:
       required:
         - id
@@ -8879,6 +10848,22 @@ components:
           description: Equipo del turno.
           $ref: '#/components/schemas/EquipoResumenDto'
       description: Turno de una compensación.
+    UsuarioGitHubDto:
+      required:
+        - personaId
+        - usuario
+      type: object
+      properties:
+        personaId:
+          type: string
+          description: Id de la persona.
+          format: uuid
+        usuario:
+          type:
+            - 'null'
+            - string
+          description: Usuario de GitHub; vacío si no tiene.
+      description: Usuario de GitHub de una persona.
     VersionApi:
       required:
         - servicio
@@ -8892,71 +10877,199 @@ components:
             - 'null'
             - string
       description: Servicio y versión del ensamblado desplegado.
-    VistaPreviaDto:
+    VersionDetalleDto:
       required:
-        - equipo
-        - desde
-        - hasta
-        - huella
-        - sabados
-        - turnosPorPersona
-        - desbalance
-        - nuevos
-        - eliminados
-        - avisos
+        - resumen
+        - definiciones
+        - responsabilidades
+        - tablas
       type: object
       properties:
-        equipo:
-          description: Equipo.
-          $ref: '#/components/schemas/EquipoResumenDto'
-        desde:
+        resumen:
+          description: La versión.
+          $ref: '#/components/schemas/VersionResumenDto'
+        definiciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/DefinicionRolDto'
+          description: Definiciones de cada rol en esa versión.
+        responsabilidades:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponsabilidadVersionDto'
+          description: Sus responsabilidades.
+        tablas:
+          description: Sus tablas en Markdown.
+          $ref: '#/components/schemas/TablasRepartoDto'
+      description: Una versión del reparto con su foto completa y sus tablas.
+    VersionResumenDto:
+      required:
+        - numero
+        - origen
+        - restauradaDe
+        - fechaDocumento
+        - definidoPor
+        - autor
+        - nota
+        - creadaEn
+        - huella
+        - responsabilidades
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de versión (la importación del documento crea la que dice el documento).
+          format: int32
+        origen:
           type: string
-          description: Primer día de la ventana.
+          description: 'importacion, cambio o restauracion.'
+        restauradaDe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Versión restaurada, si es una restauración.'
+          format: int32
+        fechaDocumento:
+          type:
+            - 'null'
+            - string
+          description: 'Fecha del documento importado, si aplica.'
           format: date
-        hasta:
+        definidoPor:
+          type:
+            - 'null'
+            - string
+          description: 'Quién definió el reparto según el documento, si aplica.'
+        autor:
+          type:
+            - 'null'
+            - string
+          description: Persona de Atlas que hizo el cambio.
+        nota:
           type: string
-          description: Último día de la ventana (incluido).
-          format: date
+          description: Nota del cambio.
+        creadaEn:
+          type: string
+          description: Cuándo se creó la versión.
+          format: date-time
         huella:
           type: string
-          description: Huella para confirmar exactamente esta propuesta.
-        sabados:
+          description: 'Huella del reparto (SHA-256): dos versiones iguales tienen la misma.'
+        responsabilidades:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántas responsabilidades tiene.
+          format: int32
+      description: 'Una versión del reparto: número, origen, autor y nota.'
+    VistaPreviaDto:
+      required:
+        - version
+        - fecha
+        - definidoPor
+        - descripcionVersion
+        - dedicacionSecundario
+        - proximaRevision
+        - definiciones
+        - filas
+        - pendientes
+        - inconsistencias
+        - avisos
+        - errores
+        - versionActual
+        - puedeConfirmar
+        - huella
+      type: object
+      properties:
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Versión que dice el documento.
+          format: int32
+        fecha:
+          type:
+            - 'null'
+            - string
+          description: Fecha del documento.
+          format: date
+        definidoPor:
+          type:
+            - 'null'
+            - string
+          description: 'Quién definió el reparto, según el documento.'
+        descripcionVersion:
+          type:
+            - 'null'
+            - string
+          description: 'Descripción de la versión, según el documento.'
+        dedicacionSecundario:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Dedicación del secundario que dice el §1.
+          format: int32
+        proximaRevision:
+          type:
+            - 'null'
+            - string
+          description: Próxima revisión que dice el documento.
+          format: date
+        definiciones:
           type: array
           items:
-            $ref: '#/components/schemas/SabadoPreviaDto'
-          description: Cada sábado de la ventana.
-        turnosPorPersona:
+            $ref: '#/components/schemas/DefinicionRolDto'
+          description: Definiciones de cada rol (§1).
+        filas:
           type: array
           items:
-            $ref: '#/components/schemas/ConteoPersonaDto'
-          description: Turnos por persona en la ventana.
-        desbalance:
-          pattern: '^-?(?:0|[1-9]\d*)$'
-          type:
-            - integer
-            - string
-          description: Diferencia entre quien más y quien menos turnos tiene.
-          format: int32
-        nuevos:
-          pattern: '^-?(?:0|[1-9]\d*)$'
-          type:
-            - integer
-            - string
-          description: Turnos nuevos que se crearían.
-          format: int32
-        eliminados:
-          pattern: '^-?(?:0|[1-9]\d*)$'
-          type:
-            - integer
-            - string
-          description: 'Turnos generados antes que se quitarían (cambio de persona, festivo o sin disponibles).'
-          format: int32
+            $ref: '#/components/schemas/FilaVistaPreviaDto'
+          description: Responsabilidades enlazadas que quedarían.
+        pendientes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendienteDto'
+          description: 'Lo que no se pudo enlazar: hay que resolverlo antes de confirmar.'
+        inconsistencias:
+          type: array
+          items:
+            type: string
+          description: Diferencias entre la tabla 2 y las tablas 3.1 y 3.2.
         avisos:
           type: array
           items:
             type: string
-          description: Avisos para quien publica.
-      description: 'Vista previa de la generación de un equipo: nada se publica hasta que alguien con permiso de aprobar la confirme.'
+          description: Avisos que no impiden confirmar.
+        errores:
+          type: array
+          items:
+            type: string
+          description: Errores de lectura del documento.
+        versionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Versión vigente en Atlas; vacía si aún no hay reparto.
+          format: int32
+        puedeConfirmar:
+          type: boolean
+          description: Si se puede confirmar tal cual.
+        huella:
+          type: string
+          description: Huella para confirmar exactamente esto.
+      description: Vista previa de la importación del documento de responsables. Nada se guarda hasta confirmar.
     VistaPreviaImportacionDto:
       required:
         - equipo
@@ -9138,6 +11251,8 @@ tags:
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
   - name: Catálogo
     description: 'Catálogo de aplicativos de FLIT: productos, módulos y servicios con su repo, tecnología, ambientes, criticidad, datos personales, estado y etiquetas, y la ficha de cada uno.'
+  - name: Equipo
+    description: 'Responsables principal y secundario de cada producto y módulo: reparto importado del documento, vistas por persona y por aplicativo, mapa de carga, historial versionado, traspasos, revisión trimestral, CODEOWNERS y «¿A quién llamo?».'
   - name: Hola
     description: 'Módulo de ejemplo de docs/como-crear-un-modulo.md: saludos por organización con permisos, predicado obligatorio y RLS. Apagado por defecto (bandera modulo.hola).'
   - name: Soporte

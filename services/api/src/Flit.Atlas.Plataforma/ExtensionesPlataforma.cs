@@ -56,6 +56,10 @@ public static class ExtensionesPlataforma
                 ? ActivatorUtilities.CreateInstance<EnviadorSmtp>(sp)
                 : ActivatorUtilities.CreateInstance<EnviadorDesactivado>(sp));
 
+        // Lecturas entre módulos (ATLAS-ADR-0031): por defecto vacías; el catálogo y el soporte registran las suyas.
+        servicios.TryAddScoped<Modulos.ILectorAplicativos, Modulos.SinAplicativos>();
+        servicios.TryAddScoped<Modulos.ISoporteDeTurno, Modulos.SinSoporteDeTurno>();
+
         // Roles y permisos (HU 1.4).
         servicios.AgregarPermisos();
         return servicios;

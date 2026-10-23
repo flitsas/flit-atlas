@@ -85,7 +85,9 @@ public sealed class ModuloSoporte : IModuloAtlas
 
     public void RegistrarServicios(IServiceCollection servicios, IConfiguration configuracion)
     {
-        // Sin servicios propios: los endpoints usan los contextos, TimeProvider y los permisos de la sesión.
+        // Los endpoints usan los contextos, TimeProvider y los permisos de la sesión. Para los demás módulos, solo la
+        // lectura del soporte de turno de una fecha («¿A quién llamo?», ATLAS-ADR-0031).
+        servicios.AddScoped<Plataforma.Modulos.ISoporteDeTurno, Dominio.SoporteDeTurno>();
     }
 
     public void MapearEndpoints(RouteGroupBuilder grupo) => EndpointsSoporte.Mapear(grupo);

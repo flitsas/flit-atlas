@@ -33,7 +33,11 @@ namespace Flit.Atlas.Api.Tests;
 /// <summary>Postgres (con las migraciones aplicadas) y Redis reales, compartidos por las pruebas de la API.</summary>
 public sealed class EntornoApi : IAsyncLifetime
 {
-    public PostgreSqlContainer Postgres { get; } = new PostgreSqlBuilder("pgvector/pgvector:0.8.7-pg16").Build();
+    // Cada atlas-api de prueba abre un pool por DbContext (Plataforma, Identidad y uno por módulo) y las clases corren en
+    // paralelo: con el tope por defecto (100) Postgres respondía «too many clients» desde la F2.
+    public PostgreSqlContainer Postgres { get; } = new PostgreSqlBuilder("pgvector/pgvector:0.8.7-pg16")
+        .WithCommand("-c", "max_connections=500")
+        .Build();
 
     public RedisContainer Redis { get; } = new RedisBuilder("redis:8.6").Build();
 
