@@ -114,7 +114,7 @@ public class CuentasExternasTests(EntornoApi entorno)
         return (clave.Clave, (await respuesta.Content.ReadFromJsonAsync<CuentaLista>(Ct))!);
     }
 
-    private static async Task<HttpResponseMessage> EntrarConContrasenaAsync(Navegador navegador, string correo, string clave, int desfase = 0)
+    private static async Task<HttpResponseMessage> EntrarConContrasenaAsync(Navegador navegador, string correo, string clave, int desfase = 0, string? codigo = null)
     {
         var paso = await PostAsync(navegador, "/api/v1/identidad/entrar/local", new { correo, contrasena = Contrasena });
         if (paso.StatusCode != HttpStatusCode.OK)
@@ -122,7 +122,7 @@ public class CuentasExternasTests(EntornoApi entorno)
             return paso;
         }
         var estado = (await paso.Content.ReadFromJsonAsync<EndpointsCuentasExternas.PasoIngreso>(Ct))!.Estado;
-        return await PostAsync(navegador, "/api/v1/identidad/entrar/local/segundo-factor", new { estado, codigo = Totp.Codigo(clave, desfasePasos: desfase) });
+        return await PostAsync(navegador, "/api/v1/identidad/entrar/local/segundo-factor", new { estado, codigo = codigo ?? Totp.Codigo(clave, desfasePasos: desfase) });
     }
 
     private static async Task<EndpointsIdentidad.Yo> YoAsync(Navegador navegador)
@@ -283,7 +283,8 @@ public class CuentasExternasTests(EntornoApi entorno)
         Assert.Equal(HttpStatusCode.NoContent, (await PostAsync(navegador, "/api/v1/identidad/entrar/local/segundo-factor", new { estado, codigo = siguiente })).StatusCode);
         Assert.Equal("externo", (await YoAsync(navegador)).TipoPrincipal);
         using var replay = Publico(api);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await EntrarConContrasenaAsync(replay, correo, clave, desfase: 1)).StatusCode);
+        // El mismo código, no uno recalculado: si entre tanto cambió la ventana de 30 s, el recalculado sería otro y válido.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await EntrarConContrasenaAsync(replay, correo, clave, codigo: siguiente)).StatusCode);
 
         // Contraseña equivocada: 401 genérico; correo desconocido: el mismo 401.
         using var intruso = Publico(api);
