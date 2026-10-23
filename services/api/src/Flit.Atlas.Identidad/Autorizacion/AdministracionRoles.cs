@@ -1,12 +1,14 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Flit.Atlas.Identidad.Externos;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Atlas.Identidad.Autorizacion;
 
@@ -25,6 +27,9 @@ public enum TipoError
     NoEncontrado,
     Invalido,
     Conflicto,
+
+    /// <summary>La sesión tiene el permiso, pero no sobre ese recurso (p. ej. un administrador de organización, HU 1.5).</summary>
+    Prohibido,
 }
 
 /// <param name="Campo">Campo del pedido que falla (solo en <see cref="TipoError.Invalido"/>).</param>
@@ -57,10 +62,13 @@ public sealed partial class AdministracionRoles(
     CatalogoPermisos catalogo,
     IInvalidadorSesiones invalidador,
     IHttpContextAccessor contexto,
+    IOptions<OpcionesExternos> externos,
     TimeProvider reloj)
 {
-    /// <summary>Vigencia máxima de un rol externo (§6.2: «máximo configurable, por defecto 90 días»).</summary>
-    public static readonly TimeSpan VigenciaMaximaExterna = TimeSpan.FromDays(90);
+    /// <summary>
+    /// Vigencia máxima de un rol externo (§6.2: «máximo configurable, por defecto 90 días»): <c>Identidad:Externos:VigenciaMaximaAcceso</c>.
+    /// </summary>
+    public TimeSpan VigenciaMaximaExterna => externos.Value.VigenciaMaximaAcceso;
 
     public async Task<Resultado<AsignacionRol>> AsignarAsync(
         Guid personaId, PedidoAsignacion pedido, Guid? actor, OrigenAsignacion origen = OrigenAsignacion.Manual, CancellationToken ct = default)

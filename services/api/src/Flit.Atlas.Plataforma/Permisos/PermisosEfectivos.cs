@@ -103,7 +103,8 @@ public sealed class PermisosEfectivos
 /// <summary>
 /// Calcula los <see cref="PermisosEfectivos"/> de una persona con la hora actual: asignaciones vigentes (manuales, de
 /// grupos de Entra o de invitaciones), <see cref="RolesAtlas.Lector"/> para todo empleado y los roles implícitos. Una
-/// persona inactiva o suspendida, o de una organización suspendida, no tiene permisos. Una asignación vencida deja de
+/// persona inactiva o suspendida, o de una organización suspendida, no tiene permisos; <see cref="RolesAtlas.AdminOrganizacion"/>
+/// solo cuenta si su organización lo tiene habilitado. Una asignación vencida deja de
 /// contar en la primera petición después de su vencimiento, sin que nadie intervenga.
 /// </summary>
 public sealed class CalculadoraPermisos(
@@ -121,7 +122,7 @@ public sealed class CalculadoraPermisos(
         var persona = await plataforma.Personas.AsNoTracking()
             .Where(p => p.Id == personaId && p.Estado == EstadoPersona.Activa)
             .Join(plataforma.Organizaciones.Where(o => o.Estado == EstadoOrganizacion.Activa),
-                p => p.OrganizacionId, o => o.Id, (p, o) => new { p.Tipo, p.OrganizacionId })
+                p => p.OrganizacionId, o => o.Id, (p, o) => new { p.Tipo, p.OrganizacionId, o.AdminOrganizacionHabilitado })
             .FirstOrDefaultAsync(ct);
         if (persona is null)
         {
@@ -140,9 +141,11 @@ public sealed class CalculadoraPermisos(
         foreach (var a in asignaciones)
         {
             // Defensa: un rol externo solo vale para un externo de esa organización, y un interno solo para un empleado.
+            // ext.admin_organizacion solo vale si la organización lo tiene habilitado (§7.3, HU 1.5).
             var valida = a.Tipo switch
             {
-                TipoRol.Externo => persona.Tipo == TipoPersona.Externo && a.OrganizacionId == persona.OrganizacionId,
+                TipoRol.Externo => persona.Tipo == TipoPersona.Externo && a.OrganizacionId == persona.OrganizacionId
+                    && (a.Codigo != RolesAtlas.AdminOrganizacion || persona.AdminOrganizacionHabilitado),
                 TipoRol.Interno => persona.Tipo == TipoPersona.Empleado,
                 _ => false,
             };

@@ -317,6 +317,8 @@ public class SeguridadTests(EntornoApi entorno)
         var tipos = typeof(TiposEventoSeguridad).GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(f => f.IsLiteral && f.Name != nameof(TiposEventoSeguridad.PrefijoAuditoria))
             .Select(f => (string)f.GetRawConstantValue()!)
+            // Los de las cuentas externas (HU 1.5) se prueban de punta a punta, con su auditoría, en CuentasExternasTests.
+            .Except(CuentasExternasTests.TiposDeEventoProbados)
             .ToHashSet();
 
         // Ocurrieron todos los tipos de evento…

@@ -37,6 +37,23 @@ public class AutorizacionTests(EntornoApi entorno)
         "GET /api/v1/identidad/entrar/microsoft",
         "POST /api/v1/identidad/simulado/entrar",
         "POST /api/v1/identidad/salir",
+        // HU 1.5 (ATLAS-ADR-0025): el camino para tener sesión de un externo. Sin sesión, con el límite de tasa de
+        // externos; cada una valida su enlace de un solo uso, su paso temporal o sus credenciales.
+        "GET /api/v1/identidad/terminos",
+        "POST /api/v1/identidad/invitaciones/consultar",
+        "POST /api/v1/identidad/invitaciones/passkey/opciones",
+        "POST /api/v1/identidad/invitaciones/totp/clave",
+        "POST /api/v1/identidad/invitaciones/aceptar",
+        "POST /api/v1/identidad/entrar/local",
+        "POST /api/v1/identidad/entrar/local/segundo-factor",
+        "POST /api/v1/identidad/entrar/passkey/opciones",
+        "POST /api/v1/identidad/entrar/passkey",
+        "POST /api/v1/identidad/entrar/terminos",
+        "POST /api/v1/identidad/recuperacion/",
+        "POST /api/v1/identidad/recuperacion/consultar",
+        "POST /api/v1/identidad/recuperacion/passkey/opciones",
+        "POST /api/v1/identidad/recuperacion/totp/clave",
+        "POST /api/v1/identidad/recuperacion/completar",
         // Protocolo OAuth/OIDC (HU 1.3c, ATLAS-ADR-0024): OpenIddict autentica al cliente (secreto, PKCE, código o
         // refresh) antes de dejar pasar la petición; authorize toma al usuario de la sesión del BFF si la hay.
         "GET /connect/authorize",

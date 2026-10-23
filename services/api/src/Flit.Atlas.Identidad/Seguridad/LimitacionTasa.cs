@@ -31,6 +31,12 @@ public sealed class OpcionesLimiteTasa
 
     /// <summary>Peticiones a <c>/connect/token</c> y <c>/connect/authorize</c> por IP y ventana (HU 1.3c).</summary>
     public int TokensPorIp { get; set; } = 30;
+
+    /// <summary>
+    /// Peticiones por IP y ventana a las rutas públicas de las cuentas externas (aceptar invitación, ingreso local,
+    /// recuperación): más estricto que el ingreso de empleados (§12, HU 1.5). Se suma a los demás límites.
+    /// </summary>
+    public int ExternosPorIp { get; set; } = 10;
 }
 
 /// <summary>
@@ -59,6 +65,7 @@ public static partial class LimitacionTasa
             o.GlobalLimiter = PartitionedRateLimiter.CreateChained(
                 Particion(l.IngresoPorIp, l.Ventana, http => EsIngreso(http.Request.Path) ? "ingreso:" + Ip(http) : null),
                 Particion(l.TokensPorIp, l.Ventana, http => EsEmisionTokens(http.Request.Path) ? "tokens:" + Ip(http) : null),
+                Particion(l.ExternosPorIp, l.Ventana, http => Externos.EndpointsCuentasExternas.EsRutaDeIngreso(http.Request.Path) ? "externos:" + Ip(http) : null),
                 Particion(l.PorIp, l.Ventana, http => EsIdentidad(http.Request.Path) ? "ip:" + Ip(http) : null),
                 Particion(l.PorUsuario, l.Ventana, http => EsIdentidad(http.Request.Path) && Usuario(http) is { } sub ? "usuario:" + sub : null));
             o.OnRejected = AlRechazarAsync;
@@ -107,7 +114,8 @@ public static partial class LimitacionTasa
     internal static bool EsIngreso(PathString ruta) =>
         ruta.StartsWithSegments("/api/v1/identidad/entrar", StringComparison.OrdinalIgnoreCase)
         || ruta.StartsWithSegments("/api/v1/identidad/simulado", StringComparison.OrdinalIgnoreCase)
-        || ruta.StartsWithSegments("/api/auth", StringComparison.OrdinalIgnoreCase);
+        || ruta.StartsWithSegments("/api/auth", StringComparison.OrdinalIgnoreCase)
+        || Externos.EndpointsCuentasExternas.EsRutaDeIngreso(ruta);
 
     private static PartitionedRateLimiter<HttpContext> Particion(int permisos, TimeSpan ventana, Func<HttpContext, string?> clave) =>
         PartitionedRateLimiter.Create<HttpContext, string>(http => clave(http) is { } k

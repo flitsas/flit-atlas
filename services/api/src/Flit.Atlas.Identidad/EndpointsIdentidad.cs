@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Flit.Atlas.Identidad.Aprovisionamiento;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Entra;
+using Flit.Atlas.Identidad.Externos;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Identidad.Tokens;
@@ -11,6 +12,11 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Flit.Atlas.Plataforma.Datos;
+using Flit.Atlas.Plataforma.Entidades;
 
 namespace Flit.Atlas.Identidad;
 
@@ -26,7 +32,11 @@ public static class EndpointsIdentidad
     public const string RutaRetornoEntra = "/api/auth/callback/azure-ad";
 
     /// <param name="Reautenticar">La PWA vuelve a pedir el ingreso porque una acción sensible lo exigió.</param>
-    public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos, bool Reautenticar = false);
+    /// <param name="Administrador">
+    /// Solo local y dev: suma el grupo de <see cref="ExtensionesIdentidad.ClaveSimuladoGrupoAdministracion"/>, que da
+    /// <c>atlas.superadmin</c>, para probar la administración sin Entra (HU 1.5). Sin esa variable, se ignora.
+    /// </param>
+    public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos, bool Reautenticar = false, bool Administrador = false);
 
     /// <param name="Roles">Roles vigentes en este momento (incluye atlas.lector de todo empleado y los implícitos).</param>
     /// <param name="Permisos">Permisos efectivos en este momento, calculados en el servidor (ATLAS-ADR-0023).</param>
@@ -88,9 +98,16 @@ public static class EndpointsIdentidad
                     });
                 }
                 var correo = solicitud.Correo.Trim().ToLowerInvariant();
+                var grupos = (solicitud.Grupos ?? []).ToList();
+                if (solicitud.Administrador
+                    && Guid.TryParse(http.RequestServices.GetRequiredService<IConfiguration>()[ExtensionesIdentidad.ClaveSimuladoGrupoAdministracion], out var grupoAdmin))
+                {
+                    await AsegurarGrupoAdministracionAsync(http.RequestServices.GetRequiredService<PlataformaDbContext>(), grupoAdmin, ct);
+                    grupos.Add(grupoAdmin);
+                }
                 var cuenta = new CuentaEmpleado(
                     AprovisionadorEmpleados.ProveedorSimulado, correo, null, correo, solicitud.Nombre.Trim(),
-                    solicitud.Grupos ?? [], null, null, [], Reautenticacion: solicitud.Reautenticar);
+                    grupos, null, null, [], Reautenticacion: solicitud.Reautenticar);
                 try
                 {
                     var principal = await aprovisionador.AprovisionarAsync(cuenta, ct);
@@ -132,6 +149,7 @@ public static class EndpointsIdentidad
         identidad.MapSesiones();
         // Servidor de tokens (HU 1.3c): /connect/* fuera del contrato y GET /api/v1/identidad/token/yo con Bearer.
         rutas.MapServidorTokens(identidad);
+        identidad.MapCuentasExternas();
 
         rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, CancellationToken ct) =>
             {
@@ -157,6 +175,7 @@ public static class EndpointsIdentidad
                 "ya no aparece (ATLAS-ADR-0023).");
 
         rutas.MapRoles();
+        rutas.MapAdministracionExternos();
         return rutas;
     }
 
@@ -189,6 +208,18 @@ public static class EndpointsIdentidad
             }
             await siguiente(http);
         });
+
+    /// <summary>Solo con el proveedor simulado: el grupo de administración otorga atlas.superadmin (idempotente).</summary>
+    private static async Task AsegurarGrupoAdministracionAsync(PlataformaDbContext plataforma, Guid grupo, CancellationToken ct)
+    {
+        var rol = await plataforma.Roles.Where(r => r.Codigo == RolesAtlas.Superadmin).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
+        if (rol is null || await plataforma.MapeosGrupoEntra.AnyAsync(m => m.GrupoId == grupo && m.RolId == rol, ct))
+        {
+            return;
+        }
+        plataforma.MapeosGrupoEntra.Add(new MapeoGrupoEntra { GrupoId = grupo, GrupoNombre = "Simulado: administración (solo local y dev)", RolId = rol.Value });
+        await plataforma.SaveChangesAsync(ct);
+    }
 
     /// <summary>Evita redirecciones abiertas: solo rutas locales de la PWA.</summary>
     internal static string RutaLocal(string? volver) =>

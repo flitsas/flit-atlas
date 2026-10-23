@@ -44,6 +44,11 @@
   <ItemGroup Label="Plataforma">
     <!-- Web Push con VAPID (HU 1.6, ATLAS-ADR-0020). MIT; en net6+ usa la criptografía de .NET, sin BouncyCastle. -->
     <PackageVersion Include="Lib.Net.Http.WebPush" Version="3.3.1" />
+    <!-- Correo por SMTP (HU 1.5, ATLAS-ADR-0025). MIT. MimeKit se fija en la misma versión (4.18.2 tiene menos de 2 semanas). -->
+    <PackageVersion Include="MailKit" Version="4.18.1" />
+    <PackageVersion Include="MimeKit" Version="4.18.1" />
+    <!-- QR del TOTP como SVG (HU 1.5). MIT, sin dependencias. -->
+    <PackageVersion Include="QRCoder" Version="1.8.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />

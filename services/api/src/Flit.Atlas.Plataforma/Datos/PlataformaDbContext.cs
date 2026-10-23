@@ -148,11 +148,14 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
             e.ToTable(Prefijo + "invitacion");
             Enum(e.Property(i => i.Estado));
             e.Property(i => i.Correo).HasMaxLength(320).HasComment(Pii);
+            e.Property(i => i.Nombre).HasMaxLength(200).HasComment(Pii);
             e.Property(i => i.Alcance).HasColumnType("jsonb");
             e.Property(i => i.PermisosExtra).HasColumnType("jsonb");
             e.Property(i => i.TokenHash).HasMaxLength(32);
             e.HasIndex(i => i.TokenHash).IsUnique();
             e.HasIndex(i => new { i.OrganizacionId, i.Estado });
+            e.HasIndex(i => i.Correo);
+            e.HasOne<Persona>().WithMany().HasForeignKey(i => i.EstadoCambiadoPor).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<Organizacion>().WithMany().HasForeignKey(i => i.OrganizacionId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Rol>().WithMany().HasForeignKey(i => i.RolId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Persona>().WithMany().HasForeignKey(i => i.InvitadoPor).OnDelete(DeleteBehavior.Restrict);
@@ -164,10 +167,12 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
             e.ToTable(Prefijo + "aceptacion_terminos");
             Enum(e.Property(a => a.Documento));
             e.Property(a => a.Version).HasMaxLength(50);
+            e.Property(a => a.HashContenido).HasMaxLength(64);
             e.Property(a => a.Ip).HasComment(Pii);
             e.Property(a => a.AgenteUsuario).HasMaxLength(500);
             e.HasIndex(a => new { a.PersonaId, a.Documento, a.Version }).IsUnique();
             e.HasOne<Persona>().WithMany().HasForeignKey(a => a.PersonaId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Invitacion>().WithMany().HasForeignKey(a => a.InvitacionId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Notificacion>(e =>

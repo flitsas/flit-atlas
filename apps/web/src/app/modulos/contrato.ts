@@ -19,7 +19,8 @@ export type NombreIcono =
   | 'notificaciones'
   | 'ajustes'
   | 'permisos'
-  | 'ejemplo';
+  | 'ejemplo'
+  | 'administracion';
 
 /** Carga diferida: cada página y cada widget va en su propio chunk. */
 export type Cargador = () => Promise<{ default: ComponentType }>;

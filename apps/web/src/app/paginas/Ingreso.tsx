@@ -1,12 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlaskConical, ShieldCheck } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, lazy, Suspense, useState } from 'react';
 import { useLocation } from 'react-router';
 
 import { entrarSimulado, obtenerProveedores, type Proveedores, urlEntrarMicrosoft } from '../api';
 import { CLAVE_YO } from '../sesion';
 import { MarcaAtlas } from '../ui/Marca';
 import { Boton } from '../ui/Tarjeta';
+
+// Ingreso de externos (HU 1.5): fuera del bundle inicial, se descarga al pintar el ingreso.
+const IngresoExterno = lazy(() => import('../externos/IngresoExterno'));
 
 const MENSAJES_ERROR: Record<string, string> = {
   cuenta_no_permitida: 'Esa cuenta no puede entrar a Atlas. Usa tu cuenta de FLIT.',
@@ -43,7 +46,7 @@ export function Ingreso() {
       <main className="flex items-center justify-center px-6 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:px-10">
         <div className="w-full max-w-sm">
           <h2 className="text-2xl font-semibold">Ingresa a Atlas</h2>
-          <p className="mt-1 text-sm text-atlas-texto-suave">Usa tu cuenta corporativa de FLIT.</p>
+          <p className="mt-1 text-sm text-atlas-texto-suave">Empleados de FLIT: con tu cuenta corporativa de Microsoft.</p>
 
           {error && MENSAJES_ERROR[error] && (
             <p role="alert" className="mt-5 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
@@ -75,7 +78,9 @@ function Metodos({ proveedores, volver }: { proveedores: Proveedores; volver: st
         </a>
       )}
       {proveedores.simulado && <IngresoSimulado />}
-      {!proveedores.microsoft && !proveedores.simulado && <p>No hay métodos de ingreso configurados.</p>}
+      <Suspense fallback={<p role="status">Cargando…</p>}>
+        <IngresoExterno />
+      </Suspense>
     </section>
   );
 }
@@ -86,13 +91,14 @@ function IngresoSimulado() {
   const [nombre, setNombre] = useState('');
   const [fallo, setFallo] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [administrador, setAdministrador] = useState(false);
 
   async function enviar(evento: FormEvent) {
     evento.preventDefault();
     setFallo(false);
     setEnviando(true);
     try {
-      await entrarSimulado(correo, nombre);
+      await entrarSimulado(correo, nombre, administrador);
       await cliente.invalidateQueries({ queryKey: CLAVE_YO });
     } catch {
       setFallo(true);
@@ -121,6 +127,10 @@ function IngresoSimulado() {
       <label className="text-sm font-medium">
         Nombre
         <input required autoComplete="name" value={nombre} onChange={(e) => setNombre(e.target.value)} className={campo} />
+      </label>
+      <label className="flex min-h-toque items-center gap-3 text-sm">
+        <input type="checkbox" checked={administrador} onChange={(e) => setAdministrador(e.target.checked)} className="size-5" />
+        Con rol de administración (si el ambiente lo permite)
       </label>
       <Boton type="submit" disabled={enviando} className="min-h-12">
         Entrar (simulado)

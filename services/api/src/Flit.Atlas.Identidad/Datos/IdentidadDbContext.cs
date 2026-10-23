@@ -42,7 +42,18 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
         opciones.Lockout.AllowedForNewUsers = true;
         opciones.Lockout.MaxFailedAccessAttempts = IntentosAntesDelBloqueo;
         opciones.Lockout.DefaultLockoutTimeSpan = BloqueoInicial;
+        // Contraseñas de externos (HU 1.5, §6.2, NIST SP 800-63B): largo mínimo y revisión contra filtraciones
+        // (ValidadorContrasenaFiltrada), sin reglas de composición que empujan a contraseñas previsibles.
+        opciones.Password.RequiredLength = LargoMinimoContrasena;
+        opciones.Password.RequiredUniqueChars = 4;
+        opciones.Password.RequireDigit = false;
+        opciones.Password.RequireLowercase = false;
+        opciones.Password.RequireUppercase = false;
+        opciones.Password.RequireNonAlphanumeric = false;
     }
+
+    /// <summary>Largo mínimo de la contraseña de una cuenta local (§6.2).</summary>
+    public const int LargoMinimoContrasena = 12;
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion)
     {

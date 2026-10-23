@@ -31,20 +31,40 @@ public sealed class VerificadorContrasena(
 {
     public static readonly TimeSpan BloqueoMaximo = TimeSpan.FromHours(24);
 
-    public async Task<ResultadoVerificacion> VerificarAsync(UsuarioAtlas usuario, string contrasena, CancellationToken ct = default)
+    public Task<ResultadoVerificacion> VerificarAsync(UsuarioAtlas usuario, string contrasena, CancellationToken ct = default) =>
+        VerificarFactorAsync(usuario, "contrasena", TiposEventoSeguridad.InicioFallido, () => usuarios.CheckPasswordAsync(usuario, contrasena), ct);
+
+    /// <summary>
+    /// Código TOTP del segundo paso del ingreso (HU 1.5), con el mismo conteo y bloqueo progresivo que la contraseña: los
+    /// fallos de uno y otro se suman (ASVS V2.2.1).
+    /// </summary>
+    public Task<ResultadoVerificacion> VerificarTotpAsync(UsuarioAtlas usuario, string codigo, CancellationToken ct = default) =>
+        VerificarFactorAsync(usuario, "totp", TiposEventoSeguridad.MfaFallido,
+            () => usuarios.VerifyTwoFactorTokenAsync(usuario, TokenOptions.DefaultAuthenticatorProvider, Normalizar(codigo)), ct);
+
+    /// <summary>Código de recuperación (de un solo uso) en lugar del TOTP; también cuenta para el bloqueo.</summary>
+    public Task<ResultadoVerificacion> CanjearCodigoRecuperacionAsync(UsuarioAtlas usuario, string codigo, CancellationToken ct = default) =>
+        VerificarFactorAsync(usuario, "codigo_recuperacion", TiposEventoSeguridad.MfaFallido,
+            async () => (await usuarios.RedeemTwoFactorRecoveryCodeAsync(usuario, codigo ?? string.Empty)).Succeeded, ct);
+
+    private static string Normalizar(string? codigo) =>
+        (codigo ?? string.Empty).Replace(" ", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal);
+
+    private async Task<ResultadoVerificacion> VerificarFactorAsync(
+        UsuarioAtlas usuario, string metodo, string tipoFallo, Func<Task<bool>> comprobar, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(usuario);
         var datos = new DatosEventoSeguridad { UsuarioId = usuario.Id, PersonaId = usuario.PersonaId };
 
         if (await usuarios.IsLockedOutAsync(usuario))
         {
-            // Ni siquiera se compara la contraseña: un bloqueo no se puede usar para adivinarla.
+            // Ni siquiera se compara el factor: un bloqueo no se puede usar para adivinarlo.
             await registro.RegistrarAsync(TiposEventoSeguridad.InicioRechazado,
-                datos with { Detalle = new { metodo = "contrasena", motivo = "cuenta_bloqueada" } }, ct);
+                datos with { Detalle = new { metodo, motivo = "cuenta_bloqueada" } }, ct);
             return ResultadoVerificacion.Bloqueada;
         }
 
-        if (await usuarios.CheckPasswordAsync(usuario, contrasena))
+        if (await comprobar())
         {
             await usuarios.ResetAccessFailedCountAsync(usuario);
             return ResultadoVerificacion.Valida;
@@ -53,8 +73,7 @@ public sealed class VerificadorContrasena(
         // Identity suma el fallo y, al llegar al máximo, bloquea la cuenta y reinicia el conteo.
         var intentos = await usuarios.GetAccessFailedCountAsync(usuario) + 1;
         await usuarios.AccessFailedAsync(usuario);
-        await registro.RegistrarAsync(TiposEventoSeguridad.InicioFallido,
-            datos with { Detalle = new { metodo = "contrasena", intentos } }, ct);
+        await registro.RegistrarAsync(tipoFallo, datos with { Detalle = new { metodo, intentos } }, ct);
 
         if (!await usuarios.IsLockedOutAsync(usuario))
         {
@@ -68,7 +87,7 @@ public sealed class VerificadorContrasena(
         var duracion = DuracionBloqueo(previos);
         await usuarios.SetLockoutEndDateAsync(usuario, ahora + duracion);
         await registro.RegistrarAsync(TiposEventoSeguridad.CuentaBloqueada,
-            datos with { Detalle = new { metodo = "contrasena", minutos = (int)duracion.TotalMinutes, bloqueos_previos = previos } }, ct);
+            datos with { Detalle = new { metodo, minutos = (int)duracion.TotalMinutes, bloqueos_previos = previos } }, ct);
         return ResultadoVerificacion.Bloqueada;
     }
 

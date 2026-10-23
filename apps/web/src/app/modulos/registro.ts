@@ -1,3 +1,4 @@
+import { moduloAdministracion } from '../../modulos/administracion/modulo';
 import { moduloAsistente } from '../../modulos/asistente/modulo';
 import { moduloCatalogo } from '../../modulos/catalogo/modulo';
 import { moduloContratos } from '../../modulos/contratos/modulo';
@@ -23,6 +24,7 @@ export const MODULOS_REGISTRADOS: readonly ModuloAtlas[] = [
   moduloAsistente,
   moduloPermisos,
   moduloHola,
+  moduloAdministracion,
 ];
 
 validarRegistro(MODULOS_REGISTRADOS);

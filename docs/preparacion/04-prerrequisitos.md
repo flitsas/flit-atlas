@@ -56,12 +56,14 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 | 5.3 | Permisos delegados para el login | 📋 | `openid`, `profile`, `email`, `offline_access`, `User.Read` | Samuel Cárdenas | HU 1.3 |
 | 5.4 | Permisos de aplicación para la sincronización diaria | 📋 | `User.Read.All` y `GroupMember.Read.All` (foto, cargo, área, estado y grupos). Consentimiento de administrador documentado | Samuel Cárdenas | HU 1.3 (JIT y mapeo de grupos) |
 | 5.5 | `Calendars.ReadWrite` restringido al calendario «Soporte TI sábados» | 📋 | Permiso de aplicación limitado a ese buzón con RBAC para aplicaciones de Exchange Online **[verificar: las políticas de acceso de aplicaciones de Exchange están en retiro a favor de RBAC para aplicaciones]** | Samuel Cárdenas | F2 |
-| 5.6 | `Mail.Send` restringido al buzón «Invitaciones Atlas» | 📋 | Misma restricción que 5.5. Alternativa: SMTP autenticado (ATLAS-ADR-0004) | Samuel Cárdenas | HU 1.5 |
+| 5.6 | `Mail.Send` (permiso **de aplicación**, consentimiento de administrador) restringido al buzón «Invitaciones Atlas» | 📋 | En el registro de Entra de qa y de pdn. Restringirlo a ese buzón con RBAC para aplicaciones de Exchange Online (o `New-ApplicationAccessPolicy -AccessRight RestrictAccess` mientras exista) **[verificar el mecanismo vigente]**: sin la restricción, la app podría enviar como cualquier buzón del tenant. Probar con `Test-ApplicationAccessPolicy` o `Test-ServicePrincipalAuthorization`. Alternativa: SMTP autenticado (ATLAS-ADR-0025) | Samuel Cárdenas | HU 1.5 en qa |
 | 5.7 | Aviso en un canal de Teams | ⏳ | Los conectores de webhook entrante de Office 365 se retiraron. Opciones: flujo de Workflows (Power Automate) con URL propia, o un bot. Graph no permite publicar en canales con permiso de aplicación salvo en migraciones **[verificar mecanismo vigente]** | Samuel Cárdenas | F2 |
 | 5.8 | El token de Entra trae `amr` con `mfa` para todos los empleados | ⏳ | ATLAS-ADR-0004. Revisar la política de acceso condicional; si no siempre lo emite, Atlas no puede exigirlo | Samuel Cárdenas | HU 1.3 |
 | 5.9 | Grupos de Entra para el mapeo a roles | ⏳ | Listar los grupos que existen (p. ej. `FLIT-Developers`) y proponer el mapeo a `atlas.*` | Jorman Copete | HU 1.4 |
 | 5.10 | Buzón compartido «Soporte TI sábados» con su calendario | 📋 | Crear en Microsoft 365 | Jorman Copete | F2 |
-| 5.11 | Buzón compartido «Invitaciones Atlas» | 📋 | Crear en Microsoft 365. Dirección **[por definir]** | Jorman Copete | HU 1.5 |
+| 5.11 | Buzón compartido «Invitaciones Atlas» | 📋 | Crear en Microsoft 365. Dirección **[por definir]**. Es el remitente de invitaciones y recuperación (`Plataforma__Correo__Remitente`) | Jorman Copete | HU 1.5 en qa |
+| 5.13 | Configuración de correo y URL pública de atlas-api en qa y pdn | 📋 | ConfigMap de `flit-gitops`: `Atlas__UrlPublica` (`https://qa.atlas.flitsas.com`), `Plataforma__Correo__Proveedor=graph`, `Plataforma__Correo__Remitente` (5.11). Con SMTP: `Plataforma__Correo__Smtp__Host`, `__Puerto`, `__Seguridad` y, en el SealedSecret, `__Usuario` y `__Clave`. **Sin estas variables atlas-api no arranca en qa ni pdn** (ATLAS-ADR-0025) | Jorman Copete | HU 1.5 en qa |
+| 5.14 | Salida a `api.pwnedpasswords.com` (HTTPS) desde los pods de atlas-api | ⏳ | Revisión de contraseñas filtradas por k-anonimato. Sin salida, queda la lista local; se puede apagar con `Identidad__Externos__ConsultarContrasenasFiltradas=false` | Daniel Mejía | — |
 | 5.12 | Entra multi-tenant para externos con Microsoft 365 (opcional, detrás de bandera) | ⏳ | Evaluar en F0.5 (pregunta N-07). No bloquea | Samuel Cárdenas | — |
 
 ## 6. Identidad propia (OpenIddict y sesión)
@@ -103,3 +105,4 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 - **HU 1.1 y 1.2** se pueden hacer en local. El outbox de HU 1.2 ya no depende de `flit` (ATLAS-ADR-0018).
 - **HU 1.3** necesita 5.1 a 5.4 y 5.8 para la prueba con una cuenta real. Mientras tanto se avanza con el proveedor simulado de dev.
 - **HU 1.8** necesita 2.1, 2.4, 3.1, 4.1, 4.3, 4.4, 8.1 y 8.3.
+- **HU 1.5** se prueba en local con Mailpit; en qa necesita 5.6, 5.11 y 5.13 (y 5.14 para revisar contraseñas contra HIBP).

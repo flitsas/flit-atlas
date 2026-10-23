@@ -29,6 +29,16 @@ var s3 = builder.AddContainer("s3", "rustfs/rustfs", "1.0.1")
     .WithVolume("flit-atlas-s3", "/data")
     .WithHttpHealthCheck("/health/ready");
 
+// Servidor SMTP de pruebas, solo local (HU 1.5): Mailpit (MIT), imagen fijada por digest. Los correos de invitación y
+// recuperación se ven en http://localhost:4038 y las pruebas E2E los leen de su API. En qa y pdn el correo sale por Graph
+// desde el buzón compartido (o por el relé SMTP que defina el líder).
+var correo = builder.AddContainer("correo", "axllent/mailpit", "v1.31.4")
+    .WithImageSHA256("b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48")
+    .WithEndpoint(targetPort: 1025, name: "smtp", scheme: "tcp")
+    .WithHttpEndpoint(port: 4038, targetPort: 8025, name: "http")
+    .WithHttpHealthCheck("/livez", endpointName: "http");
+var smtp = correo.GetEndpoint("smtp");
+
 // --- Servicios de Atlas ---
 
 // CommunityToolkit marca AddGolangApp como obsoleto a favor de Aspire.Hosting.Go, que aún no está publicado
@@ -71,6 +81,20 @@ var api = builder.AddProject<Projects.Flit_Atlas_Api>("api")
     .WithEnvironment("Atlas__Ambiente", "local")
     // Proveedor simulado de empleados: solo local y dev (HU 1.3). atlas-api no arranca con él en qa ni pdn.
     .WithEnvironment("Identidad__Simulado__Habilitado", "true")
+    // HU 1.5: el ingreso simulado puede pedir el grupo de administración (superadmin) para probar invitaciones; los
+    // correos van a Mailpit; los vencimientos se procesan cada 10 s y los límites de ingreso admiten los tres perfiles E2E en paralelo desde la misma IP.
+    .WithEnvironment("Identidad__Simulado__GrupoAdministracion", "5a1d0000-0000-4000-8000-00000000a7a5")
+    .WithEnvironment("Atlas__UrlPublica", "https://localhost:4032")
+    .WithEnvironment("Plataforma__Correo__Proveedor", "smtp")
+    .WithEnvironment("Plataforma__Correo__Remitente", "atlas@ejemplo.com")
+    .WithEnvironment("Plataforma__Correo__Smtp__Host", smtp.Property(EndpointProperty.Host))
+    .WithEnvironment("Plataforma__Correo__Smtp__Puerto", smtp.Property(EndpointProperty.Port))
+    .WithEnvironment("Plataforma__Correo__Smtp__Seguridad", "ninguna")
+    .WithEnvironment("Identidad__Vencimientos__Intervalo", "00:00:10")
+    .WithEnvironment("Identidad__LimiteTasa__ExternosPorIp", "120")
+    .WithEnvironment("Identidad__LimiteTasa__IngresoPorIp", "120")
+    .WithEnvironment("Identidad__LimiteTasa__PorIp", "1000")
+    .WaitFor(correo)
     .WithReference(atlasDb).WaitFor(atlasDb)
     .WithReference(redis).WaitFor(redis)
     .WithReference(rabbitmq).WaitFor(rabbitmq)

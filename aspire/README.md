@@ -28,6 +28,7 @@ El panel de Aspire queda en `http://localhost:15031` (el enlace con el token sal
 | `render` (atlas-render) | 4033 | `/health/ready` |
 | `ia` (atlas-ia) | 4034 | `/health/ready`: Postgres con la extensión `vector` |
 | `docs` (atlas-docs) | 4035 | `/health/ready`: bucket `atlas` en el S3 local |
+| `correo` (Mailpit 1.31.4) | 4038 (interfaz y API); SMTP dinámico | `/livez`. Recibe los correos de invitación y recuperación (HU 1.5); puerto [por verificar con el líder] |
 | `postgres`, `redis`, `rabbitmq`, `s3` | dinámicos | Los asigna Aspire, para no chocar con el Postgres de FLIT 2.0 |
 
 Los puertos de los servicios son los de la propuesta F0.3 (`docs/preparacion/03-puertos-y-namespaces.md`).
@@ -44,7 +45,7 @@ Sin un certificado de confianza, Aspire avisa «No trusted Aspire development ce
 
 ## Ingreso de empleados
 
-- **Proveedor simulado** (solo local y dev): botón «Entrar (simulado)» con cualquier correo de prueba, p. ej. `ana@ejemplo.com`. La API se niega a arrancar si se habilita en qa o pdn.
+- **Proveedor simulado** (solo local y dev): botón «Entrar (simulado)» con cualquier correo de prueba, p. ej. `ana@ejemplo.com`. La API se niega a arrancar si se habilita en qa o pdn. La casilla «Con rol de administración» da `atlas.superadmin` (grupo de `Identidad__Simulado__GrupoAdministracion`, que solo fija el AppHost) para probar organizaciones e invitaciones.
 - **Microsoft (Entra ID)**: usa el registro de **dev**. Los valores van en los user secrets del AppHost, que quedan en tu perfil y nunca en el repo:
 
 ```bash
@@ -104,3 +105,12 @@ Corren en escritorio (Chromium), Pixel 7 (Chromium) e iPhone 14 (WebKit), y veri
 - El S3 local es **RustFS** 1.0.1 (Apache-2.0, compatible con la API de MinIO), porque MinIO dejó de publicar imágenes públicas en Docker Hub y quay.io (revisado el 21/10/2026). La clave se genera la primera vez y queda en los user secrets del AppHost. En dev y qa la decisión sigue abierta: ver la pregunta N-18 de `docs/preparacion/05-preguntas-abiertas.md`.
 - Solo en local, `atlas-docs` crea su bucket (`ATLAS_DOCS_S3_CREAR_BUCKET`). El servicio rechaza esa bandera en cualquier otro ambiente.
 - Cada servicio falla al arrancar, nombrando todas las variables obligatorias que faltan, si se corre fuera del AppHost sin configurarlo.
+
+## Externos e invitaciones (HU 1.5)
+
+1. Entra con el proveedor simulado marcando «Con rol de administración».
+2. En «Más» (móvil) o en la barra lateral (escritorio): **Organizaciones** → crea una; **Invitaciones** → invita un correo `@ejemplo.com`.
+3. Abre `http://localhost:4038` (Mailpit), abre el correo y sigue el enlace `https://localhost:4032/invitacion#…` en una ventana privada.
+4. Crea la cuenta con una passkey (o con contraseña y una aplicación de autenticación) y guarda los códigos de recuperación.
+
+En local, los vencimientos se procesan cada 10 s y los límites de tasa de ingreso son más holgados, para que las pruebas E2E corran en paralelo desde la misma IP. La imagen de Mailpit va fijada por digest.

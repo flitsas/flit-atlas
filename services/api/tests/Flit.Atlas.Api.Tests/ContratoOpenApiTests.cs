@@ -38,6 +38,10 @@ public class ContratoOpenApiTests
             b.UseSetting(ExtensionesIdentidad.ClaveSimulado, ambiente is "local" or "dev" ? "true" : "false");
             b.UseSetting($"{ExtensionesIdentidad.SeccionEntra}:TenantId", "00000000-0000-0000-0000-00000000a71a");
             b.UseSetting($"{ExtensionesIdentidad.SeccionEntra}:ClientId", "00000000-0000-0000-0000-00000000c11e");
+            b.UseSetting("Atlas:UrlPublica", "https://qa.atlas.ejemplo.com");
+            b.UseSetting("Plataforma:Correo:Proveedor", "smtp");
+            b.UseSetting("Plataforma:Correo:Remitente", "atlas@ejemplo.com");
+            b.UseSetting("Plataforma:Correo:Smtp:Host", "127.0.0.1");
             extra?.Invoke(b);
         });
 

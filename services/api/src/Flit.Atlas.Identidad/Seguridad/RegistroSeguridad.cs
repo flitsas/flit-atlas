@@ -30,6 +30,38 @@ public static class TiposEventoSeguridad
     public const string ReautenticacionRequerida = "reautenticacion_requerida";
     public const string LimiteTasa = "limite_tasa";
 
+    // Invitaciones y cuentas externas (HU 1.5, ATLAS-ADR-0025).
+    public const string InvitacionCreada = "invitacion_creada";
+    public const string InvitacionReenviada = "invitacion_reenviada";
+    public const string InvitacionSuspendida = "invitacion_suspendida";
+    public const string InvitacionRenovada = "invitacion_renovada";
+    public const string InvitacionRevocada = "invitacion_revocada";
+    public const string InvitacionAceptada = "invitacion_aceptada";
+
+    /// <summary>Alguien usó un enlace de invitación o de recuperación que no sirve (usado, vencido, revocado o inventado).</summary>
+    public const string EnlaceRechazado = "enlace_rechazado";
+
+    public const string CorreoNoEnviado = "correo_no_enviado";
+    public const string CuentaCreada = "cuenta_creada";
+
+    /// <summary>Se registró un factor: passkey, contraseña, TOTP o códigos de recuperación (detalle <c>metodo</c>).</summary>
+    public const string FactorRegistrado = "factor_registrado";
+
+    /// <summary>Se quitaron los factores anteriores (recuperación o restablecimiento forzado).</summary>
+    public const string FactoresRetirados = "factores_retirados";
+
+    public const string MfaVerificado = "mfa_verificado";
+    public const string MfaFallido = "mfa_fallido";
+
+    /// <summary>Una cuenta externa sin segundo factor intentó entrar y se rechazó.</summary>
+    public const string MfaRequerido = "mfa_requerido";
+
+    public const string CodigoRecuperacionUsado = "codigo_recuperacion_usado";
+    public const string RecuperacionSolicitada = "recuperacion_solicitada";
+    public const string RecuperacionCompletada = "recuperacion_completada";
+    public const string RestablecimientoForzado = "restablecimiento_forzado";
+    public const string TerminosAceptados = "terminos_aceptados";
+
     public const string PrefijoAuditoria = "identidad.";
 }
 
@@ -49,6 +81,11 @@ public sealed record DatosEventoSeguridad
 
     /// <summary>Detalle que se serializa a JSON. Nunca contraseñas, tokens ni la IP (ya va en su columna).</summary>
     public object? Detalle { get; init; }
+
+    /// <summary>Recurso de la auditoría cuando no es el usuario o la persona (p. ej. <c>invitacion</c>).</summary>
+    public string? RecursoTipo { get; init; }
+
+    public Guid? RecursoId { get; init; }
 
     /// <summary>Usuario, persona, organización y sesión del principal de la sesión en curso.</summary>
     public static DatosEventoSeguridad DeSesion(ClaimsPrincipal usuario)
@@ -115,8 +152,9 @@ public sealed class RegistroSeguridad(PlataformaDbContext plataforma, TimeProvid
                 ActorId = actor?.ToString(),
                 OrganizacionId = datos.OrganizacionId,
                 Accion = TiposEventoSeguridad.PrefijoAuditoria + tipo,
-                RecursoTipo = datos.UsuarioId is not null ? "usuario" : datos.PersonaId is not null ? "persona" : "identidad",
-                RecursoId = (datos.UsuarioId ?? datos.PersonaId)?.ToString(),
+                RecursoTipo = datos.RecursoTipo
+                    ?? (datos.UsuarioId is not null ? "usuario" : datos.PersonaId is not null ? "persona" : "identidad"),
+                RecursoId = (datos.RecursoId ?? datos.UsuarioId ?? datos.PersonaId)?.ToString(),
                 Ip = ip,
                 Datos = datos.SesionId is null
                     ? detalle

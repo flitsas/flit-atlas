@@ -31,11 +31,15 @@ internal static class RenovacionAlIngresar
             return siguiente(http);
         });
 
-    /// <summary>El retorno de Entra (POST con form_post, o GET si cambiara el modo de respuesta) y el simulado.</summary>
+    /// <summary>
+    /// El retorno de Entra (POST con form_post, o GET si cambiara el modo de respuesta), el simulado y las rutas públicas
+    /// de las cuentas externas (HU 1.5): estas también corren sin la sesión anterior, con el alcance de datos del sistema.
+    /// </summary>
     private static bool EsIngreso(HttpRequest peticion) =>
         peticion.Path.Equals(EndpointsIdentidad.RutaRetornoEntra, StringComparison.OrdinalIgnoreCase)
         || (HttpMethods.IsPost(peticion.Method)
-            && peticion.Path.Equals("/api/v1/identidad/simulado/entrar", StringComparison.OrdinalIgnoreCase));
+            && (peticion.Path.Equals("/api/v1/identidad/simulado/entrar", StringComparison.OrdinalIgnoreCase)
+                || Externos.EndpointsCuentasExternas.EsRutaDeIngreso(peticion.Path)));
 
     private static void Apartar(HttpContext http)
     {

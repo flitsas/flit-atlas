@@ -22,8 +22,26 @@ export interface Proveedores {
 }
 
 export class ErrorApi extends Error {
-  constructor(public readonly estado: number) {
+  constructor(
+    public readonly estado: number,
+    /** Cuerpo JSON de la respuesta de error, si lo hay (problem+json o `{ error, mensaje }`). */
+    public readonly cuerpo?: Record<string, unknown>,
+  ) {
     super(`La API respondió ${estado}`);
+  }
+
+  /** Código estable del error (`error` o `codigo` del cuerpo). */
+  get codigo(): string | undefined {
+    const valor = this.cuerpo?.error ?? this.cuerpo?.codigo;
+    return typeof valor === 'string' ? valor : undefined;
+  }
+
+  /** Mensaje para la persona: el del servidor o, si no hay, `porDefecto`. */
+  mensajePara(porDefecto: string): string {
+    const errores = this.cuerpo?.errors as Record<string, string[]> | undefined;
+    const primero = errores ? Object.values(errores)[0]?.[0] : undefined;
+    const valor = this.cuerpo?.mensaje ?? primero ?? this.cuerpo?.title;
+    return typeof valor === 'string' ? valor : porDefecto;
   }
 }
 
@@ -36,12 +54,15 @@ export async function pedir(ruta: string, opciones: RequestInit = {}): Promise<R
   }
   const respuesta = await fetch(ruta, { ...opciones, headers: cabeceras, credentials: 'same-origin' });
   if (!respuesta.ok) {
-    throw new ErrorApi(respuesta.status);
+    const cuerpo = (respuesta.headers.get('Content-Type') ?? '').includes('json')
+      ? ((await respuesta.json().catch(() => undefined)) as Record<string, unknown> | undefined)
+      : undefined;
+    throw new ErrorApi(respuesta.status, cuerpo);
   }
   return respuesta;
 }
 
-export async function enviarJson(ruta: string, metodo: 'POST' | 'PUT', cuerpo?: unknown): Promise<Response> {
+export async function enviarJson(ruta: string, metodo: 'POST' | 'PUT' | 'DELETE', cuerpo?: unknown): Promise<Response> {
   return pedir(ruta, {
     method: metodo,
     headers: cuerpo === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -63,8 +84,8 @@ export async function obtenerProveedores(): Promise<Proveedores> {
   return (await (await pedir('/api/v1/identidad/proveedores')).json()) as Proveedores;
 }
 
-export async function entrarSimulado(correo: string, nombre: string): Promise<void> {
-  await enviarJson('/api/v1/identidad/simulado/entrar', 'POST', { correo, nombre });
+export async function entrarSimulado(correo: string, nombre: string, administrador = false): Promise<void> {
+  await enviarJson('/api/v1/identidad/simulado/entrar', 'POST', { correo, nombre, administrador });
 }
 
 export async function salir(): Promise<void> {

@@ -41,9 +41,11 @@ internal static class ContratoOpenApi
 
     private static readonly (string Nombre, string Descripcion)[] Etiquetas =
     [
-        ("Identidad", "Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022), y tokens para clientes que no son el navegador (ATLAS-ADR-0024)."),
+        ("Identidad", "Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022), tokens para clientes que no son el navegador (ATLAS-ADR-0024), y las cuentas locales de externos: aceptar invitación, passkey, contraseña con TOTP y recuperación (ATLAS-ADR-0025)."),
         ("Plataforma", "Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API."),
-        ("Permisos", "Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023)."),
+        ("Organizaciones", "FLIT, clientes y proveedores: crear, editar, suspender y eliminar, y habilitar el administrador de la organización (HU 1.5, ATLAS-ADR-0025)."),
+        ("Invitaciones", "Invitaciones de externos con rol, alcance, vencimiento y permisos extra: crear, reenviar, suspender, renovar y revocar (HU 1.5, ATLAS-ADR-0025)."),
+        ("Permisos","Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023)."),
     ];
 
     public static IServiceCollection AgregarContratoOpenApi(this IServiceCollection servicios) =>

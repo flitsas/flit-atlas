@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { type ReactNode, Suspense, useState } from 'react';
 import { createBrowserRouter, type RouteObject } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 
@@ -17,6 +17,9 @@ import { Boton } from './ui/Tarjeta';
 const Buscar = diferido(() => import('./paginas/Buscar'));
 const Notificaciones = diferido(() => import('./paginas/Notificaciones'));
 const Ajustes = diferido(() => import('./paginas/Ajustes'));
+// Páginas públicas de las cuentas externas (HU 1.5): sin sesión y con el token en el fragmento de la URL.
+const AceptarInvitacion = diferido(() => import('./externos/AceptarInvitacion'));
+const Recuperar = diferido(() => import('./externos/Recuperar'));
 
 /**
  * Raíz: sin sesión, el ingreso (en cualquier ruta, para volver a ella al entrar); con sesión, el shell. Mientras se
@@ -36,6 +39,8 @@ function Raiz({ modulos }: { modulos: readonly ModuloAtlas[] }) {
 
 export function rutasAtlas(modulos: readonly ModuloAtlas[] = MODULOS_REGISTRADOS): RouteObject[] {
   return [
+    { path: 'invitacion', element: <Publica><AceptarInvitacion /></Publica>, errorElement: <ErrorDeRuta /> },
+    { path: 'recuperar', element: <Publica><Recuperar /></Publica>, errorElement: <ErrorDeRuta /> },
     {
       element: <Raiz modulos={modulos} />,
       errorElement: <ErrorDeRuta />,
@@ -70,6 +75,11 @@ export function App({ modulos = MODULOS_REGISTRADOS }: { modulos?: readonly Modu
       <RouterProvider router={enrutador} />
     </QueryClientProvider>
   );
+}
+
+/** Página pública: no depende de la sesión (si hay una, la aceptación o la recuperación la reemplazan). */
+function Publica({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<Arranque />}>{children}</Suspense>;
 }
 
 /** Misma pantalla que el splash de index.html, para que no haya salto entre ambos. */

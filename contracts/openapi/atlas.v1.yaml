@@ -248,6 +248,49 @@ paths:
             - atlas.mcp
             - atlas.publicar
             - atlas.widget
+  /api/v1/identidad/terminos:
+    get:
+      tags:
+        - Identidad
+      summary: Términos de uso y aviso de privacidad vigentes
+      description: Versión y texto (Markdown) de los documentos que acepta un externo al crear su cuenta (Ley 1581). No requiere sesión.
+      operationId: ListarDocumentosLegales
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentoVigente'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
   /api/v1/identidad/sesiones:
     get:
       tags:
@@ -571,6 +614,901 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.identidad.administrar
+  /api/v1/identidad/invitaciones/consultar:
+    post:
+      tags:
+        - Identidad
+      summary: Ver una invitación antes de aceptarla
+      description: 'Organización, rol, vencimientos y documentos de la invitación del enlace. 410 si el enlace se usó, venció, se revocó o no existe (la misma respuesta en todos los casos). No requiere sesión.'
+      operationId: ConsultarInvitacion
+      requestBody:
+        description: Token del enlace de la invitación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudToken'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionPublica'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/invitaciones/passkey/opciones:
+    post:
+      tags:
+        - Identidad
+      summary: Opciones para crear la passkey de la cuenta
+      description: Desafío de WebAuthn (navigator.credentials.create) para la cuenta que se crea con la invitación. Vence en 5 minutos y sirve una sola vez. No requiere sesión.
+      operationId: OpcionesPasskeyInvitacion
+      requestBody:
+        description: Token de la invitación y nombre para la passkey.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudOpcionesInvitacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpcionesPasskey'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/invitaciones/totp/clave:
+    post:
+      tags:
+        - Identidad
+      summary: Clave TOTP para la cuenta con contraseña
+      description: Clave nueva y su QR (SVG) para la aplicación de autenticación. Se confirma con el primer código al aceptar. No requiere sesión.
+      operationId: ClaveTotpInvitacion
+      requestBody:
+        description: Token del enlace de la invitación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudToken'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaveTotp'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/invitaciones/aceptar:
+    post:
+      tags:
+        - Identidad
+      summary: Aceptar la invitación y crear la cuenta
+      description: 'Crea la cuenta local con passkey (preferida) o contraseña (mínimo 12, revisada contra filtraciones) y TOTP, guarda la aceptación de los términos y del aviso de privacidad, asigna el rol de la invitación y abre la sesión. Devuelve los diez códigos de recuperación (se muestran una sola vez). El enlace deja de servir. No requiere sesión.'
+      operationId: AceptarInvitacion
+      requestBody:
+        description: 'Nombre, documentos aceptados y factor de la cuenta.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAceptacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaLista'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/entrar/local:
+    post:
+      tags:
+        - Identidad
+      summary: Ingreso de externos con contraseña (paso 1)
+      description: Verifica correo y contraseña con bloqueo progresivo y responde el paso del TOTP; nunca abre sesión solo con la contraseña. 401 genérico si no coinciden o la cuenta está bloqueada; 403 mfa_requerido si la cuenta no tiene segundo factor. No requiere sesión.
+      operationId: EntrarConContrasena
+      requestBody:
+        description: Correo y contraseña.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudIngresoLocal'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasoIngreso'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/entrar/local/segundo-factor:
+    post:
+      tags:
+        - Identidad
+      summary: 'Ingreso de externos con contraseña (paso 2: TOTP)'
+      description: Código TOTP (o un código de recuperación) del paso anterior. Los fallos suman al bloqueo progresivo y un código no se acepta dos veces. 204 abre la sesión; 409 terminos_pendientes si hay versiones nuevas de los documentos. No requiere sesión.
+      operationId: EntrarConSegundoFactor
+      requestBody:
+        description: Paso del ingreso y código TOTP o de recuperación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudSegundoFactor'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminosPendientes'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/entrar/passkey/opciones:
+    post:
+      tags:
+        - Identidad
+      summary: Opciones para entrar con passkey
+      description: 'Desafío de WebAuthn (navigator.credentials.get) sin usuario: la passkey se descubre en el dispositivo. No requiere sesión.'
+      operationId: OpcionesPasskeyIngreso
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpcionesPasskey'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/entrar/passkey:
+    post:
+      tags:
+        - Identidad
+      summary: Ingreso de externos con passkey
+      description: 'Verifica la respuesta del autenticador (verificación de usuario obligatoria: cuenta como MFA). 204 abre la sesión; 409 terminos_pendientes. No requiere sesión.'
+      operationId: EntrarConPasskey
+      requestBody:
+        description: Paso del ingreso y respuesta del autenticador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPasskey'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminosPendientes'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/entrar/terminos:
+    post:
+      tags:
+        - Identidad
+      summary: Aceptar documentos nuevos para terminar el ingreso
+      description: 'Guarda la aceptación de las versiones vigentes (evidencia, Ley 1581) y abre la sesión. No requiere sesión.'
+      operationId: AceptarTerminosAlEntrar
+      requestBody:
+        description: Paso del ingreso y versiones aceptadas.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudTerminos'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/recuperacion:
+    post:
+      tags:
+        - Identidad
+      summary: Pedir el enlace para recuperar la cuenta
+      description: 'Si el correo es de una cuenta externa, envía un enlace de un solo uso que vence en 30 minutos. Responde 202 siempre (no revela si la cuenta existe). No requiere sesión.'
+      operationId: SolicitarRecuperacion
+      requestBody:
+        description: Correo de la cuenta.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCorreo'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/recuperacion/consultar:
+    post:
+      tags:
+        - Identidad
+      summary: Ver la cuenta del enlace de recuperación
+      description: '410 si el enlace se usó, venció o no es válido. No requiere sesión.'
+      operationId: ConsultarRecuperacion
+      requestBody:
+        description: Enlace de recuperación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEnlace'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaARecuperar'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/recuperacion/passkey/opciones:
+    post:
+      tags:
+        - Identidad
+      summary: Opciones para registrar una passkey nueva
+      description: Desafío de WebAuthn para el factor nuevo de la cuenta que se recupera. No requiere sesión.
+      operationId: OpcionesPasskeyRecuperacion
+      requestBody:
+        description: Enlace de recuperación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEnlace'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpcionesPasskey'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/recuperacion/totp/clave:
+    post:
+      tags:
+        - Identidad
+      summary: Clave TOTP nueva para la cuenta que se recupera
+      description: Clave nueva y su QR para la aplicación de autenticación. No requiere sesión.
+      operationId: ClaveTotpRecuperacion
+      requestBody:
+        description: Enlace de recuperación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEnlace'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaveTotp'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/recuperacion/completar:
+    post:
+      tags:
+        - Identidad
+      summary: Registrar el factor nuevo y recuperar la cuenta
+      description: 'Quita todos los factores anteriores, registra el nuevo, genera códigos de recuperación nuevos, quita el bloqueo, cierra todas las sesiones y, si la persona puede entrar, abre una nueva. El enlace deja de servir. No requiere sesión.'
+      operationId: CompletarRecuperacion
+      requestBody:
+        description: Enlace de recuperación y factor nuevo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCompletarRecuperacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaLista'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  '/api/v1/identidad/admin/personas/{personaId}/restablecer':
+    post:
+      tags:
+        - Identidad
+      summary: Forzar el restablecimiento de una cuenta externa
+      description: 'Administración: requiere atlas.identidad.administrar. Quita todos los factores de la cuenta (passkeys, contraseña, TOTP y códigos), cierra sus sesiones y le envía un enlace de recuperación. 409 si la persona es un empleado o aún no tiene cuenta. Exige reautenticación.'
+      operationId: RestablecerCuentaExterna
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona externa (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoRestablecimiento'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
   /api/v1/plataforma/roles:
     get:
       tags:
@@ -848,6 +1786,518 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.roles.gestionar
+  /api/v1/plataforma/organizaciones:
+    get:
+      tags:
+        - Organizaciones
+      summary: Organizaciones
+      description: 'FLIT (interna), clientes y proveedores, con sus personas e invitaciones pendientes. Requiere atlas.organizaciones.gestionar.'
+      operationId: ListarOrganizaciones
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizacionVista'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.organizaciones.gestionar.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.organizaciones.gestionar
+    post:
+      tags:
+        - Organizaciones
+      summary: Crear una organización
+      description: Cliente o proveedor nuevo. Queda en la auditoría. Requiere atlas.organizaciones.gestionar y reautenticación.
+      operationId: CrearOrganizacion
+      requestBody:
+        description: 'Nombre, tipo y administrador de la organización.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudOrganizacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizacionVista'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.organizaciones.gestionar
+  '/api/v1/plataforma/organizaciones/{id}':
+    put:
+      tags:
+        - Organizaciones
+      summary: Editar una organización
+      description: 'Nombre, tipo y si habilita ext.admin_organizacion (al deshabilitarlo, ese rol deja de conceder permisos desde la siguiente petición). De la interna solo cambia el nombre. Requiere atlas.organizaciones.gestionar y reautenticación.'
+      operationId: ActualizarOrganizacion
+      parameters:
+        - name: id
+          in: path
+          description: Id de la organización.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Nombre, tipo y administrador de la organización.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudOrganizacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizacionVista'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.organizaciones.gestionar
+    delete:
+      tags:
+        - Organizaciones
+      summary: Eliminar una organización vacía
+      description: 'Solo si no tiene personas ni invitaciones (si las tiene, suspéndela). Queda en la auditoría. Requiere atlas.organizaciones.gestionar y reautenticación.'
+      operationId: EliminarOrganizacion
+      parameters:
+        - name: id
+          in: path
+          description: Id de la organización.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.organizaciones.gestionar
+  '/api/v1/plataforma/organizaciones/{id}/suspender':
+    post:
+      tags:
+        - Organizaciones
+      summary: Suspender una organización
+      description: 'Nadie de la organización entra ni conserva permisos, y sus sesiones se cierran de inmediato. La interna no se suspende. Requiere atlas.organizaciones.gestionar y reautenticación.'
+      operationId: SuspenderOrganizacion
+      parameters:
+        - name: id
+          in: path
+          description: Id del recurso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizacionVista'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.organizaciones.gestionar
+  '/api/v1/plataforma/organizaciones/{id}/reactivar':
+    post:
+      tags:
+        - Organizaciones
+      summary: Reactivar una organización
+      description: Sus personas vuelven a entrar con un ingreso nuevo. Requiere atlas.organizaciones.gestionar y reautenticación.
+      operationId: ReactivarOrganizacion
+      parameters:
+        - name: id
+          in: path
+          description: Id del recurso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizacionVista'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.organizaciones.gestionar
+  /api/v1/plataforma/invitaciones:
+    get:
+      tags:
+        - Invitaciones
+      summary: Invitaciones
+      description: 'Las más recientes primero (hasta 500), con su estado calculado ahora. Un administrador de organización solo ve las de la suya. Requiere atlas.invitaciones.gestionar.'
+      operationId: ListarInvitaciones
+      parameters:
+        - name: organizacionId
+          in: query
+          description: Solo las de esta organización.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvitacionVista'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.invitaciones.gestionar.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.invitaciones.gestionar
+    post:
+      tags:
+        - Invitaciones
+      summary: Invitar a una persona externa
+      description: 'Crea la invitación (organización, rol externo, alcance, vencimiento y permisos extra) y envía el correo con un enlace de un solo uso que vence en 72 h (en la base solo queda su hash). Un proveedor exige vencimiento y alcance. Requiere atlas.invitaciones.gestionar; un administrador de organización, solo en la suya y dentro de su alcance (403 si no).'
+      operationId: CrearInvitacion
+      requestBody:
+        description: 'Correo, organización, rol, alcance, vencimiento y permisos extra.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudInvitacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionEnviada'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.invitaciones.gestionar
+  /api/v1/plataforma/invitaciones/opciones:
+    get:
+      tags:
+        - Invitaciones
+      summary: Qué se puede elegir al invitar
+      description: 'Organizaciones, roles externos, tipos de alcance, permisos extra y vencimiento máximo para la sesión. Requiere atlas.invitaciones.gestionar.'
+      operationId: ObtenerOpcionesDeInvitacion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpcionesInvitacion'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.invitaciones.gestionar.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.invitaciones.gestionar
+  '/api/v1/plataforma/invitaciones/{id}/reenviar':
+    post:
+      tags:
+        - Invitaciones
+      summary: Reenviar una invitación pendiente
+      description: Enlace nuevo de 72 h (el anterior deja de servir) y correo otra vez. Requiere atlas.invitaciones.gestionar.
+      operationId: ReenviarInvitacion
+      parameters:
+        - name: id
+          in: path
+          description: Id del recurso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionEnviada'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.invitaciones.gestionar
+  '/api/v1/plataforma/invitaciones/{id}/suspender':
+    post:
+      tags:
+        - Invitaciones
+      summary: Suspender una invitación
+      description: 'Pendiente: el enlace deja de servir. Aceptada: la persona queda suspendida y sus sesiones se cierran. Se deshace renovándola. Requiere atlas.invitaciones.gestionar.'
+      operationId: SuspenderInvitacion
+      parameters:
+        - name: id
+          in: path
+          description: Id del recurso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionVista'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.invitaciones.gestionar
+  '/api/v1/plataforma/invitaciones/{id}/renovar':
+    post:
+      tags:
+        - Invitaciones
+      summary: Renovar una invitación
+      description: 'Vencimiento nuevo del acceso. Si ya se aceptó, extiende sus asignaciones y reactiva a la persona; si no, vuelve a pendiente con un enlace nuevo. Requiere atlas.invitaciones.gestionar.'
+      operationId: RenovarInvitacion
+      parameters:
+        - name: id
+          in: path
+          description: Id del recurso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Vencimiento nuevo del acceso.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRenovacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionEnviada'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.invitaciones.gestionar
+  '/api/v1/plataforma/invitaciones/{id}/revocar':
+    post:
+      tags:
+        - Invitaciones
+      summary: Revocar una invitación
+      description: 'Definitivo: el enlace deja de servir y, si se había aceptado, se retiran sus roles y se cierran sus sesiones. Requiere atlas.invitaciones.gestionar.'
+      operationId: RevocarInvitacion
+      parameters:
+        - name: id
+          in: path
+          description: Id del recurso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionVista'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.invitaciones.gestionar
   /api/v1/plataforma/banderas:
     get:
       tags:
@@ -1180,6 +2630,19 @@ paths:
         - atlas.hola.ver
 components:
   schemas:
+    AceptacionDocumento:
+      required:
+        - documento
+        - version
+      type: object
+      properties:
+        documento:
+          type: string
+          description: terminos o privacidad.
+        version:
+          type: string
+          description: La versión vigente que se mostró.
+      description: Versión de un documento legal que la persona acepta.
     AlcanceVista:
       required:
         - tipo
@@ -1308,6 +2771,89 @@ components:
             - 'null'
             - string
       description: Llave pública VAPID para suscribir el dispositivo; habilitado es falso si el ambiente no tiene llaves.
+    ClaveTotp:
+      required:
+        - estado
+        - clave
+        - uri
+        - qr
+      type: object
+      properties:
+        estado:
+          type: string
+          description: Id del paso; vence en 5 minutos.
+        clave:
+          type: string
+          description: 'Clave en base32, en grupos de 4, para escribirla a mano.'
+        uri:
+          type: string
+          description: URI otpauth:// (la misma que lleva el QR).
+        qr:
+          type: string
+          description: 'QR de la URI como imagen SVG en data URI (img-src data: de la CSP).'
+      description: Clave TOTP nueva para registrar en la aplicación de autenticación.
+    CuentaARecuperar:
+      required:
+        - correo
+        - nombre
+      type: object
+      properties:
+        correo:
+          type: string
+        nombre:
+          type: string
+      description: Cuenta que se va a recuperar.
+    CuentaLista:
+      required:
+        - codigosRecuperacion
+        - sesionIniciada
+      type: object
+      properties:
+        codigosRecuperacion:
+          type: array
+          items:
+            type: string
+          description: Diez códigos de recuperación de un solo uso.
+        sesionIniciada:
+          type: boolean
+          description: true si ya quedó la sesión abierta.
+      description: 'Cuenta creada o recuperada: los códigos de recuperación se muestran esta única vez.'
+    DocumentoVigente:
+      required:
+        - documento
+        - version
+        - titulo
+        - texto
+        - hash
+      type: object
+      properties:
+        documento:
+          type: string
+          description: terminos o privacidad.
+        version:
+          type: string
+          description: Versión que se acepta; cambia cuando cambia el texto.
+        titulo:
+          type: string
+        texto:
+          type: string
+          description: 'Texto en Markdown, tal como se muestra.'
+        hash:
+          type: string
+          description: 'SHA-256 (hex) del texto: queda en la evidencia de la aceptación.'
+      description: 'Documento legal vigente (términos de uso o aviso de privacidad, Ley 1581) con su versión y su texto en Markdown.'
+    ErrorExternos:
+      required:
+        - error
+        - mensaje
+      type: object
+      properties:
+        error:
+          type: string
+          description: Código estable del error.
+        mensaje:
+          type: string
+      description: Error de una operación de invitaciones o de cuentas externas.
     ErrorRoles:
       required:
         - error
@@ -1352,6 +2898,147 @@ components:
             type: array
             items:
               type: string
+    InvitacionEnviada:
+      required:
+        - invitacion
+        - correoEnviado
+      type: object
+      properties:
+        invitacion:
+          $ref: '#/components/schemas/InvitacionVista'
+        correoEnviado:
+          type: boolean
+          description: 'false si el ambiente no tiene correo o el envío falló: reenvíala más tarde.'
+      description: Resultado de una operación que envía el correo de la invitación.
+    InvitacionPublica:
+      required:
+        - correo
+        - nombre
+        - organizacion
+        - rol
+        - rolNombre
+        - accesoVenceEn
+        - enlaceVenceEn
+        - documentos
+      type: object
+      properties:
+        correo:
+          type: string
+          description: 'Correo invitado: será el de la cuenta.'
+        nombre:
+          type:
+            - 'null'
+            - string
+        organizacion:
+          type: string
+        rol:
+          type: string
+        rolNombre:
+          type: string
+        accesoVenceEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        enlaceVenceEn:
+          type: string
+          format: date-time
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoVigente'
+      description: 'Lo que ve el invitado antes de aceptar: a qué organización y con qué rol, y los documentos que debe aceptar.'
+    InvitacionVista:
+      required:
+        - id
+        - correo
+        - nombre
+        - organizacionId
+        - organizacionNombre
+        - rol
+        - rolNombre
+        - alcance
+        - permisosExtra
+        - accesoVenceEn
+        - enlaceVenceEn
+        - estado
+        - personaId
+        - aceptadaEn
+        - enviadaEn
+        - envios
+        - creadaEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        correo:
+          type: string
+          description: Correo invitado (dato personal).
+        nombre:
+          type:
+            - 'null'
+            - string
+        organizacionId:
+          type: string
+          format: uuid
+        organizacionNombre:
+          type: string
+        rol:
+          type: string
+          description: Código del rol externo (ext.*).
+        rolNombre:
+          type: string
+        alcance:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlcanceVista'
+          description: Recursos concedidos; vacío = lo que se comparta con la organización.
+        permisosExtra:
+          type: array
+          items:
+            type: string
+          description: 'exportar, sandbox.'
+        accesoVenceEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo vence el acceso.
+          format: date-time
+        enlaceVenceEn:
+          type: string
+          description: Cuándo vence el enlace actual (72 h después de cada envío).
+          format: date-time
+        estado:
+          type: string
+          description: 'pendiente, enlace_vencido, aceptada, acceso_vencido, suspendida o revocada.'
+        personaId:
+          type:
+            - 'null'
+            - string
+          description: Persona creada al aceptar.
+          format: uuid
+        aceptadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        enviadaEn:
+          type:
+            - 'null'
+            - string
+          description: Último envío del correo que salió bien.
+          format: date-time
+        envios:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        creadaEn:
+          type: string
+          format: date-time
+      description: 'Invitación de una persona externa, con su estado calculado en este momento.'
     MapeoGrupoVista:
       required:
         - id
@@ -1450,6 +3137,133 @@ components:
           type: string
           description: Texto del saludo; se recortan los espacios de los extremos.
       description: Saludo nuevo; queda en la organización de la persona en sesión.
+    OpcionesInvitacion:
+      required:
+        - organizaciones
+        - roles
+        - tiposAlcance
+        - permisosExtra
+        - vigenciaMaximaDias
+        - soloSuOrganizacion
+      type: object
+      properties:
+        organizaciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizacionInvitable'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RolInvitable'
+        tiposAlcance:
+          type: array
+          items:
+            type: string
+          description: Tipos de alcance que acepta una invitación.
+        permisosExtra:
+          type: array
+          items:
+            type: string
+        vigenciaMaximaDias:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Días máximos de acceso desde hoy.
+          format: int32
+        soloSuOrganizacion:
+          type: boolean
+          description: 'true si invita un administrador de su organización: solo dentro de su alcance.'
+      description: Lo que la sesión puede elegir al invitar.
+    OpcionesPasskey:
+      required:
+        - estado
+        - opciones
+      type: object
+      properties:
+        estado:
+          type: string
+          description: Id del paso; se devuelve con la respuesta del autenticador. Vence en 5 minutos y sirve una sola vez.
+        opciones:
+          type: string
+          description: 'PublicKeyCredentialCreationOptionsJSON o PublicKeyCredentialRequestOptionsJSON (WebAuthn nivel 3), como texto JSON.'
+      description: Opciones para que el navegador cree o use una passkey (WebAuthn) y el id del paso que las acompaña.
+    OrganizacionInvitable:
+      required:
+        - id
+        - nombre
+        - tipo
+        - adminOrganizacionHabilitado
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: cliente o proveedor.
+        adminOrganizacionHabilitado:
+          type: boolean
+      description: Organización a la que se puede invitar.
+    OrganizacionVista:
+      required:
+        - id
+        - nombre
+        - tipo
+        - estado
+        - adminOrganizacionHabilitado
+        - personas
+        - invitacionesPendientes
+        - creadaEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'interna, cliente o proveedor.'
+        estado:
+          type: string
+          description: activa o suspendida.
+        adminOrganizacionHabilitado:
+          type: boolean
+          description: Si sus ext.admin_organizacion pueden invitar a colegas.
+        personas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Personas de la organización.
+          format: int32
+        invitacionesPendientes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Invitaciones pendientes.
+          format: int32
+        creadaEn:
+          type: string
+          format: date-time
+      description: 'Organización de Atlas: FLIT (interna), un cliente o un proveedor.'
+    PasoIngreso:
+      required:
+        - paso
+        - estado
+      type: object
+      properties:
+        paso:
+          type: string
+          description: totp.
+        estado:
+          type: string
+          description: Id del paso; vence en 5 minutos.
+      description: Siguiente paso del ingreso.
     PermisoMatriz:
       required:
         - codigo
@@ -1586,6 +3400,15 @@ components:
             - string
           format: int32
       description: Cuántas sesiones activas se cerraron.
+    ResultadoRestablecimiento:
+      required:
+        - correoEnviado
+      type: object
+      properties:
+        correoEnviado:
+          type: boolean
+          description: false si el correo con el enlace no salió.
+      description: Resultado del restablecimiento forzado.
     RolConPermisos:
       required:
         - codigo
@@ -1614,6 +3437,20 @@ components:
           items:
             type: string
       description: Rol de Atlas con los permisos que concede según los manifiestos del código.
+    RolInvitable:
+      required:
+        - codigo
+        - nombre
+        - descripcion
+      type: object
+      properties:
+        codigo:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+      description: Rol externo que se puede invitar.
     RolMatriz:
       required:
         - codigo
@@ -1689,6 +3526,28 @@ components:
         actual:
           type: boolean
       description: Sesión activa del usuario en un dispositivo («dispositivos conectados»). La IP es un dato personal.
+    SolicitudAceptacion:
+      required:
+        - token
+        - nombre
+        - documentos
+        - factor
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token del enlace (el fragmento de la URL del correo).
+        nombre:
+          type: string
+          description: Nombre completo del invitado.
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AceptacionDocumento'
+          description: Versiones vigentes de los términos y del aviso de privacidad.
+        factor:
+          $ref: '#/components/schemas/SolicitudFactor'
+      description: 'Aceptación de la invitación: nombre, versiones de los documentos aceptados y el factor de la cuenta.'
     SolicitudAsignacion:
       required:
         - rol
@@ -1725,6 +3584,120 @@ components:
           description: Hasta cuándo vale; obligatoria para roles externos.
           format: date-time
       description: Rol que se asigna a una persona. Un rol externo exige vencimiento (máximo 90 días) y queda en la organización de la persona.
+    SolicitudCompletarRecuperacion:
+      required:
+        - enlace
+        - factor
+      type: object
+      properties:
+        enlace:
+          type: string
+        factor:
+          $ref: '#/components/schemas/SolicitudFactor'
+      description: Enlace de recuperación y el factor nuevo.
+    SolicitudCorreo:
+      required:
+        - correo
+      type: object
+      properties:
+        correo:
+          type: string
+      description: Correo de la cuenta externa que se quiere recuperar.
+    SolicitudEnlace:
+      required:
+        - enlace
+      type: object
+      properties:
+        enlace:
+          type: string
+      description: Enlace de recuperación (el fragmento de la URL del correo).
+    SolicitudFactor:
+      required:
+        - metodo
+        - estado
+        - credencial
+        - contrasena
+        - codigo
+      type: object
+      properties:
+        metodo:
+          type: string
+          description: passkey o contrasena.
+        estado:
+          type: string
+          description: Id del paso de las opciones de passkey o de la clave TOTP.
+        credencial:
+          type:
+            - 'null'
+            - string
+          description: 'Con passkey: la respuesta del autenticador (PublicKeyCredential.toJSON()) como texto JSON.'
+        contrasena:
+          type:
+            - 'null'
+            - string
+          description: 'Con contraseña: mínimo 12 caracteres; se revisa contra contraseñas filtradas.'
+        codigo:
+          type:
+            - 'null'
+            - string
+          description: 'Con contraseña: el código de 6 dígitos que muestra la aplicación de autenticación.'
+      description: 'Factor con el que se crea o se recupera una cuenta externa: passkey (preferida) o contraseña más TOTP.'
+    SolicitudIngresoLocal:
+      required:
+        - correo
+        - contrasena
+      type: object
+      properties:
+        correo:
+          type: string
+        contrasena:
+          type: string
+      description: Correo y contraseña de una cuenta externa (primer paso; el segundo es el TOTP).
+    SolicitudInvitacion:
+      required:
+        - correo
+        - nombre
+        - organizacionId
+        - rol
+        - alcance
+        - accesoVenceEn
+        - permisosExtra
+      type: object
+      properties:
+        correo:
+          type: string
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: 'Nombre del invitado, si lo conoces (opcional).'
+        organizacionId:
+          type: string
+          format: uuid
+        rol:
+          type: string
+          description: Rol externo (ext.*).
+        alcance:
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/AlcanceVista'
+          description: 'Aplicativos, paquetes o documentos concedidos; vacío = lo que se comparta con la organización.'
+        accesoVenceEn:
+          type:
+            - 'null'
+            - string
+          description: 'Vencimiento del acceso; por defecto, el máximo configurado (90 días).'
+          format: date-time
+        permisosExtra:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'exportar, sandbox.'
+      description: Invitación nueva. Un proveedor exige vencimiento y alcance; el vencimiento no supera el máximo configurado.
     SolicitudMapeoGrupo:
       required:
         - grupoId
@@ -1740,6 +3713,99 @@ components:
         rol:
           type: string
       description: Grupo de Entra ID (object id y nombre) y el rol interno que otorga.
+    SolicitudOpcionesInvitacion:
+      required:
+        - token
+        - nombre
+      type: object
+      properties:
+        token:
+          type: string
+        nombre:
+          type: string
+      description: Token de la invitación y el nombre que se mostrará en la passkey.
+    SolicitudOrganizacion:
+      required:
+        - nombre
+        - tipo
+        - adminOrganizacionHabilitado
+      type: object
+      properties:
+        nombre:
+          type: string
+          description: Nombre único (hasta 200 caracteres).
+        tipo:
+          type: string
+          description: cliente o proveedor (la interna ya existe).
+        adminOrganizacionHabilitado:
+          type: boolean
+          description: Habilita el rol ext.admin_organizacion en esta organización.
+      description: Organización nueva o cambios de una existente.
+    SolicitudPasskey:
+      required:
+        - estado
+        - credencial
+      type: object
+      properties:
+        estado:
+          type: string
+        credencial:
+          type: string
+          description: 'PublicKeyCredential.toJSON() de navigator.credentials.get(), como texto JSON.'
+      description: Respuesta del autenticador para entrar con passkey.
+    SolicitudRenovacion:
+      required:
+        - accesoVenceEn
+      type: object
+      properties:
+        accesoVenceEn:
+          type:
+            - 'null'
+            - string
+          description: 'Vencimiento nuevo; por defecto, el máximo configurado.'
+          format: date-time
+      description: 'Renovación: vencimiento nuevo del acceso. Si la invitación no se ha aceptado, también se envía un enlace nuevo.'
+    SolicitudSegundoFactor:
+      required:
+        - estado
+        - codigo
+        - codigoRecuperacion
+      type: object
+      properties:
+        estado:
+          type: string
+        codigo:
+          type:
+            - 'null'
+            - string
+          description: Código de 6 dígitos de la aplicación de autenticación.
+        codigoRecuperacion:
+          type:
+            - 'null'
+            - string
+          description: 'Código de recuperación de un solo uso, en lugar del TOTP.'
+      description: 'Segundo factor del ingreso con contraseña: el código TOTP o un código de recuperación.'
+    SolicitudTerminos:
+      required:
+        - estado
+        - documentos
+      type: object
+      properties:
+        estado:
+          type: string
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AceptacionDocumento'
+      description: Aceptación de las versiones nuevas de los documentos legales para terminar el ingreso.
+    SolicitudToken:
+      required:
+        - token
+      type: object
+      properties:
+        token:
+          type: string
+      description: Token del enlace de la invitación (el fragmento de la URL del correo).
     SuscripcionDto:
       required:
         - endpoint
@@ -1763,6 +3829,24 @@ components:
             - string
           description: 'Resumen del dispositivo, p. ej. «Chrome en Android».'
       description: Suscripción Web Push de un dispositivo (PushSubscription del navegador).
+    TerminosPendientes:
+      required:
+        - error
+        - estado
+        - documentos
+      type: object
+      properties:
+        error:
+          type: string
+          description: terminos_pendientes.
+        estado:
+          type: string
+          description: Id del paso para POST /api/v1/identidad/entrar/terminos.
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoVigente'
+      description: Antes de entrar hay que aceptar versiones nuevas de los documentos legales.
     VersionApi:
       required:
         - servicio
@@ -1845,9 +3929,13 @@ components:
             atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.
 tags:
   - name: Identidad
-    description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022), y tokens para clientes que no son el navegador (ATLAS-ADR-0024).'
+    description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022), tokens para clientes que no son el navegador (ATLAS-ADR-0024), y las cuentas locales de externos: aceptar invitación, passkey, contraseña con TOTP y recuperación (ATLAS-ADR-0025).'
   - name: Plataforma
     description: Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API.
+  - name: Organizaciones
+    description: 'FLIT, clientes y proveedores: crear, editar, suspender y eliminar, y habilitar el administrador de la organización (HU 1.5, ATLAS-ADR-0025).'
+  - name: Invitaciones
+    description: 'Invitaciones de externos con rol, alcance, vencimiento y permisos extra: crear, reenviar, suspender, renovar y revocar (HU 1.5, ATLAS-ADR-0025).'
   - name: Permisos
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
   - name: Hola

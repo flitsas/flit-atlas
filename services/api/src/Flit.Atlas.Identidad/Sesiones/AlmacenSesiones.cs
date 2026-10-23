@@ -12,13 +12,22 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Atlas.Identidad.Sesiones;
 
+/// <summary>Duraciones de la sesión del BFF (sección <c>Identidad:Sesion</c>).</summary>
 public sealed class OpcionesSesion
 {
+    public const string Seccion = "Identidad:Sesion";
+
     /// <summary>Expiración deslizante de los empleados (ATLAS-ADR-0004 §6).</summary>
     public TimeSpan DeslizanteEmpleados { get; set; } = TimeSpan.FromHours(8);
 
     /// <summary>Tope absoluto de una sesión de empleado.</summary>
     public TimeSpan AbsolutaEmpleados { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>Expiración deslizante de los externos: más corta (§6.3, ATLAS-ADR-0004 §6).</summary>
+    public TimeSpan DeslizanteExternos { get; set; } = TimeSpan.FromHours(2);
+
+    /// <summary>Tope absoluto de una sesión de externo.</summary>
+    public TimeSpan AbsolutaExternos { get; set; } = TimeSpan.FromHours(24);
 
     /// <summary>Antigüedad máxima del último ingreso para una acción sensible (ATLAS-ADR-0004 §6.4).</summary>
     public TimeSpan VentanaReautenticacion { get; set; } = TimeSpan.FromMinutes(10);
@@ -85,7 +94,9 @@ public sealed class AlmacenSesiones(
             CreadaEn = ahora,
             UltimoUsoEn = ahora,
             ExpiraEn = ticket.Properties.ExpiresUtc ?? ahora + opciones.DeslizanteEmpleados,
-            ExpiraAbsolutaEn = ahora + opciones.AbsolutaEmpleados,
+            ExpiraAbsolutaEn = ahora + (ticket.Principal.FindFirstValue(ClaimsAtlas.TipoPrincipal) == ClaimsAtlas.TipoExterno
+                ? opciones.AbsolutaExternos
+                : opciones.AbsolutaEmpleados),
             Ticket = [],
             AgenteResumen = ticket.Properties.GetString(ClavesPropiedades.Agente)
                 ?? (httpContext is null ? null : ResumenAgente.De(httpContext.Request.Headers.UserAgent)),

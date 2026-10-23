@@ -46,6 +46,15 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .HasColumnType("character varying(10)")
                         .HasColumnName("documento");
 
+                    b.Property<string>("HashContenido")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("hash_contenido");
+
+                    b.Property<Guid?>("InvitacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invitacion_id");
+
                     b.Property<IPAddress>("Ip")
                         .HasColumnType("inet")
                         .HasColumnName("ip")
@@ -63,6 +72,9 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 
                     b.HasKey("Id")
                         .HasName("pk_plataforma_aceptacion_terminos");
+
+                    b.HasIndex("InvitacionId")
+                        .HasDatabaseName("ix_plataforma_aceptacion_terminos_invitacion_id");
 
                     b.HasIndex("PersonaId", "Documento", "Version")
                         .IsUnique()
@@ -291,15 +303,37 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
+                    b.Property<DateTimeOffset?>("EnviadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enviada_en");
+
+                    b.Property<int>("Envios")
+                        .HasColumnType("integer")
+                        .HasColumnName("envios");
+
                     b.Property<string>("Estado")
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("estado");
 
+                    b.Property<DateTimeOffset?>("EstadoCambiadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("estado_cambiado_en");
+
+                    b.Property<Guid?>("EstadoCambiadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("estado_cambiado_por");
+
                     b.Property<Guid>("InvitadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("invitado_por");
+
+                    b.Property<string>("Nombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre")
+                        .HasComment("@pii");
 
                     b.Property<Guid>("OrganizacionId")
                         .HasColumnType("uuid")
@@ -330,6 +364,12 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 
                     b.HasKey("Id")
                         .HasName("pk_plataforma_invitacion");
+
+                    b.HasIndex("Correo")
+                        .HasDatabaseName("ix_plataforma_invitacion_correo");
+
+                    b.HasIndex("EstadoCambiadoPor")
+                        .HasDatabaseName("ix_plataforma_invitacion_estado_cambiado_por");
 
                     b.HasIndex("InvitadoPor")
                         .HasDatabaseName("ix_plataforma_invitacion_invitado_por");
@@ -880,6 +920,12 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 
             modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.AceptacionTerminos", b =>
                 {
+                    b.HasOne("Flit.Atlas.Plataforma.Entidades.Invitacion", null)
+                        .WithMany()
+                        .HasForeignKey("InvitacionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_plataforma_aceptacion_terminos_plataforma_invitacion_invita");
+
                     b.HasOne("Flit.Atlas.Plataforma.Entidades.Persona", null)
                         .WithMany()
                         .HasForeignKey("PersonaId")
@@ -919,6 +965,12 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 
             modelBuilder.Entity("Flit.Atlas.Plataforma.Entidades.Invitacion", b =>
                 {
+                    b.HasOne("Flit.Atlas.Plataforma.Entidades.Persona", null)
+                        .WithMany()
+                        .HasForeignKey("EstadoCambiadoPor")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_plataforma_invitacion_plataforma_persona_estado_cambiado_por");
+
                     b.HasOne("Flit.Atlas.Plataforma.Entidades.Persona", null)
                         .WithMany()
                         .HasForeignKey("InvitadoPor")

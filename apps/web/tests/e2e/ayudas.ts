@@ -4,12 +4,14 @@ import { expect, type Page, type TestInfo } from '@playwright/test';
 export const esMovil = (info: TestInfo): boolean => info.project.name !== 'escritorio';
 
 /** Ingreso con el proveedor simulado (solo local y dev), con un correo distinto por prueba y perfil. */
-export async function entrar(page: Page, info: TestInfo, nombre = 'Persona E2E', ruta = '/'): Promise<string> {
+/** Con `administrador`, el ingreso simulado pide el grupo de administración (superadmin) que el AppHost habilita en local. */
+export async function entrar(page: Page, info: TestInfo, nombre = 'Persona E2E', ruta = '/', administrador = false): Promise<string> {
   const correo = `e2e.${info.project.name}.${Date.now()}.${Math.random().toString(36).slice(2, 7)}@ejemplo.com`;
   await page.goto(ruta);
   const formulario = page.getByRole('form', { name: /simulado/ });
   await formulario.getByLabel('Correo').fill(correo);
   await formulario.getByLabel('Nombre').fill(nombre);
+  if (administrador) await formulario.getByLabel(/rol de administración/).check();
   await formulario.getByRole('button', { name: 'Entrar (simulado)' }).click();
   // El shell ya está: la barra de navegación que corresponde al ancho.
   await expect(page.getByRole('navigation', { name: esMovil(info) ? 'Barra inferior' : 'Principal' })).toBeVisible();

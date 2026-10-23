@@ -7,6 +7,7 @@ using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Modulos;
@@ -20,6 +21,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Testcontainers.Redis;
@@ -94,6 +96,13 @@ public sealed class EntornoApi : IAsyncLifetime
         IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
+            // HU 1.5: sin consultar Have I Been Pwned (sin red en CI) y con la URL pública de los enlaces de los correos.
+            b.UseSetting("Identidad:Externos:ConsultarContrasenasFiltradas", "false");
+            b.UseSetting("Atlas:UrlPublica", "https://localhost");
+            // El envío lo reemplaza BuzonDePrueba; la configuración de SMTP solo cumple lo que exigen qa y pdn.
+            b.UseSetting("Plataforma:Correo:Proveedor", "smtp");
+            b.UseSetting("Plataforma:Correo:Remitente", "atlas@ejemplo.com");
+            b.UseSetting("Plataforma:Correo:Smtp:Host", "127.0.0.1");
             foreach (var (clave, valor) in configuracion ?? new Dictionary<string, string>())
             {
                 b.UseSetting(clave, valor);
@@ -101,6 +110,9 @@ public sealed class EntornoApi : IAsyncLifetime
             b.ConfigureTestServices(s =>
             {
                 s.SinRegistroDeEventosDeWindows();
+                // Los correos (invitaciones, recuperación) quedan en un buzón en memoria que las pruebas leen.
+                s.AddSingleton<BuzonDePrueba>();
+                s.Replace(ServiceDescriptor.Singleton<IEnviadorCorreo>(sp => sp.GetRequiredService<BuzonDePrueba>()));
                 // TestServer no trae IP remota: se simula un proxy de loopback para que X-Forwarded-For valga.
                 s.AddSingleton<IStartupFilter, IpDeLoopback>();
                 s.AddSingleton<IStartupFilter, IngresoDePrueba>();
@@ -139,7 +151,12 @@ public sealed class EntornoApi : IAsyncLifetime
         WebApplicationFactory<Program> api, string rol, DateTimeOffset vigenteHasta, string? baseDeDatos = null)
     {
         await using var plataforma = Plataforma(baseDeDatos);
-        var organizacion = new Organizacion { Nombre = $"Organismo Demo {Guid.NewGuid():N}", Tipo = TipoOrganizacion.Cliente };
+        var organizacion = new Organizacion
+        {
+            Nombre = $"Organismo Demo {Guid.NewGuid():N}",
+            Tipo = TipoOrganizacion.Cliente,
+            AdminOrganizacionHabilitado = rol == RolesAtlas.AdminOrganizacion,
+        };
         var persona = new Persona
         {
             Tipo = TipoPersona.Externo,

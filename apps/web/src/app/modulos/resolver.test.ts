@@ -128,10 +128,13 @@ describe('registro', () => {
   it('los módulos del MVP quedan en la barra inferior del móvil: Inicio, Buscar, Soporte y Asistente (más «Más»)', () => {
     const nav = resolverNavegacion(MODULOS_REGISTRADOS, { banderas: {} });
     expect(nav.barraInferior.map((e) => e.etiqueta)).toEqual(['Inicio', 'Buscar', 'Soporte', 'Asistente']);
-    // «Roles y permisos» (HU 1.4) también va en «Más»; «hola» (HU 1.9) está apagado por defecto.
-    expect(nav.mas.map((e) => e.etiqueta)).toEqual(['Catálogo', 'Equipo', 'Contratos', 'Documentación', 'Roles y permisos']);
-    const mvp = MODULOS_REGISTRADOS.filter((m) => !['permisos', 'hola'].includes(m.id));
+    // «Roles y permisos» (HU 1.4), Invitaciones y Organizaciones (HU 1.5) también van en «Más»; «hola» (HU 1.9) está apagado por defecto.
+    expect(nav.mas.map((e) => e.etiqueta)).toEqual(['Catálogo', 'Equipo', 'Contratos', 'Documentación', 'Roles y permisos', 'Invitaciones', 'Organizaciones']);
+    const mvp = MODULOS_REGISTRADOS.filter((m) => !['permisos', 'hola', 'administracion'].includes(m.id));
     expect(mvp.every((m) => m.estado === 'proximamente' && m.banderaPorDefecto)).toBe(true);
+    // Sin el permiso, la administración no aparece.
+    const lector = resolverNavegacion(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.catalogo.ver'] });
+    expect(lector.mas.map((e) => e.etiqueta)).not.toContain('Invitaciones');
   });
 
   it('cada página y cada widget se carga de forma diferida', () => {

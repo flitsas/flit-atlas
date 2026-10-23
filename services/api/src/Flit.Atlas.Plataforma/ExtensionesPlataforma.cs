@@ -1,3 +1,4 @@
+using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Mensajeria;
 using Flit.Atlas.Plataforma.Notificaciones;
@@ -46,6 +47,14 @@ public static class ExtensionesPlataforma
         // el envío no duplica el aviso: el service worker usa el id de la notificación como tag.
         servicios.AddHttpClient<EnviadorPush>();
         servicios.AddScoped<ServicioNotificaciones>();
+
+        // Correo (HU 1.5, ATLAS-ADR-0025): SMTP si el ambiente lo configura; Graph lo registra la identidad (usa la
+        // credencial de Entra). Sin proveedor, no se envía nada.
+        servicios.AddOptions<OpcionesCorreo>().BindConfiguration(OpcionesCorreo.Seccion);
+        servicios.TryAddSingleton<IEnviadorCorreo>(sp =>
+            string.Equals(sp.GetRequiredService<IConfiguration>()[$"{OpcionesCorreo.Seccion}:Proveedor"], OpcionesCorreo.ProveedorSmtp, StringComparison.OrdinalIgnoreCase)
+                ? ActivatorUtilities.CreateInstance<EnviadorSmtp>(sp)
+                : ActivatorUtilities.CreateInstance<EnviadorDesactivado>(sp));
 
         // Roles y permisos (HU 1.4).
         servicios.AgregarPermisos();

@@ -8,7 +8,8 @@ const barraInferior = (page: Page) => page.getByRole('navigation', { name: 'Barr
 const lateral = (page: Page) => page.getByRole('navigation', { name: 'Principal' });
 
 test('entra y ve la barra que corresponde al ancho, con la navegación completa', async ({ page }, info) => {
-  await entrar(page, info, 'Ana Demo');
+  // Desde la HU 1.4 la navegación se filtra por permisos: con todos (superadmin) aparecen todos los módulos.
+  await entrar(page, info, 'Ana Demo', '/', true);
   await expect(page.getByRole('heading', { level: 1, name: 'Hola, Ana' })).toBeVisible();
 
   if (esMovil(info)) {
@@ -65,7 +66,7 @@ test('cambia al tema oscuro y lo conserva al recargar', async ({ page }, info) =
 });
 
 test('la búsqueda global lleva a un módulo (⌘K en escritorio, Buscar en el móvil)', async ({ page }, info) => {
-  await entrar(page, info);
+  await entrar(page, info, 'Persona E2E', '/', true);
   if (esMovil(info)) {
     await barraInferior(page).getByRole('link', { name: 'Buscar' }).click();
   } else {
