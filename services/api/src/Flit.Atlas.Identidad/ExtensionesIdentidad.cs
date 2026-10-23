@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Security.Cryptography.X509Certificates;
 using Flit.Atlas.Identidad.Aprovisionamiento;
 using Flit.Atlas.Identidad.Datos;
@@ -22,6 +23,7 @@ using StackExchange.Redis;
 namespace Flit.Atlas.Identidad;
 
 /// <summary>Qué botones de ingreso ofrece este ambiente.</summary>
+[Description("Proveedores de ingreso que ofrece este ambiente. El simulado solo existe en local y dev.")]
 public sealed record ProveedoresHabilitados(bool Microsoft, bool Simulado);
 
 public static class ExtensionesIdentidad

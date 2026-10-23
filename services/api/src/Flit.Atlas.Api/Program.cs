@@ -24,6 +24,7 @@ builder.EnrichNpgsqlDbContext<PlataformaDbContext>(s => s.DisableRetry = true);
 builder.AddRedisClient(Dependencias.Redis);
 builder.AddRabbitMQClient(Dependencias.RabbitMq);
 builder.AgregarIdentidad(ambiente, cadenaAtlas);
+builder.Services.AgregarContratoOpenApi();
 
 // Detrás del proxy de Vite (local) o del nginx del host y el de atlas-web (qa y pdn) el esquema real llega en
 // X-Forwarded-Proto: la redirect_uri de Entra, el chequeo de Origin y las cookies Secure dependen de él. Por defecto
@@ -49,12 +50,13 @@ app.UseAntifalsificacionApi();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapIdentidad();
+app.MapContratoOpenApi(ambiente);
 
-app.MapGet("/api/v1/version", () => new
-{
-    servicio = "atlas-api",
-    version = typeof(Program).Assembly.GetName().Version?.ToString(),
-});
+app.MapGet("/api/v1/version", () => new VersionApi("atlas-api", typeof(Program).Assembly.GetName().Version?.ToString()))
+    .WithName("ObtenerVersion")
+    .WithTags("Plataforma")
+    .WithSummary("Versión de atlas-api")
+    .WithDescription("Nombre del servicio y versión del ensamblado desplegado. No requiere sesión.");
 
 await app.RunAsync();
 

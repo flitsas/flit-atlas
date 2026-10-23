@@ -33,6 +33,10 @@
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Identity.Web" Version="4.16.0" />
   </ItemGroup>
+  <ItemGroup Label="Contratos">
+    <!-- OpenAPI 3.1 generado desde el código (HU 1.7, ATLAS-ADR-0021). Mismo conjunto 10.0.13 de ASP.NET Core. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+  </ItemGroup>
   <ItemGroup Label="Plataforma">
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />

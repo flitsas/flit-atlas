@@ -1,0 +1,160 @@
+openapi: '3.1.1'
+info:
+  title: Flit Atlas
+  description: 'API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie `__Host-atlas` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado exigen además la cabecera `X-Atlas-Csrf` y el mismo origen. Este archivo se genera desde el código: no se edita a mano.'
+  version: 1.0.0
+servers:
+  - url: https://atlas.flitsas.com
+    description: Producción (pdn)
+  - url: https://qa.atlas.flitsas.com
+    description: Pruebas (qa)
+paths:
+  /api/v1/plataforma/yo:
+    get:
+      tags:
+        - Plataforma
+      summary: Usuario en sesión
+      description: 'Persona, organización, proveedor de ingreso y roles de la sesión actual.'
+      operationId: ObtenerUsuarioActual
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Yo'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+  /api/v1/version:
+    get:
+      tags:
+        - Plataforma
+      summary: Versión de atlas-api
+      description: Nombre del servicio y versión del ensamblado desplegado. No requiere sesión.
+      operationId: ObtenerVersion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionApi'
+  /api/v1/identidad/proveedores:
+    get:
+      tags:
+        - Identidad
+      summary: Proveedores de ingreso habilitados
+      description: Qué botones de ingreso muestra la PWA en este ambiente. No requiere sesión.
+      operationId: ListarProveedoresDeIngreso
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProveedoresHabilitados'
+  /api/v1/identidad/entrar/microsoft:
+    get:
+      tags:
+        - Identidad
+      summary: Iniciar sesión con Microsoft
+      description: 'Navegación completa del navegador (no fetch). Redirige a Entra ID (OIDC con PKCE); al volver por /api/auth/callback/azure-ad crea la sesión y lleva a «volver», que solo puede ser una ruta local de la PWA.'
+      operationId: EntrarConMicrosoft
+      parameters:
+        - name: volver
+          in: query
+          description: Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Found
+  /api/v1/identidad/salir:
+    post:
+      tags:
+        - Identidad
+      summary: Cerrar sesión
+      description: 'Revoca la sesión en el servidor, borra la cookie y envía Clear-Site-Data para que el navegador limpie caché, almacenamiento y cookies del origen. Responde 204 aunque no haya sesión.'
+      operationId: CerrarSesion
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - csrfAtlas: [ ]
+components:
+  schemas:
+    ProveedoresHabilitados:
+      required:
+        - microsoft
+        - simulado
+      type: object
+      properties:
+        microsoft:
+          type: boolean
+        simulado:
+          type: boolean
+      description: Proveedores de ingreso que ofrece este ambiente. El simulado solo existe en local y dev.
+    VersionApi:
+      required:
+        - servicio
+        - version
+      type: object
+      properties:
+        servicio:
+          type: string
+        version:
+          type:
+            - 'null'
+            - string
+      description: Servicio y versión del ensamblado desplegado.
+    Yo:
+      required:
+        - sub
+        - personaId
+        - nombre
+        - tipoPrincipal
+        - organizacionId
+        - proveedor
+        - roles
+      type: object
+      properties:
+        sub:
+          type: string
+          format: uuid
+        personaId:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        tipoPrincipal:
+          type: string
+        organizacionId:
+          type: string
+          format: uuid
+        proveedor:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+      description: 'Usuario de la sesión actual: persona, organización, proveedor con el que entró y roles de Atlas.'
+  securitySchemes:
+    sesionAtlas:
+      type: apiKey
+      description: 'Cookie de sesión del BFF. La emite el ingreso y solo lleva el id cifrado de la sesión, que vive en el servidor.'
+      name: __Host-atlas
+      in: cookie
+    csrfAtlas:
+      type: apiKey
+      description: 'Antifalsificación: obligatoria (cualquier valor) en POST, PUT, PATCH y DELETE bajo /api/. Sin ella, o con otro Origin, la respuesta es 403.'
+      name: X-Atlas-Csrf
+      in: header
+tags:
+  - name: Identidad
+    description: 'Ingreso de empleados con Microsoft, proveedores habilitados y cierre de sesión (ATLAS-ADR-0004).'
+  - name: Plataforma
+    description: Datos del usuario en sesión y de la propia API.

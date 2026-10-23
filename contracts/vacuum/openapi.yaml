@@ -1,0 +1,50 @@
+# Ruleset de vacuum para contracts/openapi/ (HU 1.7, ATLAS-ADR-0010 y ATLAS-ADR-0021).
+# Compatible con Spectral. El CI falla con cualquier error; las advertencias se ven en el log y no bloquean.
+#
+# Base: el «recommended» de vacuum para OpenAPI y todas las reglas OWASP, con la severidad ajustada a lo que
+# ya aplica a una API BFF con cookie. Las de límites de tasa (429 y cabeceras X-RateLimit) quedan como advertencia hasta
+# que llegue la limitación de tasa (HU 1.3b); las de errores con cuerpo (500 y 400/422) hasta que haya problem+json.
+extends:
+  - [spectral:oas, recommended]
+  - [vacuum:owasp, all]
+
+rules:
+  # Mínimos de ATLAS-ADR-0010: operationId únicos y presentes, operaciones etiquetadas y descritas.
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-operationId-valid-in-url: error
+  operation-tags: error
+  operation-tag-defined: error
+  operation-description: error
+  info-description: error
+  # Autenticación declarada en toda operación que cambia estado (cookie de sesión y/o X-Atlas-Csrf), solo HTTPS, sin
+  # esquemas inseguros y nada sensible en la URL: quedan como error (su severidad de OWASP).
+  owasp-protection-global-unsafe: error
+  owasp-protection-global-unsafe-strict: error
+  owasp-no-credentials-in-url: error
+  owasp-no-api-keys-in-url: error
+  owasp-security-hosts-https-oas3: error
+  owasp-auth-insecure-schemes: error
+  owasp-no-http-basic: error
+  # Las operaciones de lectura sin sesión (versión, proveedores de ingreso) son públicas a propósito.
+  owasp-protection-global-safe: off
+  # Pendientes de la limitación de tasa (HU 1.3b) y de los errores problem+json.
+  owasp-rate-limit: warn
+  owasp-rate-limit-retry-after: warn
+  owasp-define-error-responses-429: warn
+  owasp-define-error-responses-500: warn
+  owasp-define-error-validation: warn
+  # Límites de tamaño en los esquemas: se ajustan por módulo; la entrada se valida en el servidor.
+  owasp-string-limit: info
+  owasp-string-restricted: info
+  owasp-integer-limit: info
+  owasp-integer-format: info
+  owasp-array-limit: info
+  owasp-no-additionalProperties: info
+  owasp-constrained-additionalProperties: info
+  # El 401 lo agrega ContratoOpenApi a toda operación con sesión; esta regla también lo pide a las públicas.
+  owasp-define-error-responses-401: info
+  # Los esquemas aún no traen ejemplos; se agregan con los módulos funcionales (F2 en adelante).
+  oas3-missing-example: info
+  # «OK», «Found» y «No Content» los pone el generador en cada respuesta.
+  description-duplication: off
