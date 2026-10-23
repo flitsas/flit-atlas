@@ -1,5 +1,6 @@
 import { Mail, Phone, RefreshCw } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
+import { Link } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
 import { tienePermiso } from '../../../app/modulos/resolver';
@@ -56,8 +57,10 @@ export default function Equipo() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Equipo</h1>
           <p className="text-sm text-atlas-texto-suave">
-            Las personas de FLIT con su cargo, área y foto de Microsoft 365, actualizadas cada día. Los responsables de cada
-            producto y módulo llegan pronto.
+            Las personas de FLIT con su cargo, área y foto de Microsoft 365, actualizadas cada día.{' '}
+            <Link to="/equipo/responsables" className="font-medium text-atlas-tinta underline-offset-2 hover:underline">
+              Ver los responsables de cada producto y módulo
+            </Link>
           </p>
         </div>
       </header>

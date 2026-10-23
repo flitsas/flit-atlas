@@ -17,4 +17,8 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Documento de responsables ficticio (personas «Persona Demo»), el mismo de las pruebas del módulo. -->
+    <None Include="..\Flit.Atlas.Modulos.Equipo.Tests\Datos\responsables-ficticio.md" Link="Datos\responsables-ficticio.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -31,11 +31,16 @@ public static class PermisosPlataforma
 /// (ATLAS-ADR-0023). Los permisos base viven aquí para que la matriz y los roles estén completos desde F1 y la PWA filtre
 /// la navegación desde ya; cuando llega cada módulo, su manifiesto se <b>muda</b> de aquí a su proyecto con los mismos
 /// códigos (son contrato) y las mismas concesiones, más los permisos nuevos: dos manifiestos con el mismo id no pueden
-/// convivir. El catálogo ya se mudó (<c>PermisosCatalogo</c>, ATLAS-ADR-0028). Identidad agrega el suyo en
+/// convivir. Ya se mudaron el catálogo (<c>PermisosCatalogo</c>, ATLAS-ADR-0028), el soporte (ATLAS-ADR-0029) y el
+/// equipo (<c>PermisosEquipo</c>, ATLAS-ADR-0031). Identidad agrega el suyo en
 /// <c>Flit.Atlas.Identidad</c>.
 /// </summary>
 public static class ManifiestosNucleo
 {
+    /// <summary>
+    /// Lista base del §7.4 para Equipo. Desde la HU 2.3 la publica el módulo <c>Flit.Atlas.Modulos.Equipo</c>: por eso ya
+    /// no va en <see cref="Todos"/>. Los códigos siguen siendo contrato.
+    /// </summary>
     public static ManifiestoPermisos Equipo { get; } = new("equipo", "Equipo y responsables",
     [
         new("atlas.equipo.ver", "Ver personas, responsables y el mapa de carga.", [.. Empleados]),
@@ -96,9 +101,9 @@ public static class ManifiestosNucleo
     ]);
 
     /// <summary>
-    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="SoporteSabados"/>:
-    /// lo registra su módulo.
+    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/> ni
+    /// <see cref="SoporteSabados"/>: los registran sus módulos.
     /// </summary>
     public static IReadOnlyList<ManifiestoPermisos> Todos { get; } =
-        [PermisosPlataforma.Manifiesto, Equipo, Contratos, Documentacion, Diagramas, Asistente, GobiernoDeIa];
+        [PermisosPlataforma.Manifiesto, Contratos, Documentacion, Diagramas, Asistente, GobiernoDeIa];
 }

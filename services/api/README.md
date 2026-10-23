@@ -173,6 +173,22 @@ curl -s https://qa.atlas.flitsas.com/api/v1/identidad/token/yo -H "Authorization
 | `Identidad__Personas__TamanoMaximoFoto` | `102400` | Bytes |
 | `Identidad__Personas__FraccionMaximaDeshabilitadas`, `Identidad__Personas__MinimoFreno` | `0.5`, `3` | Freno de seguridad |
 
+## Responsables, CODEOWNERS y «¿A quién llamo?» (HU 2.3 a 2.5, ATLAS-ADR-0031)
+
+- Módulo `Flit.Atlas.Modulos.Equipo` (`/api/v1/equipo`, tablas `equipo_*`): reparto principal/secundario por aplicativo del catálogo (por id, leído con `ILectorAplicativos`), importado del documento de responsables con vista previa y huella; historial versionado (cada cambio, una versión con autor y nota; restaurar crea otra igual); traspaso con checklist; revisión trimestral con recordatorio en el centro de notificaciones; mapa de carga; CODEOWNERS sugerido y ficha en Markdown; «¿A quién llamo?» con el soporte de turno (`ISoporteDeTurno`, del módulo de soporte).
+- Rol implícito: el responsable vigente recibe `atlas.responsable` con alcance `aplicativo:<id>` (`IProveedorRolesImplicitos`); el catálogo ya evalúa `atlas.catalogo.editar` sobre el aplicativo y sus ancestros.
+- Permisos: `atlas.equipo.ver` (leer), `atlas.equipo.gestionar` (importar, cambiar, restaurar, traspasos, revisiones, usuarios de GitHub y comparar con GitHub), `atlas.equipo.ver_contacto` (teléfonos).
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `Plataforma__GitHub__Token` | — | Token de solo lectura (contenidos) para leer los CODEOWNERS reales. Secreto: SealedSecret |
+| `Plataforma__GitHub__AppId`, `Plataforma__GitHub__InstalacionId`, `Plataforma__GitHub__LlavePrivada` | — | En lugar del token, la GitHub App (llave privada PEM en SealedSecret; permiso «Contents: read») |
+| `Plataforma__GitHub__UrlApi` | `https://api.github.com/` | Solo para GitHub Enterprise |
+| `Equipo__Revision__DiasAnticipacion` | `7` | Días antes de la revisión trimestral en que sale el recordatorio |
+| `Equipo__Revision__Habilitada` | `true` | `false` apaga el trabajo del recordatorio |
+
+Sin GitHub configurado, la pantalla de CODEOWNERS muestra el bloque sugerido y dice que no puede comparar.
+
 ## Contratos (HU 1.7)
 
 - `contracts/openapi/atlas.v1.yaml` se genera desde los endpoints con `Microsoft.AspNetCore.OpenApi` (OpenAPI 3.1, `ContratoOpenApi.cs`) y `ContratoOpenApiTests` falla si no coincide con el código. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.ContratoOpenApiTests` (detalles en [`contracts/openapi/README.md`](../../contracts/openapi/README.md)).

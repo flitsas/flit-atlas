@@ -60,6 +60,8 @@ public sealed partial class ModuloCatalogo : IModuloAtlas
     public void RegistrarServicios(IServiceCollection servicios, IConfiguration configuracion)
     {
         servicios.AgregarProveedorBusqueda<BusquedaCatalogo>();
+        // Lectura para los demás módulos (responsables, ATLAS-ADR-0031).
+        servicios.AddScoped<ILectorAplicativos, LectorAplicativos>();
     }
 
     public void MapearEndpoints(RouteGroupBuilder grupo) => EndpointsCatalogo.Mapear(grupo);

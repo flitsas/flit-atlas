@@ -36,7 +36,7 @@ dotnet new classlib -o services/api/src/Flit.Atlas.Modulos.<X> --framework net10
 rm services/api/src/Flit.Atlas.Modulos.<X>/Class1.cs
 ```
 
-Deja el `.csproj` como el de `Flit.Atlas.Modulos.Hola.csproj`: `FrameworkReference` a `Microsoft.AspNetCore.App`, `Microsoft.EntityFrameworkCore.Design` (solo para las migraciones) y **una sola** referencia de proyecto, a `Flit.Atlas.Plataforma`. Un módulo nunca referencia a otro módulo ni a `Flit.Atlas.Identidad`: `ArquitecturaModulosTests` falla si lo haces. Para hablar con otro módulo, usa eventos (ATLAS-ADR-0018) o una interfaz de lectura publicada en Plataforma.
+Deja el `.csproj` como el de `Flit.Atlas.Modulos.Hola.csproj`: `FrameworkReference` a `Microsoft.AspNetCore.App`, `Microsoft.EntityFrameworkCore.Design` (solo para las migraciones) y **una sola** referencia de proyecto, a `Flit.Atlas.Plataforma`. Un módulo nunca referencia a otro módulo ni a `Flit.Atlas.Identidad`: `ArquitecturaModulosTests` falla si lo haces. Para hablar con otro módulo, usa eventos (ATLAS-ADR-0018) o una interfaz de lectura publicada en Plataforma: `ILectorAplicativos` (la implementa el catálogo) e `ISoporteDeTurno` (la implementa el soporte) en `Plataforma/Modulos/LecturasCompartidas.cs`, con una implementación vacía por defecto (ATLAS-ADR-0031).
 
 Las versiones de los paquetes viven en `Directory.Packages.props`; un paquete nuevo va ahí con versión exacta y al menos dos semanas de publicada.
 
