@@ -60,6 +60,17 @@ dotnet user-secrets set "Parameters:entra-secreto" "<secreto>" --project aspire/
 
 El registro de Entra ID necesita la redirect URI `https://localhost:4032/api/auth/callback/azure-ad` (plataforma **Web**). Sin `Entra:TenantId`, solo aparece el proveedor simulado.
 
+## Web Push
+
+Sin configurar nada, atlas-api genera llaves VAPID efímeras en cada arranque (la PWA renueva sola la suscripción del dispositivo). Para llaves estables en tu máquina, genera un par con `node scripts/generar-vapid.mjs` y guárdalo en los user secrets del AppHost:
+
+```bash
+dotnet user-secrets set "Vapid:ClavePublica" "<clave pública>" --project aspire/Flit.Atlas.AppHost
+dotnet user-secrets set "Parameters:vapid-clave-privada" "<clave privada>" --project aspire/Flit.Atlas.AppHost
+```
+
+El service worker (y con él el push) solo existe en el build de producción; ver `apps/web/README.md`.
+
 ## Pruebas de extremo a extremo
 
 Con el AppHost corriendo:
@@ -70,7 +81,7 @@ pnpm exec playwright install chromium webkit   # una vez
 pnpm e2e
 ```
 
-Corren en escritorio (Chromium), Pixel 7 (Chromium) e iPhone 14 (WebKit), y verifican que la sesión vive solo en la cookie `HttpOnly`, sin nada en `localStorage` ni `sessionStorage`.
+Corren en escritorio (Chromium), Pixel 7 (Chromium) e iPhone 14 (WebKit), y verifican el shell (HU 1.6), la accesibilidad con axe y que la sesión vive solo en la cookie `HttpOnly`, sin tokens en `localStorage` ni `sessionStorage`.
 
 ## Notas
 

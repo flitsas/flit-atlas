@@ -103,6 +103,16 @@ if (!string.IsNullOrWhiteSpace(entra["TenantId"]))
     }
 }
 
+// Web Push (HU 1.6): llaves VAPID en los user secrets del AppHost (node scripts/generar-vapid.mjs). Sin ellas, atlas-api
+// genera unas efímeras en cada arranque y la PWA renueva sola la suscripción del dispositivo.
+var vapid = builder.Configuration.GetSection("Vapid");
+if (!string.IsNullOrWhiteSpace(vapid["ClavePublica"]))
+{
+    var vapidPrivada = builder.AddParameter("vapid-clave-privada", secret: true);
+    api.WithEnvironment("Plataforma__Push__ClavePublica", vapid["ClavePublica"])
+        .WithEnvironment("Plataforma__Push__ClavePrivada", vapidPrivada);
+}
+
 // ASPIRECERTIFICATES001: las APIs de certificados de Aspire son experimentales; solo afectan el entorno local.
 #pragma warning disable ASPIRECERTIFICATES001
 builder.AddViteApp("web", "../../apps/web")

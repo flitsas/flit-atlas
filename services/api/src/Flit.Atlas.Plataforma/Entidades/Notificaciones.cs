@@ -56,4 +56,9 @@ public sealed class SuscripcionPush : Entidad
     public string? Dispositivo { get; set; }
 
     public DateTimeOffset? UltimoUsoEn { get; set; }
+
+    /// <summary>Envíos fallidos seguidos (5xx o red); al llegar al tope la suscripción se borra (HU 1.6).</summary>
+    public int FallosConsecutivos { get; set; }
+
+    public DateTimeOffset? UltimoFalloEn { get; set; }
 }

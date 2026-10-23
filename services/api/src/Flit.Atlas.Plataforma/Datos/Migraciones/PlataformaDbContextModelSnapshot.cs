@@ -20,7 +20,7 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("atlas")
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -457,6 +457,9 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                     b.HasKey("Id")
                         .HasName("pk_plataforma_notificacion");
 
+                    b.HasIndex("PersonaId", "CreadoEn")
+                        .HasDatabaseName("ix_plataforma_notificacion_persona_id_creado_en");
+
                     b.HasIndex("PersonaId", "LeidaEn")
                         .HasDatabaseName("ix_plataforma_notificacion_persona_id_leida_en");
 
@@ -700,6 +703,10 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                         .HasColumnName("endpoint")
                         .HasComment("@pii");
 
+                    b.Property<int>("FallosConsecutivos")
+                        .HasColumnType("integer")
+                        .HasColumnName("fallos_consecutivos");
+
                     b.Property<string>("P256dh")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -709,6 +716,10 @@ namespace Flit.Atlas.Plataforma.Datos.Migraciones
                     b.Property<Guid>("PersonaId")
                         .HasColumnType("uuid")
                         .HasColumnName("persona_id");
+
+                    b.Property<DateTimeOffset?>("UltimoFalloEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultimo_fallo_en");
 
                     b.Property<DateTimeOffset?>("UltimoUsoEn")
                         .HasColumnType("timestamp with time zone")

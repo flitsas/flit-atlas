@@ -12,6 +12,8 @@ export interface Yo {
   organizacionId: string;
   proveedor: string;
   roles: string[];
+  /** Llega con la HU 1.4. Mientras no venga, la navegación solo se filtra por bandera. */
+  permisos?: string[];
 }
 
 export interface Proveedores {
@@ -38,6 +40,14 @@ async function pedir(ruta: string, opciones: RequestInit = {}): Promise<Response
   return respuesta;
 }
 
+async function enviarJson(ruta: string, metodo: 'POST' | 'PUT', cuerpo?: unknown): Promise<Response> {
+  return pedir(ruta, {
+    method: metodo,
+    headers: cuerpo === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+  });
+}
+
 /** Persona con sesión, o `null` si no hay sesión (401). */
 export async function obtenerYo(): Promise<Yo | null> {
   try {
@@ -53,11 +63,7 @@ export async function obtenerProveedores(): Promise<Proveedores> {
 }
 
 export async function entrarSimulado(correo: string, nombre: string): Promise<void> {
-  await pedir('/api/v1/identidad/simulado/entrar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ correo, nombre }),
-  });
+  await enviarJson('/api/v1/identidad/simulado/entrar', 'POST', { correo, nombre });
 }
 
 export async function salir(): Promise<void> {
@@ -67,4 +73,97 @@ export async function salir(): Promise<void> {
 /** Navegación completa hacia Entra ID; vuelve a `volver` (solo rutas locales, lo valida el servidor). */
 export function urlEntrarMicrosoft(volver = '/'): string {
   return `/api/v1/identidad/entrar/microsoft?volver=${encodeURIComponent(volver)}`;
+}
+
+// --- Banderas de módulo (ATLAS-ADR-0016) ---
+
+/** `modulo.<id>` → activo para la organización de la persona. Las banderas que no vengan usan su valor por defecto. */
+export async function obtenerBanderas(): Promise<Record<string, boolean>> {
+  return (await (await pedir('/api/v1/plataforma/banderas')).json()) as Record<string, boolean>;
+}
+
+// --- Centro de notificaciones (§8.9) ---
+
+export interface Notificacion {
+  id: string;
+  tipo: string;
+  titulo: string;
+  cuerpo: string;
+  enlace: string | null;
+  creadaEn: string;
+  leidaEn: string | null;
+}
+
+export interface BandejaNotificaciones {
+  noLeidas: number;
+  elementos: Notificacion[];
+}
+
+export type Canal = 'app' | 'push' | 'correo' | 'teams';
+
+export interface PreferenciaCanal {
+  canal: Canal;
+  activa: boolean;
+  /** `false` mientras el canal no exista en este ambiente (correo y Teams llegan después). */
+  disponible: boolean;
+  /** El canal `app` siempre está activo: es el centro de notificaciones. */
+  editable: boolean;
+}
+
+export interface PreferenciaTipo {
+  tipo: string;
+  nombre: string;
+  descripcion: string;
+  canales: PreferenciaCanal[];
+}
+
+export async function obtenerNotificaciones(limite = 30): Promise<BandejaNotificaciones> {
+  return (await (await pedir(`/api/v1/plataforma/notificaciones?limite=${limite}`)).json()) as BandejaNotificaciones;
+}
+
+export async function marcarLeida(id: string): Promise<void> {
+  await enviarJson(`/api/v1/plataforma/notificaciones/${encodeURIComponent(id)}/leida`, 'POST');
+}
+
+export async function marcarTodasLeidas(): Promise<void> {
+  await enviarJson('/api/v1/plataforma/notificaciones/leidas', 'POST');
+}
+
+export async function obtenerPreferencias(): Promise<PreferenciaTipo[]> {
+  return (await (await pedir('/api/v1/plataforma/notificaciones/preferencias')).json()) as PreferenciaTipo[];
+}
+
+export async function guardarPreferencia(tipo: string, canal: Canal, activa: boolean): Promise<void> {
+  await enviarJson('/api/v1/plataforma/notificaciones/preferencias', 'PUT', [{ tipo, canal, activa }]);
+}
+
+// --- Web Push (VAPID, §11) ---
+
+export interface ClavePush {
+  habilitado: boolean;
+  clavePublica: string | null;
+}
+
+export interface SuscripcionDispositivo {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  dispositivo: string;
+}
+
+export async function obtenerClavePush(): Promise<ClavePush> {
+  return (await (await pedir('/api/v1/plataforma/push/clave')).json()) as ClavePush;
+}
+
+export async function registrarSuscripcion(suscripcion: SuscripcionDispositivo): Promise<void> {
+  await enviarJson('/api/v1/plataforma/push/suscripciones', 'POST', suscripcion);
+}
+
+export async function darDeBajaSuscripcion(endpoint: string): Promise<void> {
+  await enviarJson('/api/v1/plataforma/push/suscripciones/baja', 'POST', { endpoint });
+}
+
+/** Crea una notificación de prueba y la envía por push a los dispositivos de la persona. */
+export async function enviarPushDePrueba(): Promise<{ dispositivos: number }> {
+  return (await (await enviarJson('/api/v1/plataforma/push/prueba', 'POST')).json()) as { dispositivos: number };
 }
