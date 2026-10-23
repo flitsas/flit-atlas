@@ -15,7 +15,7 @@ public sealed record AlcanceAsignacion(string Tipo, string? Id = null)
 }
 
 /// <summary>Un rol vigente de la persona, con su organización, su alcance y de dónde viene.</summary>
-/// <param name="Origen"><c>manual</c>, <c>grupo_entra</c>, <c>invitacion</c>, <c>base</c> (atlas.lector de todo empleado) o <c>implicito</c>.</param>
+/// <param name="Origen"><c>manual</c>, <c>grupo_entra</c>, <c>invitacion</c>, <c>emergencia</c>, <c>base</c> (atlas.lector de todo empleado) o <c>implicito</c>.</param>
 public sealed record ConcesionRol(string Rol, Guid? OrganizacionId, AlcanceAsignacion Alcance, DateTimeOffset? VigenteHasta, string Origen);
 
 /// <summary>

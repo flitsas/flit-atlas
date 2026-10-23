@@ -144,6 +144,19 @@ curl -s https://qa.atlas.flitsas.com/api/v1/identidad/token/yo -H "Authorization
 | `Identidad__Passkeys__Dominio` | Dominio de las passkeys si no es el host de la petición |
 | `Identidad__Simulado__GrupoAdministracion` | Solo local y dev: grupo simulado que da `atlas.superadmin` (casilla «Con rol de administración» del ingreso simulado) |
 
+## Cuenta de administrador de emergencia (ATLAS-ADR-0027)
+
+- Una sola cuenta local por ambiente, de la organización interna, con `atlas.superadmin` sin vencimiento (`OrigenAsignacion.Emergencia`): para arrancar un ambiente (crear los primeros mapeos de grupos de Entra) y para entrar si Entra no responde. No tiene contraseña por defecto.
+- **Comando** (dentro de la imagen de atlas-api): `dotnet Flit.Atlas.Api.dll emergencia activar`. Crea la cuenta si falta, le quita los factores, cierra sus sesiones e imprime en su salida (nunca en el log) un enlace `/emergencia#…` de un solo uso que vence en 1 h. Volver a correrlo invalida el enlace anterior. En local: `dotnet run --project services/api/src/Flit.Atlas.Api -- emergencia activar` con las mismas variables que usa el AppHost.
+- **Activación** (públicos): `emergencia/consultar`, `emergencia/passkey/opciones`, `emergencia/totp/clave` y `emergencia/activar`, como la recuperación de una cuenta externa. **Ingreso** por el de cuentas locales, con MFA. `/yo` devuelve `emergencia = true` y `proveedor = emergencia`.
+- No se retira su rol ni se suspende desde Atlas (409 `cuenta_de_emergencia`). Cada creación, enlace, activación e ingreso es un evento de alta severidad (`identidad.emergencia.*`).
+
+| Variable | Uso |
+|---|---|
+| `Identidad__Emergencia__Correo` | Correo ficticio de la cuenta, solo al crearla (`admin.emergencia@atlas.local`) |
+| `Identidad__Emergencia__Nombre` | Nombre visible («Administrador de emergencia») |
+| `Identidad__Emergencia__VigenciaEnlace` | Vigencia del enlace de activación (`01:00:00`) |
+
 ## Contratos (HU 1.7)
 
 - `contracts/openapi/atlas.v1.yaml` se genera desde los endpoints con `Microsoft.AspNetCore.OpenApi` (OpenAPI 3.1, `ContratoOpenApi.cs`) y `ContratoOpenApiTests` falla si no coincide con el código. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.ContratoOpenApiTests` (detalles en [`contracts/openapi/README.md`](../../contracts/openapi/README.md)).

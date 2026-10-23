@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { ErrorApi, urlEntrarMicrosoft } from '../../app/api';
+import { useSesionOpcional } from '../../app/sesion';
 import { Hoja } from '../../app/ui/Hoja';
 import { Boton, cn } from '../../app/ui/Tarjeta';
 
@@ -22,7 +23,10 @@ export function avisoDeError(error: unknown, porDefecto: string): Aviso {
 }
 
 export function MostrarAviso({ aviso }: { aviso: Aviso }) {
+  const sesion = useSesionOpcional();
   if (!aviso) return null;
+  // Las cuentas locales (la de emergencia, ATLAS-ADR-0027) no pasan por Microsoft: se confirma volviendo a entrar.
+  const local = sesion?.yo.proveedor === 'emergencia' || sesion?.yo.proveedor === 'local';
   return (
     <div
       role={aviso.tono === 'error' ? 'alert' : 'status'}
@@ -34,10 +38,15 @@ export function MostrarAviso({ aviso }: { aviso: Aviso }) {
       )}
     >
       {aviso.texto}{' '}
-      {aviso.reautenticar && (
+      {aviso.reautenticar && !local && (
         <a className="font-semibold underline" href={`${urlEntrarMicrosoft(window.location.pathname)}&reautenticar=true`}>
           Confirmar con Microsoft
         </a>
+      )}
+      {aviso.reautenticar && local && (
+        <button type="button" className="font-semibold underline" onClick={() => void sesion?.cerrarSesion()}>
+          Salir y volver a entrar
+        </button>
       )}
     </div>
   );

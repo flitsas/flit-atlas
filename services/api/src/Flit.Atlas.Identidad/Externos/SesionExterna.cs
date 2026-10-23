@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Datos;
+using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
@@ -46,7 +47,8 @@ public sealed class SesionExterna(PlataformaDbContext plataforma, RegistroSeguri
         var ahora = reloj.GetUtcNow();
         var persona = await plataforma.Personas.AsNoTracking().Where(p => p.Id == personaId)
             .Select(p => new { p.Tipo, p.Estado, p.OrganizacionId }).FirstOrDefaultAsync(ct);
-        if (persona is null || persona.Tipo != TipoPersona.Externo)
+        // Ningún empleado entra por aquí (usan Entra ID), salvo la cuenta de emergencia (ATLAS-ADR-0027).
+        if (persona is null || (persona.Tipo != TipoPersona.Externo && !await EsEmergenciaAsync(personaId, ct)))
         {
             return PersonaNoExterna;
         }
@@ -65,21 +67,30 @@ public sealed class SesionExterna(PlataformaDbContext plataforma, RegistroSeguri
         return vigente ? null : AccesoVencido;
     }
 
-    /// <summary>Crea la sesión del BFF (fila nueva en <c>identidad_sesion</c> y cookie) y registra el ingreso.</summary>
+    /// <summary>¿Es la cuenta de administrador de emergencia? Entra por aquí, con MFA, pero su sesión es interna.</summary>
+    public Task<bool> EsEmergenciaAsync(Guid personaId, CancellationToken ct) => CuentaEmergencia.EsDeEmergenciaAsync(plataforma, personaId, ct);
+
+    /// <summary>
+    /// Crea la sesión del BFF (fila nueva en <c>identidad_sesion</c> y cookie) y registra el ingreso. La de la cuenta de
+    /// emergencia es de empleado (organización interna, alcance de datos interno) con <c>proveedor = emergencia</c>, dura
+    /// lo mismo que la de un externo y su ingreso es un evento de alta severidad.
+    /// </summary>
     public async Task IniciarAsync(HttpContext http, UsuarioAtlas usuario, string metodo, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(usuario);
         var persona = await plataforma.Personas.AsNoTracking().SingleAsync(p => p.Id == usuario.PersonaId, ct);
         var ahora = reloj.GetUtcNow();
+        var emergencia = persona.Tipo != TipoPersona.Externo && await EsEmergenciaAsync(persona.Id, ct);
+        var proveedor = emergencia ? CuentaEmergencia.Proveedor : MetodosExternos.ProveedorLocal;
 
         var identidad = new ClaimsIdentity(ClaimsAtlas.EsquemaCookie, ClaimsAtlas.Nombre, ClaimsAtlas.Rol);
         identidad.AddClaim(new Claim(ClaimsAtlas.Sub, usuario.Id.ToString()));
         identidad.AddClaim(new Claim(ClaimsAtlas.PersonaId, persona.Id.ToString()));
-        identidad.AddClaim(new Claim(ClaimsAtlas.TipoPrincipal, ClaimsAtlas.TipoExterno));
+        identidad.AddClaim(new Claim(ClaimsAtlas.TipoPrincipal, emergencia ? ClaimsAtlas.TipoEmpleado : ClaimsAtlas.TipoExterno));
         identidad.AddClaim(new Claim(ClaimsAtlas.OrganizacionId, persona.OrganizacionId.ToString()));
         identidad.AddClaim(new Claim(ClaimsAtlas.Nombre, persona.Nombre));
-        identidad.AddClaim(new Claim(ClaimsAtlas.Proveedor, MetodosExternos.ProveedorLocal));
+        identidad.AddClaim(new Claim(ClaimsAtlas.Proveedor, proveedor));
         identidad.AddClaim(new Claim(ClaimsAtlas.AuthTime, ahora.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
         identidad.AddClaim(new Claim(ClaimsAtlas.SelloSeguridad, usuario.SecurityStamp ?? string.Empty));
         identidad.AddClaims(MetodosExternos.Amr(metodo).Select(m => new Claim(ClaimsAtlas.Amr, m)));
@@ -90,12 +101,14 @@ public sealed class SesionExterna(PlataformaDbContext plataforma, RegistroSeguri
         propiedades.SetString(AlmacenSesiones.ClavesPropiedades.Agente, ResumenAgente.De(http.Request.Headers.UserAgent));
         await http.SignInAsync(ClaimsAtlas.EsquemaCookie, new ClaimsPrincipal(identidad), propiedades);
 
-        await registro.RegistrarAsync(TiposEventoSeguridad.InicioSesion, new DatosEventoSeguridad
+        var datos = new DatosEventoSeguridad { UsuarioId = usuario.Id, PersonaId = persona.Id, OrganizacionId = persona.OrganizacionId };
+        await registro.RegistrarAsync(TiposEventoSeguridad.InicioSesion, datos with { Detalle = new { proveedor, metodo } }, ct);
+        if (emergencia)
         {
-            UsuarioId = usuario.Id,
-            PersonaId = persona.Id,
-            OrganizacionId = persona.OrganizacionId,
-            Detalle = new { proveedor = MetodosExternos.ProveedorLocal, metodo },
-        }, ct);
+            await registro.RegistrarAsync(TiposEventoSeguridad.EmergenciaIngreso, datos with
+            {
+                Detalle = new { severidad = CuentaEmergencia.Severidad, metodo },
+            }, ct);
+        }
     }
 }

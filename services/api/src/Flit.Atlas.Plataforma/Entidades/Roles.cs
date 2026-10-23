@@ -58,6 +58,12 @@ public enum OrigenAsignacion
 
     /// <summary>La crea la aceptación de una invitación (HU 1.5).</summary>
     Invitacion,
+
+    /// <summary>
+    /// <c>atlas.superadmin</c> de la cuenta de administrador de emergencia (ATLAS-ADR-0027): sin vencimiento, no la toca la
+    /// sincronización de grupos de Entra y no se retira desde la administración.
+    /// </summary>
+    Emergencia,
 }
 
 /// <summary>

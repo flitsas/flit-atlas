@@ -3,6 +3,7 @@ using System.Security.Cryptography.X509Certificates;
 using Flit.Atlas.Identidad.Aprovisionamiento;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
+using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Externos;
 using Flit.Atlas.Identidad.Seguridad;
@@ -89,6 +90,8 @@ public static class ExtensionesIdentidad
             .AddUserStore<AlmacenUsuarios>()
             .AddTokenProvider<DataProtectorTokenProvider<UsuarioAtlas>>(TokenOptions.DefaultProvider)
             .AddTokenProvider<AuthenticatorTokenProvider<UsuarioAtlas>>(TokenOptions.DefaultAuthenticatorProvider)
+            // ATLAS-ADR-0027: enlace de activación de la cuenta de emergencia, con su propio protector y vigencia.
+            .AddTokenProvider<ProveedorTokenEmergencia>(CuentaEmergencia.ProveedorToken)
             .AddPasswordValidator<ValidadorContrasenaFiltrada>();
         AgregarCuentasExternas(builder, ambiente, entraHabilitado);
 
@@ -204,6 +207,12 @@ public static class ExtensionesIdentidad
         servicios.AddScoped<SesionExterna>();
         servicios.AddScoped<CuentasExternas>();
         servicios.AddScoped<ServicioInvitaciones>();
+
+        // Cuenta de administrador de emergencia (ATLAS-ADR-0027): reutiliza los factores y la sesión de las cuentas locales.
+        servicios.AddOptions<OpcionesEmergencia>().BindConfiguration(OpcionesEmergencia.Seccion);
+        servicios.AddOptions<OpcionesTokenEmergencia>()
+            .Configure<IOptions<OpcionesEmergencia>>((o, emergencia) => o.TokenLifespan = emergencia.Value.VigenciaEnlace);
+        servicios.AddScoped<CuentaEmergencia>();
     }
 
     /// <summary>

@@ -505,7 +505,7 @@ paths:
       tags:
         - Identidad
       summary: Suspender a una persona
-      description: 'Administración: requiere atlas.identidad.administrar. Marca la persona como suspendida, invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige reautenticación.'
+      description: 'Administración: requiere atlas.identidad.administrar. Marca la persona como suspendida, invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte o si es la cuenta de administrador de emergencia (se rota con el comando de consola). Exige reautenticación.'
       operationId: SuspenderPersona
       parameters:
         - name: personaId
@@ -1509,6 +1509,244 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.identidad.administrar
+  /api/v1/identidad/emergencia/consultar:
+    post:
+      tags:
+        - Identidad
+      summary: Ver la cuenta del enlace de emergencia
+      description: 'Correo y nombre de la cuenta de administrador de emergencia. 410 si el enlace se usó, venció o no es válido. No requiere sesión.'
+      operationId: ConsultarActivacionEmergencia
+      requestBody:
+        description: Enlace de activación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEnlaceEmergencia'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaEmergenciaPublica'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/emergencia/passkey/opciones:
+    post:
+      tags:
+        - Identidad
+      summary: Opciones para registrar la passkey de la cuenta de emergencia
+      description: Desafío de WebAuthn (navigator.credentials.create). Vence en 5 minutos y sirve una sola vez. No requiere sesión.
+      operationId: OpcionesPasskeyEmergencia
+      requestBody:
+        description: Enlace de activación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEnlaceEmergencia'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpcionesPasskey'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/emergencia/totp/clave:
+    post:
+      tags:
+        - Identidad
+      summary: Clave TOTP para la cuenta de emergencia con contraseña
+      description: Clave nueva y su QR (SVG) para la aplicación de autenticación. Se confirma con el primer código al activar. No requiere sesión.
+      operationId: ClaveTotpEmergencia
+      requestBody:
+        description: Enlace de activación.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEnlaceEmergencia'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaveTotp'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/emergencia/activar:
+    post:
+      tags:
+        - Identidad
+      summary: Activar la cuenta de administrador de emergencia
+      description: 'Registra el factor (passkey, preferida, o contraseña de mínimo 12 caracteres con TOTP), genera diez códigos de recuperación (se muestran una sola vez), cierra las demás sesiones de la cuenta y abre una nueva. El enlace deja de servir. Cada activación es un evento de seguridad de alta severidad. No requiere sesión.'
+      operationId: ActivarCuentaEmergencia
+      requestBody:
+        description: Enlace de activación y factor.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudActivacionEmergencia'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaLista'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
   /api/v1/plataforma/roles:
     get:
       tags:
@@ -2705,7 +2943,7 @@ components:
           format: date-time
         origen:
           type: string
-          description: 'manual, grupo_entra o invitacion.'
+          description: 'manual, grupo_entra, invitacion o emergencia.'
         vigente:
           type: boolean
           description: Si concede permisos en este momento (empezó y no ha vencido).
@@ -2803,6 +3041,17 @@ components:
         nombre:
           type: string
       description: Cuenta que se va a recuperar.
+    CuentaEmergenciaPublica:
+      required:
+        - correo
+        - nombre
+      type: object
+      properties:
+        correo:
+          type: string
+        nombre:
+          type: string
+      description: Cuenta de emergencia del enlace de activación.
     CuentaLista:
       required:
         - codigosRecuperacion
@@ -3548,6 +3797,17 @@ components:
         factor:
           $ref: '#/components/schemas/SolicitudFactor'
       description: 'Aceptación de la invitación: nombre, versiones de los documentos aceptados y el factor de la cuenta.'
+    SolicitudActivacionEmergencia:
+      required:
+        - enlace
+        - factor
+      type: object
+      properties:
+        enlace:
+          type: string
+        factor:
+          $ref: '#/components/schemas/SolicitudFactor'
+      description: Enlace de activación y el factor de la cuenta de emergencia.
     SolicitudAsignacion:
       required:
         - rol
@@ -3611,6 +3871,14 @@ components:
         enlace:
           type: string
       description: Enlace de recuperación (el fragmento de la URL del correo).
+    SolicitudEnlaceEmergencia:
+      required:
+        - enlace
+      type: object
+      properties:
+        enlace:
+          type: string
+      description: Enlace de activación de la cuenta de emergencia (el fragmento de la URL que imprime el comando).
     SolicitudFactor:
       required:
         - metodo
@@ -3870,6 +4138,7 @@ components:
         - proveedor
         - roles
         - permisos
+        - emergencia
       type: object
       properties:
         sub:
@@ -3897,6 +4166,9 @@ components:
           items:
             type: string
           description: 'Permisos efectivos (atlas.<modulo>.<accion>) en este momento, ordenados: la PWA filtra la navegación con ellos. Se recalculan en cada petición.'
+        emergencia:
+          type: boolean
+          description: 'true si la sesión es de la cuenta de administrador de emergencia (ATLAS-ADR-0027): la PWA muestra el aviso.'
       description: 'Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.'
   securitySchemes:
     sesionAtlas:
