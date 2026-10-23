@@ -58,7 +58,7 @@ dotnet user-secrets set "Parameters:entra-clave-certificado" "<clave del .pfx>" 
 dotnet user-secrets set "Parameters:entra-secreto" "<secreto>" --project aspire/Flit.Atlas.AppHost
 ```
 
-El registro de dev necesita las redirect URI `https://localhost:4032/signin-oidc` y `https://localhost:4032/signout-callback-oidc`. Sin `Entra:TenantId`, solo aparece el proveedor simulado.
+El registro de Entra ID necesita la redirect URI `https://localhost:4032/api/auth/callback/azure-ad` (plataforma **Web**). Sin `Entra:TenantId`, solo aparece el proveedor simulado.
 
 ## Pruebas de extremo a extremo
 

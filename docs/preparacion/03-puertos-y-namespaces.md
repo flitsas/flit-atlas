@@ -48,7 +48,7 @@ La cookie del BFF es `SameSite=Strict` (ATLAS-ADR-0008), así que la PWA y la AP
 
 | Ruta en el host de Atlas | Destino |
 |---|---|
-| `/api/`, `/hubs/`, `/connect/`, `/.well-known/`, `/signin-oidc`, `/signout-callback-oidc`, `/health/` | `atlas-api` |
+| `/api/` (incluida la redirect URI de Entra ID, `/api/auth/callback/azure-ad`), `/hubs/`, `/connect/`, `/.well-known/`, `/health/` | `atlas-api` |
 | todo lo demás | `atlas-web` |
 
 `atlas-web` es una imagen de nginx sin privilegios que sirve el build de Vite con las cabeceras de caché del service worker. Se descartó que `atlas-api` sirva los estáticos: acopla los despliegues del frontend y del backend, y obliga a reiniciar la API para publicar un cambio de interfaz. El enrutamiento se hace en el Ingress de Atlas, no en `Flit.Gateway` (ATLAS-ADR-0008).
