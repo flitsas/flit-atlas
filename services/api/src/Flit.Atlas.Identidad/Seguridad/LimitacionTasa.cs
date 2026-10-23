@@ -28,6 +28,9 @@ public sealed class OpcionesLimiteTasa
 
     /// <summary>Peticiones a cualquier ruta de identidad por usuario autenticado y ventana.</summary>
     public int PorUsuario { get; set; } = 60;
+
+    /// <summary>Peticiones a <c>/connect/token</c> y <c>/connect/authorize</c> por IP y ventana (HU 1.3c).</summary>
+    public int TokensPorIp { get; set; } = 30;
 }
 
 /// <summary>
@@ -55,6 +58,7 @@ public static partial class LimitacionTasa
             o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             o.GlobalLimiter = PartitionedRateLimiter.CreateChained(
                 Particion(l.IngresoPorIp, l.Ventana, http => EsIngreso(http.Request.Path) ? "ingreso:" + Ip(http) : null),
+                Particion(l.TokensPorIp, l.Ventana, http => EsEmisionTokens(http.Request.Path) ? "tokens:" + Ip(http) : null),
                 Particion(l.PorIp, l.Ventana, http => EsIdentidad(http.Request.Path) ? "ip:" + Ip(http) : null),
                 Particion(l.PorUsuario, l.Ventana, http => EsIdentidad(http.Request.Path) && Usuario(http) is { } sub ? "usuario:" + sub : null));
             o.OnRejected = AlRechazarAsync;
@@ -83,11 +87,21 @@ public static partial class LimitacionTasa
         return app.UseRateLimiter();
     }
 
-    /// <summary>Rutas de identidad: el módulo, el retorno de OIDC y <c>/api/v1/plataforma/yo</c>.</summary>
+    /// <summary>
+    /// Rutas de identidad: el módulo, el retorno de OIDC, <c>/api/v1/plataforma/yo</c> y el servidor de tokens
+    /// (<c>/connect/*</c> y <c>/.well-known/*</c>).
+    /// </summary>
     internal static bool EsIdentidad(PathString ruta) =>
         ruta.StartsWithSegments("/api/v1/identidad", StringComparison.OrdinalIgnoreCase)
         || ruta.StartsWithSegments("/api/auth", StringComparison.OrdinalIgnoreCase)
-        || ruta.StartsWithSegments("/api/v1/plataforma/yo", StringComparison.OrdinalIgnoreCase);
+        || ruta.StartsWithSegments("/api/v1/plataforma/yo", StringComparison.OrdinalIgnoreCase)
+        || ruta.StartsWithSegments("/connect", StringComparison.OrdinalIgnoreCase)
+        || ruta.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Rutas que emiten códigos o tokens (HU 1.3c): límite propio por IP.</summary>
+    internal static bool EsEmisionTokens(PathString ruta) =>
+        ruta.StartsWithSegments("/connect/token", StringComparison.OrdinalIgnoreCase)
+        || ruta.StartsWithSegments("/connect/authorize", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Rutas que inician un ingreso: más estrictas.</summary>
     internal static bool EsIngreso(PathString ruta) =>

@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.DependencyInjection;
+using OpenIddict.EntityFrameworkCore.Models;
 
 namespace Flit.Atlas.Identidad.Datos;
 
 /// <summary>
-/// Tablas <c>identidad_*</c>: las de ASP.NET Core Identity (esquema v3, con passkeys) y la sesión del BFF.
-/// Historial propio <c>__ef_migraciones_identidad</c> (ATLAS-ADR-0016). Las tablas de OpenIddict llegan en la HU 1.3c.
+/// Tablas <c>identidad_*</c>: las de ASP.NET Core Identity (esquema v3, con passkeys), la sesión del BFF, los eventos de
+/// seguridad y las de OpenIddict (<c>identidad_oidc_*</c>, HU 1.3c). Historial propio <c>__ef_migraciones_identidad</c>
+/// (ATLAS-ADR-0016).
 /// </summary>
 public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opciones)
     : IdentityDbContext<UsuarioAtlas, RolIdentity, Guid>(opciones)
@@ -86,6 +88,13 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
             e.HasIndex(s => new { s.UsuarioId, s.RevocadaEn });
             e.HasOne<UsuarioAtlas>().WithMany().HasForeignKey(s => s.UsuarioId).OnDelete(DeleteBehavior.Cascade);
         });
+
+        // OpenIddict con llaves uuid (ATLAS-ADR-0004 §5 y ATLAS-ADR-0024). Las columnas quedan en snake_case.
+        builder.UseOpenIddict<Guid>();
+        builder.Entity<OpenIddictEntityFrameworkCoreApplication<Guid>>().ToTable(Prefijo + "oidc_aplicacion");
+        builder.Entity<OpenIddictEntityFrameworkCoreAuthorization<Guid>>().ToTable(Prefijo + "oidc_autorizacion");
+        builder.Entity<OpenIddictEntityFrameworkCoreScope<Guid>>().ToTable(Prefijo + "oidc_scope");
+        builder.Entity<OpenIddictEntityFrameworkCoreToken<Guid>>().ToTable(Prefijo + "oidc_token");
 
         builder.Entity<EventoSeguridad>(e =>
         {

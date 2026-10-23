@@ -113,6 +113,23 @@ if (!string.IsNullOrWhiteSpace(vapid["ClavePublica"]))
         .WithEnvironment("Plataforma__Push__ClavePrivada", vapidPrivada);
 }
 
+// Servidor de tokens (HU 1.3c, ATLAS-ADR-0024): clientes confidenciales de servicio solo para tu máquina (atlas-cli y
+// atlas-mcp ya vienen en el appsettings de atlas-api). La definición va en «Tokens:Clientes:<id>» de los user secrets
+// del AppHost y el secreto en «Parameters:token-<id>-secreto»; nunca en el repo. Ver aspire/README.md. Sin certificados,
+// atlas-api usa llaves de firma y cifrado efímeras: los tokens dejan de valer al reiniciar.
+foreach (var cliente in builder.Configuration.GetSection("Tokens:Clientes").GetChildren())
+{
+    foreach (var (clave, valor) in Microsoft.Extensions.Configuration.ConfigurationExtensions.AsEnumerable(cliente, makePathsRelative: true))
+    {
+        if (valor is not null && clave != "Secreto")
+        {
+            api.WithEnvironment($"Identidad__Tokens__Clientes__{cliente.Key}__{clave.Replace(":", "__", StringComparison.Ordinal)}", valor);
+        }
+    }
+    var secreto = builder.AddParameter($"token-{cliente.Key}-secreto", secret: true);
+    api.WithEnvironment($"Identidad__Tokens__Clientes__{cliente.Key}__Secreto", secreto);
+}
+
 // ASPIRECERTIFICATES001: las APIs de certificados de Aspire son experimentales; solo afectan el entorno local.
 #pragma warning disable ASPIRECERTIFICATES001
 builder.AddViteApp("web", "../../apps/web")

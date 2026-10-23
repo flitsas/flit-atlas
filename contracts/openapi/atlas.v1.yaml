@@ -1,7 +1,7 @@
 openapi: '3.1.1'
 info:
   title: Flit Atlas
-  description: 'API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie `__Host-atlas` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado exigen además la cabecera `X-Atlas-Csrf` y el mismo origen. Este archivo se genera desde el código: no se edita a mano.'
+  description: 'API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie `__Host-atlas` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado exigen además la cabecera `X-Atlas-Csrf` y el mismo origen. Los clientes que no son el navegador (atlas-cli, MCP, servicios internos) usan tokens Bearer del servidor OpenIddict de Atlas solo en las operaciones que declaran el esquema `tokenAtlas`; el protocolo (`/connect/*`) se describe en `/.well-known/openid-configuration` (ATLAS-ADR-0024). Este archivo se genera desde el código: no se edita a mano.'
   version: 1.0.0
 servers:
   - url: https://atlas.flitsas.com
@@ -198,6 +198,56 @@ paths:
                 description: Problem Details (RFC 9457) con el código que interpreta la PWA.
       security:
         - csrfAtlas: [ ]
+  /api/v1/identidad/token/yo:
+    get:
+      tags:
+        - Identidad
+      summary: Portador del token de acceso
+      description: 'Para clientes que no son el navegador (atlas-cli, MCP, servicios internos): devuelve a quién representa el token Bearer y con qué scopes y audiencias. Exige un token de Atlas con al menos un scope de módulo; la cookie de la PWA no sirve aquí.'
+      operationId: ObtenerPortadorDelToken
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortadorToken'
+        '401':
+          description: 'Falta el token Bearer de Atlas, venció, fue revocado o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '403':
+          description: 'El token no tiene ninguno de los scopes que exige la operación (atlas.mcp, atlas.publicar, atlas.widget).'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - tokenAtlas:
+            - atlas.mcp
+            - atlas.publicar
+            - atlas.widget
   /api/v1/identidad/sesiones:
     get:
       tags:
@@ -1310,6 +1360,53 @@ components:
           items:
             type: string
       description: Permiso atlas.<modulo>.<accion> y los roles que lo conceden.
+    PortadorToken:
+      required:
+        - sub
+        - cliente
+        - tipoPrincipal
+        - personaId
+        - organizacionId
+        - scopes
+        - audiencias
+        - expiraEn
+      type: object
+      properties:
+        sub:
+          type: string
+          description: 'sub del token: el id del usuario de Atlas o, para un servicio, su client_id.'
+        cliente:
+          type:
+            - 'null'
+            - string
+          description: Cliente que obtuvo el token.
+        tipoPrincipal:
+          type: string
+          description: 'empleado, externo o servicio.'
+        personaId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        organizacionId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        scopes:
+          type: array
+          items:
+            type: string
+        audiencias:
+          type: array
+          items:
+            type: string
+        expiraEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: 'Quién es el portador del token de acceso: un usuario de Atlas (código con PKCE) o un servicio (client_credentials).'
     PreferenciaCanalDto:
       required:
         - canal
@@ -1599,9 +1696,27 @@ components:
       description: 'Antifalsificación: obligatoria (cualquier valor) en POST, PUT, PATCH y DELETE bajo /api/. Sin ella, o con otro Origin, la respuesta es 403.'
       name: X-Atlas-Csrf
       in: header
+    tokenAtlas:
+      type: oauth2
+      description: 'Token de acceso de Atlas (OpenIddict, ATLAS-ADR-0024) en «Authorization: Bearer». Vida de 15 minutos, audiencia atlas-api. Código con PKCE para atlas-cli y MCP; client_credentials para servicios internos. JWT firmado (RS256) y cifrado según RFC8725 (buenas prácticas de JWT). La cookie de la PWA no sirve en estas operaciones.'
+      flows:
+        clientCredentials:
+          tokenUrl: /connect/token
+          scopes:
+            atlas.mcp: Usar el servidor MCP de Atlas con los permisos de la persona.
+            atlas.publicar: 'Publicar contratos, documentación y modelos en Atlas.'
+            atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.
+        authorizationCode:
+          authorizationUrl: /connect/authorize
+          tokenUrl: /connect/token
+          refreshUrl: /connect/token
+          scopes:
+            atlas.mcp: Usar el servidor MCP de Atlas con los permisos de la persona.
+            atlas.publicar: 'Publicar contratos, documentación y modelos en Atlas.'
+            atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.
 tags:
   - name: Identidad
-    description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022).'
+    description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022), y tokens para clientes que no son el navegador (ATLAS-ADR-0024).'
   - name: Plataforma
     description: Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API.
   - name: Permisos

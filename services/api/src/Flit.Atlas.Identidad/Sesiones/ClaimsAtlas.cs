@@ -23,6 +23,9 @@ public static class ClaimsAtlas
     public const string TipoEmpleado = "empleado";
     public const string TipoExterno = "externo";
 
+    /// <summary>Servicio interno que entra con <c>client_credentials</c> (HU 1.3c); su <c>sub</c> es el client_id.</summary>
+    public const string TipoServicio = "servicio";
+
     /// <summary>Esquema de la cookie del BFF.</summary>
     public const string EsquemaCookie = "Atlas";
 

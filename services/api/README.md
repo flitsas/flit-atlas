@@ -35,6 +35,8 @@ En `src/Flit.Atlas.ServiceDefaults/` está: telemetría, sondas `/health/live` y
 | `Identidad__Entra__ClientCredentials__0__*` | Credencial de cliente (certificado en qa y pdn, F0.4 ítem 5.2) |
 | `Identidad__ProteccionDatos__Certificado` | Certificado que cifra las llaves de Data Protection en Redis; obligatorio en qa y pdn |
 | `Identidad__Simulado__Habilitado` | Proveedor simulado; solo se acepta en `local` y `dev` |
+| `Identidad__Tokens__Certificados__Firma`, `Identidad__Tokens__Certificados__Cifrado`, `Identidad__Tokens__Certificados__Clave` | Certificados `.pfx` del servidor de tokens (rutas montadas desde un SealedSecret, varias separadas por «;») y su clave; obligatorios en qa y pdn (ATLAS-ADR-0024) |
+| `Identidad__Tokens__Clientes__<id>__*` | Clientes de OpenIddict; el `Secreto` de los confidenciales llega desde un SealedSecret |
 | `Atlas__Proxy__RedesConfiables` | Redes CIDR (separadas por coma) de los proxies cuyo `X-Forwarded-*` se acepta; en el clúster, la red de pods. Sin valor, solo loopback |
 | `Atlas__Proxy__Limite` | Proxies delante de la API (por defecto 2: nginx del host y `atlas-web`) |
 | `Plataforma__Push__ClavePublica`, `Plataforma__Push__ClavePrivada` | Llaves VAPID de Web Push en base64url (las genera `node scripts/generar-vapid.mjs`). Son secreto: SealedSecret en qa y pdn. Sin ellas, push queda deshabilitado en qa y pdn; en local y dev se generan unas efímeras |
@@ -93,6 +95,26 @@ rutas.MapGet("/api/v1/hola", ...).RequierePermiso(PermisosHola.Ver);  // en cada
 ```
 
 Sus tablas con `organizacion_id` llaman a `AplicarPredicadoDeOrganizacion` en `OnModelCreating` y, en su migración, activan RLS con `FORCE` y la política `atlas.plataforma_organizacion_visible(organizacion_id)`. `AutorizacionTests` falla si un endpoint nuevo no declara permiso (salvo que se agregue a la lista de públicos o de solo sesión).
+
+## Servidor de tokens (HU 1.3c, ATLAS-ADR-0024)
+
+OpenIddict 7.7.1 embebido para los clientes que no son el navegador (`atlas-cli`, MCP, widget y servicios internos). La PWA no usa estos tokens.
+
+- **Endpoints** (fuera de `/api` y del contrato; su contrato es el descubrimiento): `/.well-known/openid-configuration`, `/.well-known/jwks`, `/connect/authorize` (código con PKCE S256 obligatorio; el usuario es el de la sesión del BFF y, sin sesión, se va a Microsoft y se vuelve por `/connect/continuar`), `/connect/token` (`authorization_code`, `refresh_token`, `client_credentials`), `/connect/revoke`, `/connect/introspect` (confidenciales) y `/connect/userinfo`.
+- **Tokens**: acceso de 15 min (JWT firmado y cifrado, audiencia por cliente, por defecto `atlas-api`), con `sub`, `persona_id`, `tipo_principal`, `organizacion_id` y `scope`, sin roles. Refresh con rotación (7 días; tope de la concesión, 30 días): reutilizar uno ya canjeado revoca toda la cadena. Cada canje revisa la persona y el sello de seguridad; `IInvalidadorSesiones` también revoca los tokens.
+- **Clientes** en `Identidad:Tokens:Clientes:<client_id>` (`Tipo`, `Flujos`, `RedirectUris`, `Scopes`, `Audiencias`, `Secreto`). `atlas-cli` y `atlas-mcp` vienen en `appsettings.json` con redirect de loopback sin puerto. Al arrancar se sincronizan con `identidad_oidc_aplicacion`: lo que sale de la configuración se borra con sus tokens.
+- **Scopes por módulo**: `servicios.AgregarScopes(IProveedorScopes)` con `ScopeAtlas(nombre, modulo, descripcion)`; el módulo debe tener manifiesto de permisos. Base: `atlas.mcp`, `atlas.publicar`, `atlas.widget`.
+- **Endpoints con Bearer**: `.RequiereScope("atlas.publicar")` (al menos uno de los scopes; solo el esquema de OpenIddict, nunca la cookie). Sin token 401, sin el scope 403. Ejemplo: `GET /api/v1/identidad/token/yo`.
+- **Llaves**: en qa y pdn, `.pfx` de firma y de cifrado montados (los genera `scripts/generar-certificados-tokens.sh`); en local, efímeras si no hay. Rotación en ATLAS-ADR-0024 §7.
+- Otras variables (opcionales): `Identidad__Tokens__Emisor` (emisor fijo, `https://…/`), `Identidad__Tokens__DuracionAcceso` (≤ `00:15:00`), `Identidad__Tokens__DuracionRefresh` (`7.00:00:00`), `Identidad__Tokens__DuracionMaximaConcesion` (`30.00:00:00`), `Identidad__Tokens__MargenReutilizacionRefresh` (`00:00:10`), `Identidad__LimiteTasa__TokensPorIp` (30).
+- Eventos: `identidad.autorizacion_concedida`, `autorizacion_rechazada`, `token_emitido`, `token_rechazado`, `cliente_rechazado` y `refresh_reutilizado` (nunca el token).
+
+Un cliente de servicio (con su secreto en una variable, nunca en el código):
+
+```bash
+curl -s https://qa.atlas.flitsas.com/connect/token -d grant_type=client_credentials -d client_id=svc-ejemplo -d "client_secret=$SECRETO" -d scope=atlas.publicar
+curl -s https://qa.atlas.flitsas.com/api/v1/identidad/token/yo -H "Authorization: Bearer $TOKEN"
+```
 
 ## Contratos (HU 1.7)
 

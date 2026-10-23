@@ -71,6 +71,21 @@ dotnet user-secrets set "Parameters:vapid-clave-privada" "<clave privada>" --pro
 
 El service worker (y con él el push) solo existe en el build de producción; ver `apps/web/README.md`.
 
+## Servidor de tokens (OpenIddict)
+
+atlas-api trae registrados `atlas-cli` y `atlas-mcp` (clientes públicos, código con PKCE y redirect de loopback en cualquier puerto). Sin configurar nada usa llaves de firma y cifrado efímeras: los tokens emitidos dejan de valer al reiniciar. El descubrimiento queda en `https://localhost:4032/.well-known/openid-configuration` (Vite lo reenvía a la API).
+
+Para probar un servicio interno con `client_credentials`, declara un cliente confidencial en los user secrets del AppHost (el secreto, de 32 caracteres o más, va como parámetro y nunca en el repo):
+
+```bash
+dotnet user-secrets set "Tokens:Clientes:svc-local:Tipo" "Confidencial" --project aspire/Flit.Atlas.AppHost
+dotnet user-secrets set "Tokens:Clientes:svc-local:Flujos:0" "client_credentials" --project aspire/Flit.Atlas.AppHost
+dotnet user-secrets set "Tokens:Clientes:svc-local:Scopes:0" "atlas.publicar" --project aspire/Flit.Atlas.AppHost
+dotnet user-secrets set "Parameters:token-svc-local-secreto" "$(openssl rand -hex 32)" --project aspire/Flit.Atlas.AppHost
+```
+
+Ver `services/api/README.md` (servidor de tokens) para el resto de variables.
+
 ## Pruebas de extremo a extremo
 
 Con el AppHost corriendo:

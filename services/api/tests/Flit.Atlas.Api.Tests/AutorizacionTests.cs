@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Seguridad;
+using Flit.Atlas.Identidad.Tokens;
 using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authorization;
@@ -36,6 +37,14 @@ public class AutorizacionTests(EntornoApi entorno)
         "GET /api/v1/identidad/entrar/microsoft",
         "POST /api/v1/identidad/simulado/entrar",
         "POST /api/v1/identidad/salir",
+        // Protocolo OAuth/OIDC (HU 1.3c, ATLAS-ADR-0024): OpenIddict autentica al cliente (secreto, PKCE, código o
+        // refresh) antes de dejar pasar la petición; authorize toma al usuario de la sesión del BFF si la hay.
+        "GET /connect/authorize",
+        "POST /connect/authorize",
+        "GET /connect/continuar",
+        "POST /connect/token",
+        "GET /connect/userinfo",
+        "POST /connect/userinfo",
     };
 
     /// <summary>Endpoints que solo exigen sesión: actúan sobre los datos de la propia persona.</summary>
@@ -59,7 +68,12 @@ public class AutorizacionTests(EntornoApi entorno)
 
     /// <param name="Clave"><c>MÉTODO patrón</c>, como en <see cref="Publicos"/>.</param>
     /// <param name="Permisos">Permisos que exigen sus políticas; vacío si es público o de solo sesión.</param>
-    public sealed record EndpointDescubierto(string Clave, string Metodo, string Patron, bool ExigeSesion, IReadOnlyList<string> Permisos);
+    /// <param name="Scopes">
+    /// Scopes que exige si solo acepta tokens Bearer (<c>RequiereScope</c>, ATLAS-ADR-0024). Con la cookie, cualquier rol
+    /// recibe 401: el scope cuenta como su declaración.
+    /// </param>
+    public sealed record EndpointDescubierto(
+        string Clave, string Metodo, string Patron, bool ExigeSesion, IReadOnlyList<string> Permisos, IReadOnlyList<string> Scopes);
 
     /// <summary>Todos los endpoints de la API, con lo que exige cada uno según su metadata y sus políticas.</summary>
     public static async Task<List<EndpointDescubierto>> DescubrirAsync(WebApplicationFactory<Program> api)
@@ -81,7 +95,8 @@ public class AutorizacionTests(EntornoApi entorno)
             var patron = endpoint.RoutePattern.RawText ?? endpoint.DisplayName ?? "?";
             foreach (var metodo in endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? ["*"])
             {
-                lista.Add(new EndpointDescubierto($"{metodo} {patron}", metodo, patron, exige, [.. permisos]));
+                lista.Add(new EndpointDescubierto($"{metodo} {patron}", metodo, patron, exige, [.. permisos],
+                    endpoint.Metadata.GetMetadata<MetadatoScope>()?.Scopes ?? []));
             }
         }
         return lista;
@@ -89,7 +104,7 @@ public class AutorizacionTests(EntornoApi entorno)
 
     private static List<string> ProblemasDeDeclaracion(IEnumerable<EndpointDescubierto> endpoints) =>
     [
-        .. endpoints.Select(e => (e.ExigeSesion, e.Permisos.Count > 0, Publicos.Contains(e.Clave), SoloSesion.Contains(e.Clave)) switch
+        .. endpoints.Select(e => (e.ExigeSesion, e.Permisos.Count > 0 || e.Scopes.Count > 0, Publicos.Contains(e.Clave), SoloSesion.Contains(e.Clave)) switch
         {
             (false, _, true, _) => null,
             (false, _, false, _) => $"{e.Clave}: no exige sesión y no está en la lista de públicos",
@@ -161,8 +176,17 @@ public class AutorizacionTests(EntornoApi entorno)
         var fallas = new List<string>();
         foreach (var endpoint in (await DescubrirAsync(api)).Where(e => e.ExigeSesion))
         {
-            var permitido = endpoint.Permisos.All(esperados.Contains);
             var estado = (await LlamarAsync(navegador, endpoint)).StatusCode;
+            if (endpoint.Scopes.Count > 0)
+            {
+                // Solo Bearer: la cookie de ningún rol basta (TokensTests prueba el acceso con token).
+                if (estado != HttpStatusCode.Unauthorized)
+                {
+                    fallas.Add($"{endpoint.Clave} [scope {string.Join(", ", endpoint.Scopes)}]: {(int)estado}, se esperaba 401 con la cookie");
+                }
+                continue;
+            }
+            var permitido = endpoint.Permisos.All(esperados.Contains);
             var negado = estado is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
             if (permitido ? negado : estado != HttpStatusCode.Forbidden)
             {

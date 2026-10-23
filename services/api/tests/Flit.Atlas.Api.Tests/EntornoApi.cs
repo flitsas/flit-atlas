@@ -92,6 +92,7 @@ public sealed class EntornoApi : IAsyncLifetime
             }
             b.ConfigureTestServices(s =>
             {
+                s.SinRegistroDeEventosDeWindows();
                 // TestServer no trae IP remota: se simula un proxy de loopback para que X-Forwarded-For valga.
                 s.AddSingleton<IStartupFilter, IpDeLoopback>();
                 s.AddSingleton<IStartupFilter, IngresoDePrueba>();
@@ -309,6 +310,27 @@ public sealed class Navegador(HttpClient http) : IDisposable
 public sealed record PedidoIngresoPrueba(Guid UsuarioId);
 
 public sealed record Externo(Guid UsuarioId, Guid PersonaId, Guid OrganizacionId, Guid AsignacionId);
+
+internal static class ExtensionesPruebas
+{
+    /// <summary>
+    /// Quita el registro de eventos de Windows de los hosts de prueba. Microsoft.Identity.Web deja el logger de
+    /// IdentityModel en una variable estática (<c>LogHelper.Logger</c>) que apunta al host que la configuró; cuando ese
+    /// host se libera, su EventLog lanza <see cref="ObjectDisposedException"/> al escribir y la validación de un JWT en
+    /// otro host falla. Solo pasa con varios hosts en el mismo proceso (las pruebas) y en Windows.
+    /// </summary>
+    public static void SinRegistroDeEventosDeWindows(this IServiceCollection servicios) =>
+        servicios.RemoveAll(d => d.ServiceType == typeof(Microsoft.Extensions.Logging.ILoggerProvider)
+            && d.ImplementationType?.Name == "EventLogLoggerProvider");
+
+    private static void RemoveAll(this IServiceCollection servicios, Func<ServiceDescriptor, bool> condicion)
+    {
+        foreach (var descriptor in servicios.Where(condicion).ToList())
+        {
+            servicios.Remove(descriptor);
+        }
+    }
+}
 
 /// <summary>Reloj real con un desfase que la prueba puede adelantar (p. ej. para vencer la ventana de reautenticación).</summary>
 public sealed class RelojDePrueba : TimeProvider

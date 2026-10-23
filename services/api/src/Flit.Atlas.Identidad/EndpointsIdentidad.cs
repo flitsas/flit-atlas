@@ -5,6 +5,7 @@ using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Identidad.Tokens;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -129,6 +130,8 @@ public static class EndpointsIdentidad
             .Produces(StatusCodes.Status204NoContent);
 
         identidad.MapSesiones();
+        // Servidor de tokens (HU 1.3c): /connect/* fuera del contrato y GET /api/v1/identidad/token/yo con Bearer.
+        rutas.MapServidorTokens(identidad);
 
         rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, CancellationToken ct) =>
             {
@@ -162,7 +165,9 @@ public static class EndpointsIdentidad
     /// cambia estado trae la cabecera propia (un formulario de otro sitio no puede ponerla sin CORS, y Atlas no habilita
     /// CORS) y, si el navegador manda <c>Origin</c>, debe ser el mismo host. Se exceptúa <see cref="RutaRetornoEntra"/>:
     /// Microsoft la llama con un POST desde su propio origen, y la protegen el <c>state</c>, el <c>nonce</c> y la cookie
-    /// de correlación de OIDC.
+    /// de correlación de OIDC. Tampoco se exige a las peticiones con <c>Authorization: Bearer</c> (HU 1.3c): esa cabecera
+    /// ya prueba lo mismo que la propia (un sitio ajeno no puede ponerla sin CORS) y el token no es una credencial que el
+    /// navegador mande solo; esas peticiones solo valen en endpoints con <c>RequiereScope</c>, nunca con la cookie.
     /// </summary>
     public static IApplicationBuilder UseAntifalsificacionApi(this IApplicationBuilder app) =>
         app.Use(async (http, siguiente) =>
@@ -170,7 +175,8 @@ public static class EndpointsIdentidad
             var peticion = http.Request;
             var cambia = !(HttpMethods.IsGet(peticion.Method) || HttpMethods.IsHead(peticion.Method) || HttpMethods.IsOptions(peticion.Method));
             if (cambia && peticion.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
-                && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase))
+                && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase)
+                && !peticion.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
                 var origen = peticion.Headers.Origin.ToString();
                 var mismoOrigen = string.IsNullOrEmpty(origen)

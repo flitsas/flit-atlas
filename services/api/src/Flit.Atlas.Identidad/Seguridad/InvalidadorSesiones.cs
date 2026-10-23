@@ -2,6 +2,7 @@ using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Sesiones;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using OpenIddict.Abstractions;
 
 namespace Flit.Atlas.Identidad.Seguridad;
 
@@ -32,7 +33,8 @@ public interface IInvalidadorSesiones
 {
     /// <summary>
     /// Cambia el sello de seguridad del usuario de la persona (toda sesión con el sello anterior deja de valer en su
-    /// siguiente petición), revoca sus sesiones activas y registra <c>identidad.sesiones_invalidadas</c>.
+    /// siguiente petición), revoca sus sesiones activas y sus tokens de OpenIddict (HU 1.3c: los Bearer dejan de valer
+    /// en la siguiente petición y los refresh no se pueden canjear) y registra <c>identidad.sesiones_invalidadas</c>.
     /// </summary>
     /// <param name="personaId">Persona de <c>plataforma_persona</c>. Si aún no tiene usuario, no hay nada que invalidar.</param>
     /// <param name="motivo">Uno de <see cref="MotivosInvalidacion"/>.</param>
@@ -45,7 +47,9 @@ internal sealed class InvalidadorSesiones(
     UserManager<UsuarioAtlas> usuarios,
     IdentidadDbContext contexto,
     AlmacenSesiones sesiones,
-    RegistroSeguridad registro) : IInvalidadorSesiones
+    RegistroSeguridad registro,
+    IOpenIddictAuthorizationManager autorizaciones,
+    IOpenIddictTokenManager tokens) : IInvalidadorSesiones
 {
     public async Task<int> InvalidarSesionesAsync(Guid personaId, string motivo, Guid? actorPersonaId = null, CancellationToken ct = default)
     {
@@ -70,12 +74,15 @@ internal sealed class InvalidadorSesiones(
         }
 
         var revocadas = await sesiones.RevocarTodasAsync(usuario.Id, motivo, ct: ct);
+        var sub = usuario.Id.ToString();
+        await autorizaciones.RevokeBySubjectAsync(sub, ct);
+        var tokensRevocados = await tokens.RevokeBySubjectAsync(sub, ct);
         await registro.RegistrarAsync(TiposEventoSeguridad.SesionesInvalidadas, new DatosEventoSeguridad
         {
             UsuarioId = usuario.Id,
             PersonaId = personaId,
             ActorPersonaId = actorPersonaId,
-            Detalle = new { motivo, sesiones = revocadas },
+            Detalle = new { motivo, sesiones = revocadas, tokens = tokensRevocados },
         }, ct);
         return revocadas;
     }

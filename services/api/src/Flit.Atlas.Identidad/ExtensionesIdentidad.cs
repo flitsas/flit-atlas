@@ -6,6 +6,7 @@ using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Identidad.Tokens;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Permisos;
 using Flit.Atlas.ServiceDefaults;
@@ -48,6 +49,7 @@ public static class ExtensionesIdentidad
     /// Data Protection compartida en Redis, «Iniciar sesión con Microsoft» y, solo en local y dev, el proveedor simulado.
     /// Sesiones y seguridad (HU 1.3b): sello de seguridad, reautenticación, bloqueo progresivo, límite de tasa y eventos
     /// de seguridad. En el pipeline, <see cref="UseSeguridadIdentidad"/> va antes de <c>UseAuthentication</c>.
+    /// Servidor de tokens (HU 1.3c): OpenIddict para los clientes que no son el navegador (ATLAS-ADR-0024).
     /// </summary>
     public static WebApplicationBuilder AgregarIdentidad(this WebApplicationBuilder builder, string ambiente, string cadenaConexion)
     {
@@ -110,6 +112,9 @@ public static class ExtensionesIdentidad
         }
 
         PoliticasIdentidad.Configurar(servicios.AddAuthorizationBuilder());
+
+        // HU 1.3c (ATLAS-ADR-0024): OpenIddict sobre IdentidadDbContext, con su esquema de validación para los Bearer.
+        ServidorTokens.Agregar(builder, AmbientesEstrictos.Contains(ambiente));
         return builder;
     }
 
