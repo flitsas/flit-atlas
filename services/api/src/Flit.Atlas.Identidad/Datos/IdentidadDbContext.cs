@@ -19,6 +19,15 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
 
     public DbSet<Sesion> Sesiones => Set<Sesion>();
 
+    public DbSet<EventoSeguridad> EventosSeguridad => Set<EventoSeguridad>();
+
+    public const string TablaEventoSeguridad = Prefijo + "evento_seguridad";
+
+    /// <summary>Intentos fallidos seguidos que bloquean una cuenta local (CA de la HU 1.3b).</summary>
+    public const int IntentosAntesDelBloqueo = 10;
+
+    /// <summary>Primer bloqueo; los siguientes duplican la duración (ATLAS-ADR-0022).</summary>
+    public static readonly TimeSpan BloqueoInicial = TimeSpan.FromMinutes(15);
 
     /// <summary>Esquema v3 de Identity, con passkeys (ATLAS-ADR-0004 §1).</summary>
     public static void ConfigurarIdentity(IdentityOptions opciones)
@@ -26,6 +35,11 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
         ArgumentNullException.ThrowIfNull(opciones);
         opciones.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
         opciones.User.RequireUniqueEmail = true;
+        // Bloqueo de ASP.NET Core Identity para las cuentas locales (HU 1.5); el retroceso progresivo lo aplica
+        // VerificadorContrasena sobre este bloqueo base.
+        opciones.Lockout.AllowedForNewUsers = true;
+        opciones.Lockout.MaxFailedAccessAttempts = IntentosAntesDelBloqueo;
+        opciones.Lockout.DefaultLockoutTimeSpan = BloqueoInicial;
     }
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion)
@@ -68,8 +82,21 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
             e.Property(s => s.Id).ValueGeneratedNever();
             e.Property(s => s.AgenteResumen).HasMaxLength(200);
             e.Property(s => s.MotivoRevocacion).HasMaxLength(200);
+            e.Property(s => s.Ip).HasComment(PlataformaDbContext.Pii);
             e.HasIndex(s => new { s.UsuarioId, s.RevocadaEn });
             e.HasOne<UsuarioAtlas>().WithMany().HasForeignKey(s => s.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<EventoSeguridad>(e =>
+        {
+            e.ToTable(TablaEventoSeguridad, t => t.HasComment("Solo inserción: UPDATE, DELETE y TRUNCATE rechazados."));
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Tipo).HasMaxLength(100);
+            e.Property(x => x.Ip).HasComment(PlataformaDbContext.Pii);
+            e.Property(x => x.AgenteResumen).HasMaxLength(200);
+            e.Property(x => x.Datos).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.UsuarioId, x.Tipo, x.OcurridoEn });
+            e.HasIndex(x => x.OcurridoEn);
         });
     }
 }

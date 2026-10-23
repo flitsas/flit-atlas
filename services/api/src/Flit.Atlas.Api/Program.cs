@@ -47,6 +47,7 @@ app.UseForwardedHeaders();
 
 app.MapEndpointsDeSalud();
 app.UseAntifalsificacionApi();
+app.UseSeguridadIdentidad();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapIdentidad();

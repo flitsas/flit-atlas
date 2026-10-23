@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Aprovisionamiento;
 using Flit.Atlas.Identidad.Entra;
+using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -21,7 +22,8 @@ public static class EndpointsIdentidad
     /// </summary>
     public const string RutaRetornoEntra = "/api/auth/callback/azure-ad";
 
-    public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos);
+    /// <param name="Reautenticar">La PWA vuelve a pedir el ingreso porque una acción sensible lo exigió.</param>
+    public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos, bool Reautenticar = false);
 
     [Description("Usuario de la sesión actual: persona, organización, proveedor con el que entró y roles de Atlas.")]
     public sealed record Yo(
@@ -44,21 +46,31 @@ public static class EndpointsIdentidad
         if (proveedores.Microsoft)
         {
             // Navegación completa del navegador (no fetch): termina en RutaRetornoEntra y vuelve a la PWA.
+            // Con reautenticar=true, Entra vuelve a pedir las credenciales (prompt=login) aunque haya sesión de Microsoft.
             identidad.MapGet("/entrar/microsoft", (
-                    [Description("Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).")] string? volver) =>
-                    Results.Challenge(new AuthenticationProperties { RedirectUri = RutaLocal(volver) }, [ClaimsAtlas.EsquemaEntra]))
+                    [Description("Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).")] string? volver,
+                    [Description("true cuando una acción sensible pidió reautenticación (responde 401 con codigo reautenticacion_requerida).")] bool? reautenticar) =>
+                {
+                    var propiedades = new AuthenticationProperties { RedirectUri = RutaLocal(volver) };
+                    if (reautenticar == true)
+                    {
+                        propiedades.Items[IngresoEntra.ClaveReautenticar] = "1";
+                    }
+                    return Results.Challenge(propiedades, [ClaimsAtlas.EsquemaEntra]);
+                })
                 .WithName("EntrarConMicrosoft")
                 .WithSummary("Iniciar sesión con Microsoft")
                 .WithDescription(
                     "Navegación completa del navegador (no fetch). Redirige a Entra ID (OIDC con PKCE); al volver por " +
-                    $"{RutaRetornoEntra} crea la sesión y lleva a «volver», que solo puede ser una ruta local de la PWA.")
+                    $"{RutaRetornoEntra} crea una sesión nueva y lleva a «volver», que solo puede ser una ruta local de la PWA. " +
+                    "Con reautenticar=true, Entra vuelve a pedir las credenciales (prompt=login).")
                 .Produces(StatusCodes.Status302Found);
         }
 
         if (proveedores.Simulado)
         {
             identidad.MapPost("/simulado/entrar", async (SolicitudSimulada solicitud, AprovisionadorEmpleados aprovisionador,
-                HttpContext http, CancellationToken ct) =>
+                RegistroSeguridad registro, HttpContext http, CancellationToken ct) =>
             {
                 if (string.IsNullOrWhiteSpace(solicitud.Correo) || string.IsNullOrWhiteSpace(solicitud.Nombre))
                 {
@@ -70,7 +82,7 @@ public static class EndpointsIdentidad
                 var correo = solicitud.Correo.Trim().ToLowerInvariant();
                 var cuenta = new CuentaEmpleado(
                     AprovisionadorEmpleados.ProveedorSimulado, correo, null, correo, solicitud.Nombre.Trim(),
-                    solicitud.Grupos ?? [], null, null, []);
+                    solicitud.Grupos ?? [], null, null, [], Reautenticacion: solicitud.Reautenticar);
                 try
                 {
                     var principal = await aprovisionador.AprovisionarAsync(cuenta, ct);
@@ -83,17 +95,23 @@ public static class EndpointsIdentidad
                 {
                     return Results.Conflict(new { error = "correo_en_uso" });
                 }
+                catch (IngresoNoPermitidoException ex)
+                {
+                    await registro.RegistrarAsync(TiposEventoSeguridad.InicioRechazado, new DatosEventoSeguridad
+                    {
+                        Detalle = new { proveedor = AprovisionadorEmpleados.ProveedorSimulado, motivo = ex.Motivo },
+                    }, ct);
+                    // Mensaje genérico: no revela si la cuenta existe, está suspendida o bloqueada.
+                    return Results.Json(new { error = "ingreso_no_permitido" }, statusCode: StatusCodes.Status403Forbidden);
+                }
             })
             // Solo existe en local y dev: no es parte del contrato de qa y pdn (ATLAS-ADR-0021).
             .ExcludeFromDescription();
         }
 
-        identidad.MapPost("/salir", async (HttpContext http) =>
+        identidad.MapPost("/salir", async (HttpContext http, RegistroSeguridad registro, CancellationToken ct) =>
         {
-            // Revoca la sesión en el servidor (AlmacenSesiones.RemoveAsync) y borra la cookie.
-            await http.SignOutAsync(ClaimsAtlas.EsquemaCookie);
-            // El navegador borra la caché, el almacenamiento (IndexedDB, service worker) y las cookies del origen.
-            http.Response.Headers["Clear-Site-Data"] = "\"cache\", \"cookies\", \"storage\"";
+            await EndpointsSesiones.SalirAsync(http, registro, ct);
             return Results.NoContent();
         })
             .WithName("CerrarSesion")
@@ -102,6 +120,8 @@ public static class EndpointsIdentidad
                 "Revoca la sesión en el servidor, borra la cookie y envía Clear-Site-Data para que el navegador limpie " +
                 "caché, almacenamiento y cookies del origen. Responde 204 aunque no haya sesión.")
             .Produces(StatusCodes.Status204NoContent);
+
+        identidad.MapSesiones();
 
         rutas.MapGet("/api/v1/plataforma/yo", (ClaimsPrincipal usuario) => new Yo(
                 Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.Sub)!),

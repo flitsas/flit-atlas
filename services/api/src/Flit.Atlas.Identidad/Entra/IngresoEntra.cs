@@ -1,9 +1,8 @@
+using System.Globalization;
 using System.Security.Claims;
-using System.Text.Json;
 using Flit.Atlas.Identidad.Aprovisionamiento;
+using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
-using Flit.Atlas.Plataforma.Datos;
-using Flit.Atlas.Plataforma.Entidades;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +15,19 @@ namespace Flit.Atlas.Identidad.Entra;
 /// </summary>
 internal static class IngresoEntra
 {
+    /// <summary>Marca, en las propiedades del desafío, un ingreso pedido por una acción sensible.</summary>
+    public const string ClaveReautenticar = "atlas.reautenticar";
+
+    /// <summary>Si el ingreso es una reautenticación, Entra debe pedir las credenciales otra vez.</summary>
+    public static Task AlRedirigirAsync(RedirectContext ctx)
+    {
+        if (ctx.Properties.Items.ContainsKey(ClaveReautenticar))
+        {
+            ctx.ProtocolMessage.Prompt = "login";
+        }
+        return Task.CompletedTask;
+    }
+
     public static async Task AlValidarTokenAsync(TokenValidatedContext ctx, Guid tenantFlit)
     {
         var servicios = ctx.HttpContext.RequestServices;
@@ -35,19 +47,24 @@ internal static class IngresoEntra
         var amr = principal.FindAll("amr").Concat(principal.FindAll("http://schemas.microsoft.com/claims/authnmethodsreferences"))
             .Select(c => c.Value).ToList();
 
+        // auth_time es un claim opcional del registro de la app en Entra; si no viene, cuenta el momento del ingreso.
+        DateTimeOffset? autenticadoEn = long.TryParse(principal.FindFirstValue("auth_time"), NumberStyles.Integer,
+            CultureInfo.InvariantCulture, out var authTime) ? DateTimeOffset.FromUnixTimeSeconds(authTime) : null;
+        var reautenticacion = ctx.Properties?.Items.ContainsKey(ClaveReautenticar) == true;
+
         var perfil = await servicios.GetRequiredService<IPerfilEmpleados>().ObtenerAsync(validacion.Oid, ct).ConfigureAwait(false);
         var cuenta = new CuentaEmpleado(
             AprovisionadorEmpleados.ProveedorEntra, validacion.Oid.ToString(), validacion.Oid, correo, nombre,
-            perfil.Grupos, perfil.Cargo, perfil.Area, amr);
+            perfil.Grupos, perfil.Cargo, perfil.Area, amr, autenticadoEn, reautenticacion);
 
         try
         {
             ctx.Principal = await servicios.GetRequiredService<AprovisionadorEmpleados>()
                 .AprovisionarAsync(cuenta, ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or CorreoEnUsoException)
+        catch (Exception ex) when (ex is IngresoNoPermitidoException or CorreoEnUsoException)
         {
-            await AuditarRechazoAsync(servicios, ex is UnauthorizedAccessException ? "persona_inactiva" : "correo_en_uso", ct)
+            await AuditarRechazoAsync(servicios, ex is IngresoNoPermitidoException noPermitido ? noPermitido.Motivo : "correo_en_uso", ct)
                 .ConfigureAwait(false);
             ctx.HandleResponse();
             ctx.Response.Redirect("/?error=cuenta_no_permitida");
@@ -67,19 +84,9 @@ internal static class IngresoEntra
         return Task.CompletedTask;
     }
 
-    private static async Task AuditarRechazoAsync(IServiceProvider servicios, string motivo, CancellationToken ct)
-    {
-        var plataforma = servicios.GetRequiredService<PlataformaDbContext>();
-        plataforma.Auditoria.Add(new EventoAuditoria
-        {
-            OcurridoEn = servicios.GetRequiredService<TimeProvider>().GetUtcNow(),
-            ActorTipo = TipoActor.Sistema,
-            Accion = "identidad.inicio_rechazado",
-            RecursoTipo = "usuario",
-            Datos = JsonSerializer.Serialize(new { proveedor = AprovisionadorEmpleados.ProveedorEntra, motivo }),
-        });
-        await plataforma.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
+    private static Task AuditarRechazoAsync(IServiceProvider servicios, string motivo, CancellationToken ct) =>
+        servicios.GetRequiredService<RegistroSeguridad>().RegistrarAsync(TiposEventoSeguridad.InicioRechazado,
+            new DatosEventoSeguridad { Detalle = new { proveedor = AprovisionadorEmpleados.ProveedorEntra, motivo } }, ct);
 }
 
 /// <summary>Resumen corto del navegador para «dispositivos conectados», sin guardar el user agent completo.</summary>

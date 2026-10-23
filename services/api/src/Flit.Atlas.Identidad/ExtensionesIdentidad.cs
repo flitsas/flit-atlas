@@ -3,6 +3,7 @@ using System.Security.Cryptography.X509Certificates;
 using Flit.Atlas.Identidad.Aprovisionamiento;
 using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Entra;
+using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication;
@@ -42,6 +43,8 @@ public static class ExtensionesIdentidad
     /// <summary>
     /// Identidad de Atlas para empleados (HU 1.3): ASP.NET Core Identity, cookie del BFF con sesión en el servidor,
     /// Data Protection compartida en Redis, «Iniciar sesión con Microsoft» y, solo en local y dev, el proveedor simulado.
+    /// Sesiones y seguridad (HU 1.3b): sello de seguridad, reautenticación, bloqueo progresivo, límite de tasa y eventos
+    /// de seguridad. En el pipeline, <see cref="UseSeguridadIdentidad"/> va antes de <c>UseAuthentication</c>.
     /// </summary>
     public static WebApplicationBuilder AgregarIdentidad(this WebApplicationBuilder builder, string ambiente, string cadenaConexion)
     {
@@ -75,6 +78,12 @@ public static class ExtensionesIdentidad
         servicios.AddSingleton<OpcionesSesion>();
         servicios.AddSingleton<AlmacenSesiones>();
         servicios.AddScoped<AprovisionadorEmpleados>();
+        // HU 1.3b (ATLAS-ADR-0022): eventos de seguridad, sello de seguridad, bloqueo progresivo y límite de tasa.
+        servicios.AddHttpContextAccessor();
+        servicios.AddScoped<RegistroSeguridad>();
+        servicios.AddScoped<IInvalidadorSesiones, InvalidadorSesiones>();
+        servicios.AddScoped<VerificadorContrasena>();
+        LimitacionTasa.Agregar(servicios);
         servicios.AddSingleton(new ProveedoresHabilitados(entraHabilitado, simulado));
 
         var autenticacion = servicios
@@ -96,8 +105,21 @@ public static class ExtensionesIdentidad
             servicios.AddSingleton<IPerfilEmpleados, SinPerfilEmpleados>();
         }
 
-        servicios.AddAuthorization();
+        PoliticasIdentidad.Configurar(servicios.AddAuthorizationBuilder());
         return builder;
+    }
+
+    /// <summary>
+    /// Middleware de la HU 1.3b: limitación de tasa de las rutas de identidad y sesión nueva en cada ingreso. Va
+    /// después de <c>UseForwardedHeaders</c> (usa la IP del cliente) y <b>antes</b> de <c>UseAuthentication</c> (cubre
+    /// el retorno de Entra, que atiende el middleware de autenticación).
+    /// </summary>
+    public static IApplicationBuilder UseSeguridadIdentidad(this IApplicationBuilder app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        LimitacionTasa.Usar(app);
+        RenovacionAlIngresar.Usar(app);
+        return app;
     }
 
     private static void ConfigurarCookie(CookieAuthenticationOptions o)
@@ -179,6 +201,12 @@ public static class ExtensionesIdentidad
                 await IngresoEntra.AlValidarTokenAsync(ctx, tenantFlit).ConfigureAwait(false);
             };
             o.Events.OnRemoteFailure = IngresoEntra.AlFallarAsync;
+            var previoRedireccion = o.Events.OnRedirectToIdentityProvider;
+            o.Events.OnRedirectToIdentityProvider = async ctx =>
+            {
+                await previoRedireccion(ctx).ConfigureAwait(false);
+                await IngresoEntra.AlRedirigirAsync(ctx).ConfigureAwait(false);
+            };
         });
     }
 }
