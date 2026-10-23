@@ -172,25 +172,37 @@ internal static class Comunes
     };
 
     /// <summary>
-    /// Guarda los cambios de soporte y los eventos de auditoría en <b>una sola transacción</b>: el contexto de la
-    /// plataforma usa la conexión y la transacción del de soporte (misma base y mismo alcance de datos).
+    /// Guarda los cambios de soporte, los eventos de auditoría y las notificaciones en la app (centro de notificaciones,
+    /// HU 1.6) en <b>una sola transacción</b>: el contexto de la plataforma usa la conexión y la transacción del de
+    /// soporte (misma base y mismo alcance de datos). <paramref name="antes"/> corre ya dentro de la transacción (p. ej.
+    /// para crear personas en la plataforma antes que los turnos que las usan).
     /// </summary>
     public static async Task GuardarAsync(
         SoporteDbContext soporte, PlataformaDbContext plataforma, IEnumerable<EventoAuditoria> eventos, CancellationToken ct,
-        Func<Task>? antes = null)
+        Func<Task>? antes = null, IEnumerable<Notificacion>? notificaciones = null)
     {
         await using var transaccion = await soporte.Database.BeginTransactionAsync(ct);
-        if (antes is not null)
-        {
-            await antes();
-        }
-        await soporte.SaveChangesAsync(ct);
         plataforma.Database.SetDbConnection(soporte.Database.GetDbConnection());
         await plataforma.Database.UseTransactionAsync(transaccion.GetDbTransaction(), ct);
-        plataforma.Auditoria.AddRange(eventos);
-        await plataforma.SaveChangesAsync(ct);
-        await transaccion.CommitAsync(ct);
-        await plataforma.Database.UseTransactionAsync(null, ct);
+        try
+        {
+            if (antes is not null)
+            {
+                await antes();
+            }
+            await soporte.SaveChangesAsync(ct);
+            plataforma.Auditoria.AddRange(eventos);
+            if (notificaciones is not null)
+            {
+                plataforma.Notificaciones.AddRange(notificaciones);
+            }
+            await plataforma.SaveChangesAsync(ct);
+            await transaccion.CommitAsync(ct);
+        }
+        finally
+        {
+            await plataforma.Database.UseTransactionAsync(null, ct);
+        }
     }
 
     /// <summary>¿La excepción es la del índice único de un sábado con turno vigente?</summary>

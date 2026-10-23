@@ -144,8 +144,9 @@ public sealed class FestivoAdicional : Entidad
 }
 
 /// <summary>
-/// Día compensado por un turno (prompt maestro §8.3). Solo el modelo: el registro, la aprobación y el reporte llegan
-/// con la HU 2.9.
+/// Día compensado por un turno (prompt maestro §8.3): a quién, qué día, quién la aprobó y si ya la tomó. La registra quien
+/// tiene <c>atlas.soporte.aprobar</c> sobre el equipo del turno (HU 2.9) o el importador del Excel (HU 2.7). A lo sumo
+/// una por turno y persona.
 /// </summary>
 public sealed class Compensacion : Entidad
 {
@@ -162,6 +163,64 @@ public sealed class Compensacion : Entidad
     public Guid? AprobadaPorPersonaId { get; set; }
 
     public string? Nota { get; set; }
+}
+
+/// <summary>
+/// Solicitud de cambio de turno (HU 2.9, prompt maestro §8.3): la persona de turno la pide y propone un reemplazo del
+/// mismo equipo → el reemplazo acepta (o rechaza) → alguien con <c>atlas.soporte.aprobar</c> sobre el equipo aprueba (o
+/// rechaza). Al aprobar, el turno original queda <c>reemplazado</c> y se crea el del reemplazo. Cada paso queda en
+/// <see cref="EventoSolicitudCambio"/>.
+/// </summary>
+public sealed class SolicitudCambio : Entidad
+{
+    public required Guid TurnoId { get; init; }
+
+    /// <summary>Equipo del turno (copiado para filtrar por alcance sin unir con los turnos).</summary>
+    public required Guid EquipoId { get; init; }
+
+    public required DateOnly Fecha { get; init; }
+
+    /// <summary>Persona de turno que pide el cambio (<c>plataforma_persona</c>).</summary>
+    public required Guid SolicitantePersonaId { get; init; }
+
+    /// <summary>Persona del mismo equipo que tomaría el turno.</summary>
+    public required Guid ReemplazoPersonaId { get; init; }
+
+    public EstadoSolicitud Estado { get; set; } = EstadoSolicitud.PendienteReemplazo;
+
+    /// <summary>Motivo que escribe quien solicita: puede traer datos personales.</summary>
+    public string? Motivo { get; init; }
+
+    /// <summary>Turno creado para el reemplazo al aprobar.</summary>
+    public Guid? TurnoNuevoId { get; set; }
+
+    /// <summary>Quien aprobó o rechazó (con <c>atlas.soporte.aprobar</c>).</summary>
+    public Guid? ResueltaPorPersonaId { get; set; }
+
+    public DateTimeOffset? ResueltaEn { get; set; }
+}
+
+/// <summary>
+/// Un paso de una solicitud de cambio (historial completo: quién, cuándo, qué y su nota). La llave de idempotencia la
+/// manda el cliente con cada acción: si una acción hecha sin conexión se reenvía, el servidor la reconoce y no la repite
+/// (ATLAS-ADR-0032).
+/// </summary>
+public sealed class EventoSolicitudCambio : Entidad
+{
+    public required Guid SolicitudId { get; init; }
+
+    public required AccionSolicitud Accion { get; init; }
+
+    public required Guid PersonaId { get; init; }
+
+    /// <summary>Nota de quien actúa: puede traer datos personales.</summary>
+    public string? Nota { get; init; }
+
+    /// <summary>Única: la acción con esta llave ya se hizo.</summary>
+    public required Guid LlaveIdempotencia { get; init; }
+
+    /// <summary>Cuándo la hizo la persona en su dispositivo (puede ser antes de enviarla, si estaba sin conexión).</summary>
+    public DateTimeOffset? HechaEn { get; init; }
 }
 
 /// <summary>
@@ -201,6 +260,8 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
     public DbSet<Ausencia> Ausencias => Set<Ausencia>();
     public DbSet<FestivoAdicional> FestivosAdicionales => Set<FestivoAdicional>();
     public DbSet<Compensacion> Compensaciones => Set<Compensacion>();
+    public DbSet<SolicitudCambio> SolicitudesCambio => Set<SolicitudCambio>();
+    public DbSet<EventoSolicitudCambio> EventosSolicitud => Set<EventoSolicitudCambio>();
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion) =>
         ConfigurarOpciones(opciones, cadenaConexion, TablaHistorial);
@@ -297,12 +358,50 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
 
         modelBuilder.Entity<Compensacion>(e =>
         {
-            e.ToTable(Prefijo + "compensacion", t => t.HasComment("Días compensados por turnos; el flujo llega en la HU 2.9."));
+            e.ToTable(Prefijo + "compensacion", t =>
+            {
+                t.HasComment("Días compensados por turnos: a quién, qué día, quién aprobó y si ya se tomó (HU 2.9).");
+                t.HasCheckConstraint("ck_soporte_compensacion_tomada", "estado <> 'tomada' OR fecha_compensada IS NOT NULL");
+            });
             e.Property(c => c.Id).ValueGeneratedNever();
             Enum(e.Property(c => c.Estado));
             e.Property(c => c.Nota).HasMaxLength(LargoObservacion).HasComment(Pii);
             e.HasOne<Turno>().WithMany().HasForeignKey(c => c.TurnoId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(c => new { c.PersonaId, c.Estado });
+            // Una compensación por turno y persona: reimportar el Excel o repetir la acción no la duplica.
+            e.HasIndex(c => new { c.TurnoId, c.PersonaId }).IsUnique();
+        });
+
+        modelBuilder.Entity<SolicitudCambio>(e =>
+        {
+            e.ToTable(Prefijo + "solicitud_cambio", t =>
+            {
+                t.HasComment("Solicitudes de cambio de turno: solicitud, aceptación del reemplazo y aprobación (HU 2.9).");
+                t.HasCheckConstraint("ck_soporte_solicitud_cambio_personas", "solicitante_persona_id <> reemplazo_persona_id");
+            });
+            e.Property(s => s.Id).ValueGeneratedNever();
+            Enum(e.Property(s => s.Estado));
+            e.Property(s => s.Motivo).HasMaxLength(LargoObservacion).HasComment(Pii);
+            e.HasOne<Turno>().WithMany().HasForeignKey(s => s.TurnoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Turno>().WithMany().HasForeignKey(s => s.TurnoNuevoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<EquipoSoporte>().WithMany().HasForeignKey(s => s.EquipoId).OnDelete(DeleteBehavior.Restrict);
+            // A lo sumo una solicitud abierta por turno.
+            e.HasIndex(s => s.TurnoId).IsUnique().HasFilter("estado IN ('pendiente_reemplazo', 'pendiente_aprobacion')")
+                .HasDatabaseName("ux_soporte_solicitud_cambio_abierta");
+            e.HasIndex(s => new { s.EquipoId, s.Estado });
+            e.HasIndex(s => s.SolicitantePersonaId);
+            e.HasIndex(s => s.ReemplazoPersonaId);
+        });
+
+        modelBuilder.Entity<EventoSolicitudCambio>(e =>
+        {
+            e.ToTable(Prefijo + "solicitud_evento", t => t.HasComment("Historial de cada solicitud de cambio, con la llave de idempotencia de cada acción."));
+            e.Property(v => v.Id).ValueGeneratedNever();
+            Enum(e.Property(v => v.Accion));
+            e.Property(v => v.Nota).HasMaxLength(LargoObservacion).HasComment(Pii);
+            e.HasOne<SolicitudCambio>().WithMany().HasForeignKey(v => v.SolicitudId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(v => v.LlaveIdempotencia).IsUnique().HasDatabaseName("ux_soporte_solicitud_evento_llave");
+            e.HasIndex(v => v.SolicitudId);
         });
 
         // Ninguna entidad tiene OrganizacionId: el predicado no agrega filtros, pero se llama como en todo módulo para que

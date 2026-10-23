@@ -188,6 +188,74 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         ]);
       case '/api/v1/soporte/ausencias':
         return json(route, []);
+      // Cambios de turno y compensaciones (HU 2.9): una solicitud por aprobar con nombres largos y una compensación.
+      case '/api/v1/soporte/solicitudes-cambio': {
+        const persona = (id: string, nombre: string) => ({ id, nombre, correo: null, cargo: null, telefono: null });
+        return json(route, [
+          {
+            id: 'sc1',
+            turno: {
+              id: 't1', equipo: { id: 'e2', nombre: 'Operaciones' }, fecha: '2026-10-31', persona: persona('p2', 'Persona Demo Con Un Nombre Bastante Largo'),
+              horaInicio: '08:00', horaFin: '12:00', estado: 'programado', origen: 'manual', turnoReemplazadoId: null, festivo: null, observacion: null, requiereRevision: false,
+            },
+            solicitante: persona('p2', 'Persona Demo Con Un Nombre Bastante Largo'),
+            reemplazo: persona('p3', 'Otra Persona Demo Con Apellidos Largos'),
+            estado: 'pendiente_aprobacion', motivo: 'Cita médica programada desde hace semanas', turnoNuevoId: null, resueltaPor: null, resueltaEn: null,
+            creadaEn: '2026-10-23T15:00:00Z',
+            historial: [
+              { accion: 'solicitada', persona: { id: 'p2', nombre: 'Persona Demo Con Un Nombre Bastante Largo' }, nota: 'Cita médica', ocurridoEn: '2026-10-23T15:00:00Z', hechaEn: null },
+              { accion: 'aceptada', persona: { id: 'p3', nombre: 'Otra Persona Demo Con Apellidos Largos' }, nota: null, ocurridoEn: '2026-10-23T16:00:00Z', hechaEn: '2026-10-23T15:30:00Z' },
+            ],
+            puedeResponder: false, puedeResolver: opciones.permisos.includes('atlas.soporte.aprobar'), puedeCancelar: false,
+          },
+        ]);
+      }
+      case '/api/v1/soporte/compensaciones/pendientes':
+        return json(route, {
+          equipoId: null,
+          total: 1,
+          personas: [
+            {
+              persona: { id: 'p3', nombre: 'Otra Persona Demo Con Apellidos Largos', correo: null, cargo: null, telefono: null },
+              pendientes: 1, sinFecha: 1, proxima: null,
+              compensaciones: [
+                {
+                  id: 'c1', turno: { id: 't0', fecha: '2026-10-17', equipo: { id: 'e1', nombre: 'Desarrollo TI' } },
+                  persona: { id: 'p3', nombre: 'Otra Persona Demo Con Apellidos Largos', correo: null, cargo: null, telefono: null },
+                  fechaCompensada: null, estado: 'pendiente', aprobadaPor: null, nota: null, puedeCambiar: opciones.permisos.includes('atlas.soporte.aprobar'),
+                  creadaEn: '2026-10-18T12:00:00Z',
+                },
+              ],
+            },
+          ],
+        });
+      // Importador del Excel (HU 2.7): una vista previa ficticia con interpretaciones, un caso ambiguo y una persona nueva.
+      case '/api/v1/soporte/importacion/vista-previa':
+        return json(route, {
+          equipo: { id: 'e1', nombre: 'Desarrollo TI' },
+          hoja: 'Rotacion Soporte',
+          huella: 'h1',
+          resumen: { filas: 2, importadas: 1, yaImportadas: 0, omitidas: 1, turnos: 2, compensaciones: 1, personasInactivas: 0, participantes: 1, generadosQuitados: 0, interpretaciones: 3, ambiguos: 1 },
+          filas: [
+            {
+              fila: 2, fecha: '2026-06-27', textoFecha: '46200', estado: 'aplicado', observacion: 'Compensado: lo cubrió alguien del equipo de soporte del sábado',
+              responsable: { texto: 'persona demo con un nombre bastante largo', clave: 'persona demo con un nombre bastante largo', coincidencia: 'exacta', personaId: 'p2', nombre: 'Persona Demo Con Un Nombre Bastante Largo', nueva: false },
+              reemplazo: null, compensacion: null, requiereRevision: true, accion: 'crear', motivo: null,
+              interpretaciones: ['Fecha serial de Excel 46200 → 27/06/2026.', '«persona demo con un nombre bastante largo» es Persona Demo Con Un Nombre Bastante Largo (sin tildes ni mayúsculas).'],
+              ambiguedades: ['Compensado «lo cubrió alguien del equipo de soporte del sábado» no es una fecha ni dice «reemplazo»: queda en la observación para revisión.'],
+            },
+            {
+              fila: 3, fecha: '2026-07-04', textoFecha: '2026-07-04', estado: 'aplicado', observacion: null,
+              responsable: { texto: 'Persona Ficticia', clave: 'persona ficticia', coincidencia: 'ninguna', personaId: null, nombre: null, nueva: false },
+              reemplazo: null, compensacion: null, requiereRevision: false, accion: 'omitir',
+              motivo: '«Persona Ficticia» no existe en Atlas: confirma crearla como persona inactiva para importar la fila.', interpretaciones: [], ambiguedades: [],
+            },
+          ],
+          personasNuevas: [{ clave: 'persona ficticia', nombre: 'Persona Ficticia', filas: 1, ultimaFecha: '2026-07-04', confirmada: false }],
+          nombresAmbiguos: [],
+          participantesNuevos: [{ personaId: 'p2', nombre: 'Persona Demo Con Un Nombre Bastante Largo', activo: true }],
+          avisos: ['Hay personas del Excel que no existen en Atlas: confirma crearlas inactivas o sus filas no se importan.'],
+        });
       case '/api/v1/soporte/festivos':
         return json(route, [{ fecha: '2026-12-25', nombre: 'Navidad', tipo: 'fijo', trasladado: false, id: null }]);
       default: {

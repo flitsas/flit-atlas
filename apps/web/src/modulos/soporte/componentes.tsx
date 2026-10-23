@@ -1,10 +1,12 @@
-import { Mail, Phone, TriangleAlert } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { CloudOff, Mail, Phone, TriangleAlert } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 
 import { ErrorApi } from '../../app/api';
 import { iniciales } from '../../app/ui/formato';
-import { cn, Insignia } from '../../app/ui/Tarjeta';
+import { Boton, cn, Insignia } from '../../app/ui/Tarjeta';
+import { type AccionEncolada, descartar, enviarPendientes } from '../../pwa/cola';
+import { useEnLinea } from '../../pwa/conexion';
 import { type EstadoTurno, horario, TEXTO_ESTADO, TEXTO_ORIGEN, type Turno } from './api';
 import { formatearDiaLargo } from './fechas';
 
@@ -44,9 +46,9 @@ export function AvisoPendiente({ children, enlace }: { children: ReactNode; enla
   return (
     <div
       role="note"
-      className="flex items-start gap-2 rounded-xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-3 text-sm text-[var(--badge-warning-fg)]"
+      className="flex items-start gap-2 rounded-xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-3 text-sm text-foreground"
     >
-      <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--badge-warning-fg)]" aria-hidden="true" />
       <p className="min-w-0">
         {children}{' '}
         {enlace && (
@@ -208,5 +210,54 @@ export function Opciones<T extends string>({
         </label>
       ))}
     </fieldset>
+  );
+}
+
+/**
+ * Acciones de soporte hechas sin conexión y pendientes de enviar (ATLAS-ADR-0032): se envían solas al reconectar y se
+ * pueden reintentar a mano (donde no hay Background Sync). Las que el servidor rechazó muestran su motivo y se descartan.
+ */
+export function PendientesDeEnviar({ acciones }: { acciones: readonly AccionEncolada[] }) {
+  const enLinea = useEnLinea();
+  const [enviando, setEnviando] = useState(false);
+  if (acciones.length === 0) return null;
+  return (
+    <section
+      aria-label="Pendientes de enviar"
+      className="flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-3 text-sm text-foreground"
+    >
+      <p className="flex items-center gap-2 font-semibold">
+        <CloudOff className="size-4 shrink-0" aria-hidden="true" />
+        {acciones.length === 1 ? '1 acción pendiente de enviar' : `${acciones.length} acciones pendientes de enviar`}
+      </p>
+      <ul className="flex min-w-0 flex-col gap-1">
+        {acciones.map((a) => (
+          <li key={a.llave} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <span className="min-w-0 break-words">
+              {a.descripcion}
+              {a.error ? <span className="block text-xs">No se pudo: {a.error}</span> : <span className="block text-xs">Pendiente de enviar</span>}
+            </span>
+            {a.error && (
+              <Boton variante="secundario" onClick={() => void descartar(a.llave)}>
+                Descartar
+              </Boton>
+            )}
+          </li>
+        ))}
+      </ul>
+      {acciones.some((a) => !a.error) && (
+        <Boton
+          variante="secundario"
+          className="self-start"
+          disabled={!enLinea || enviando}
+          onClick={() => {
+            setEnviando(true);
+            void enviarPendientes().finally(() => setEnviando(false));
+          }}
+        >
+          {enLinea ? 'Reintentar ahora' : 'Sin conexión: se envía al reconectar'}
+        </Boton>
+      )}
+    </section>
   );
 }

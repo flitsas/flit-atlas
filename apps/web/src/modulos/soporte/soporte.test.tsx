@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../app/App';
 import { MODULOS_REGISTRADOS } from '../../app/modulos/registro';
 import { resolverNavegacion } from '../../app/modulos/resolver';
+import { vaciarCola } from '../../pwa/cola';
 import { textoCupo } from './api';
 import { cuadriculaDelMes, diaSemana, formatearDiaLargo, hoy, lunesDe, sabadoDesde, sumarDias, sumarMeses } from './fechas';
 import { moduloSoporte } from './modulo';
@@ -48,12 +49,75 @@ const turno = (id: string, fecha: string, nombre: string, eq = DESARROLLO) => ({
 interface Opciones {
   permisos: string[];
   tipo?: 'empleado' | 'externo';
+  /** El primer turno es de la persona en sesión (para pedir el cambio). */
+  turnoPropio?: boolean;
 }
+
+const fila = (n: number, accion: 'crear' | 'omitir', extra: Record<string, unknown> = {}) => ({
+  fila: n,
+  fecha: '2026-06-13',
+  textoFecha: '2026-06-13',
+  responsable: { texto: 'persona demo uno', clave: 'persona demo uno', coincidencia: 'exacta', personaId: 'p-t1', nombre: 'Persona Demo Uno', nueva: false },
+  estado: 'aplicado',
+  reemplazo: null,
+  compensacion: null,
+  observacion: null,
+  requiereRevision: false,
+  accion,
+  motivo: null,
+  interpretaciones: ['«persona demo uno» es Persona Demo Uno (sin tildes ni mayúsculas).'],
+  ambiguedades: [],
+  ...extra,
+});
+
+function vistaPreviaImportacion(confirmada: boolean) {
+  return {
+    equipo: DESARROLLO,
+    hoja: 'Rotacion Soporte',
+    huella: confirmada ? 'hi2' : 'hi1',
+    resumen: {
+      filas: 2, importadas: confirmada ? 2 : 1, yaImportadas: 0, omitidas: confirmada ? 0 : 1, turnos: confirmada ? 2 : 1, compensaciones: 0,
+      personasInactivas: confirmada ? 1 : 0, participantes: 1, generadosQuitados: 0, interpretaciones: 1, ambiguos: confirmada ? 1 : 0,
+    },
+    filas: [
+      fila(2, 'crear'),
+      fila(3, confirmada ? 'crear' : 'omitir', {
+        responsable: { texto: 'Persona Ficticia', clave: 'persona ficticia', coincidencia: 'ninguna', personaId: null, nombre: null, nueva: confirmada },
+        motivo: confirmada ? null : '«Persona Ficticia» no existe en Atlas: confirma crearla como persona inactiva para importar la fila.',
+        interpretaciones: [],
+        requiereRevision: confirmada,
+        ambiguedades: confirmada ? ['Compensado «lo cubrió alguien» no es una fecha ni dice «reemplazo»: queda en la observación para revisión.'] : [],
+      }),
+    ],
+    personasNuevas: [{ clave: 'persona ficticia', nombre: 'Persona Ficticia', filas: 1, ultimaFecha: '2026-06-20', confirmada }],
+    nombresAmbiguos: [],
+    participantesNuevos: [{ personaId: 'p-t1', nombre: 'Persona Demo Uno', activo: true }],
+    avisos: confirmada ? [] : ['Hay personas del Excel que no existen en Atlas: confirma crearlas inactivas o sus filas no se importan.'],
+  };
+}
+
+const solicitud = (puede: { responder?: boolean; resolver?: boolean }) => ({
+  id: 'sc1',
+  turno: turno('t1', SABADO, 'Usuaria Demo'),
+  solicitante: { id: 'p-x', nombre: 'Persona Demo Dos', correo: null, cargo: null, telefono: null },
+  reemplazo: { id: 'yo', nombre: 'Usuaria Demo', correo: null, cargo: null, telefono: null },
+  estado: puede.resolver ? 'pendiente_aprobacion' : 'pendiente_reemplazo',
+  motivo: 'Cita médica',
+  turnoNuevoId: null,
+  resueltaPor: null,
+  resueltaEn: null,
+  creadaEn: '2026-10-23T15:00:00Z',
+  historial: [{ accion: 'solicitada', persona: { id: 'p-x', nombre: 'Persona Demo Dos' }, nota: 'Cita médica', ocurridoEn: '2026-10-23T15:00:00Z', hechaEn: null }],
+  puedeResponder: puede.responder ?? false,
+  puedeResolver: puede.resolver ?? false,
+  puedeCancelar: false,
+});
 
 function apiFalsa(opciones: Opciones) {
   const llamadas: { ruta: string; init?: RequestInit }[] = [];
+  const propio = { ...turno('t1', SABADO, 'Usuaria Demo'), persona: { id: 'yo', nombre: 'Usuaria Demo', correo: 'yo@ejemplo.com', cargo: null, telefono: null } };
   const turnos = [
-    turno('t1', SABADO, 'Persona Demo Uno'),
+    opciones.turnoPropio ? propio : turno('t1', SABADO, 'Persona Demo Uno'),
     turno('t3', SABADO, 'Persona Demo Tres', OPERACIONES),
     turno('t4', SABADO, 'Persona Demo Cuatro', OPERACIONES),
     turno('t2', sumarDias(SABADO, 7), 'Persona Demo Dos'),
@@ -103,7 +167,20 @@ function apiFalsa(opciones: Opciones) {
       if (ruta0 === '/api/v1/soporte/canal')
         return json({ fecha: SABADO, configurado: true, canal: 'soporte@ejemplo.com', horaInicio: '08:00', horaFin: '12:00', haySoporte: true });
       if (ruta0.endsWith('/participantes'))
-        return json([{ id: 'pa1', equipoId: 'e1', personaId: 'p-t1', nombre: 'Persona Demo Uno', correo: 't1@ejemplo.com', orden: 1, activo: true, estadoPersona: 'activa' }]);
+        return json([
+          { id: 'pa1', equipoId: 'e1', personaId: 'p-t1', nombre: 'Persona Demo Uno', correo: 't1@ejemplo.com', orden: 1, activo: true, estadoPersona: 'activa' },
+          { id: 'pa2', equipoId: 'e1', personaId: 'yo', nombre: 'Usuaria Demo', correo: 'yo@ejemplo.com', orden: 2, activo: true, estadoPersona: 'activa' },
+        ]);
+      if (ruta0 === '/api/v1/soporte/importacion/vista-previa') {
+        const cuerpo = JSON.parse(String(init?.body)) as { crearInactivas: string[] };
+        return json(vistaPreviaImportacion(cuerpo.crearInactivas.length > 0));
+      }
+      if (ruta0 === '/api/v1/soporte/importacion/confirmar') return json({ importacionId: 'i1', informe: vistaPreviaImportacion(true) });
+      if (ruta0 === '/api/v1/soporte/solicitudes-cambio' && init?.method === 'POST') return json(solicitud({}), 201);
+      if (ruta0 === '/api/v1/soporte/solicitudes-cambio')
+        return json(opciones.permisos.includes('atlas.soporte.aprobar') ? [solicitud({ resolver: true })] : [solicitud({ responder: true })]);
+      if (ruta0.startsWith('/api/v1/soporte/solicitudes-cambio/')) return json({ ...solicitud({}), estado: 'pendiente_aprobacion' });
+      if (ruta0 === '/api/v1/soporte/compensaciones/pendientes') return json({ equipoId: null, total: 0, personas: [] });
       if (ruta0 === '/api/v1/soporte/configuracion')
         return json({ horaInicioPorDefecto: '08:00', horaFinPorDefecto: '12:00', reglaFestivos: 'sin_turno', diasAnticipacionRecordatorio: null, canalExterno: null, actualizadoEn: null });
       if (ruta0 === '/api/v1/soporte/ausencias') return json([]);
@@ -140,7 +217,11 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  await vaciarCola();
+});
 
 describe('fechas del soporte', () => {
   it('calcula sábados, lunes y la cuadrícula del mes sin depender del huso del dispositivo', () => {
@@ -251,5 +332,80 @@ describe('pantallas de soporte', () => {
 
     expect(await screen.findByText('soporte@ejemplo.com')).toBeInTheDocument();
     expect(screen.queryByText(/Persona Demo/)).toBeNull();
+  });
+
+  it('el importador muestra la vista previa con el informe, confirma la persona inactiva y luego importa con la huella', async () => {
+    const llamadas = apiFalsa({ permisos: ['atlas.soporte.ver', 'atlas.soporte.gestionar'] });
+    window.history.pushState({}, '', '/soporte/importar');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Importar el Excel de la rotación' })).toBeInTheDocument();
+    const archivo = new File([new Uint8Array([80, 75, 3, 4])], 'rotacion.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    fireEvent.change(screen.getByLabelText(/Archivo .xlsx/), { target: { files: [archivo] } });
+    const ver = screen.getByRole('button', { name: 'Ver vista previa' });
+    await vi.waitFor(() => expect(ver).toBeEnabled());
+    fireEvent.click(ver);
+
+    const previa = await screen.findByRole('region', { name: 'Vista previa de la importación' });
+    expect(within(previa).getByText(/no existen en Atlas: confirma crearlas inactivas/)).toBeInTheDocument();
+    expect(within(previa).getByText('«persona demo uno» es Persona Demo Uno (sin tildes ni mayúsculas).')).toBeInTheDocument();
+    expect(within(previa).getByRole('article', { name: 'Fila 3' })).toHaveTextContent('Se omite');
+    const primera = JSON.parse(String(llamadas.find((l) => l.ruta.endsWith('/importacion/vista-previa'))?.init?.body));
+    expect(primera).toMatchObject({ equipoId: 'e1', contenido: 'UEsDBA==', crearInactivas: [], agregarParticipantes: true });
+
+    fireEvent.click(within(previa).getByRole('checkbox', { name: /Crear a Persona Ficticia como persona inactiva/ }));
+    expect(await within(previa).findByRole('button', { name: 'Importar 2 filas' })).toBeInTheDocument();
+    expect(within(previa).getByRole('list', { name: 'Casos ambiguos' })).toBeInTheDocument();
+    fireEvent.click(within(previa).getByRole('button', { name: 'Importar 2 filas' }));
+
+    expect(await screen.findByText(/Se importaron 2 filas en Desarrollo TI: 2 turnos, 0 compensaciones y 1 personas inactivas nuevas/)).toBeInTheDocument();
+    const confirmacion = JSON.parse(String(llamadas.find((l) => l.ruta.endsWith('/importacion/confirmar'))?.init?.body));
+    expect(confirmacion).toMatchObject({ huella: 'hi2', crearInactivas: ['persona ficticia'] });
+  });
+
+  it('sin conexión, la solicitud de cambio queda pendiente de enviar y se envía sola al reconectar con su llave', async () => {
+    movil = true;
+    const llamadas = apiFalsa({ permisos: ['atlas.soporte.ver', 'atlas.soporte.solicitar_cambio'], turnoPropio: true });
+    window.history.pushState({}, '', '/soporte');
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Solicitar el cambio del turno del/ }));
+    const hoja = await screen.findByRole('form', { name: 'Solicitud de cambio' });
+    fireEvent.click(await within(hoja).findByRole('radio', { name: 'Persona Demo Uno' }));
+    const enLinea = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    fireEvent.click(within(hoja).getByRole('button', { name: 'Solicitar el cambio' }));
+
+    expect(await screen.findByText(/Sin conexión: quedó pendiente de enviar/)).toBeInTheDocument();
+    const pendientes = await screen.findByRole('region', { name: 'Pendientes de enviar' });
+    expect(within(pendientes).getByText('1 acción pendiente de enviar')).toBeInTheDocument();
+    expect(await screen.findByText('Cambio pendiente de enviar')).toBeInTheDocument();
+    expect(llamadas.some((l) => l.ruta === '/api/v1/soporte/solicitudes-cambio' && l.init?.method === 'POST')).toBe(false);
+
+    enLinea.mockReturnValue(true);
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await vi.waitFor(() => expect(screen.queryByRole('region', { name: 'Pendientes de enviar' })).toBeNull());
+    const enviada = llamadas.find((l) => l.ruta === '/api/v1/soporte/solicitudes-cambio' && l.init?.method === 'POST');
+    const cuerpo = JSON.parse(String(enviada?.init?.body)) as Record<string, string>;
+    expect(cuerpo).toMatchObject({ turnoId: 't1', reemplazoPersonaId: 'p-t1' });
+    expect(cuerpo.llaveIdempotencia).toMatch(/^[0-9a-f-]{36}$/);
+    expect(cuerpo.hechaEn).toBeTruthy();
+  });
+
+  it('el reemplazo acepta desde Cambios de turno y quien aprueba ve la solicitud por aprobar', async () => {
+    const llamadas = apiFalsa({ permisos: ['atlas.soporte.ver', 'atlas.soporte.solicitar_cambio'] });
+    window.history.pushState({}, '', '/soporte/cambios');
+    render(<App />);
+
+    const tarjeta = await screen.findByRole('article', { name: /Cambio del turno del/ });
+    expect(within(tarjeta).getByText('Espera al reemplazo')).toBeInTheDocument();
+    expect(within(tarjeta).getByRole('list', { name: 'Historial' })).toHaveTextContent('Solicitó el cambio');
+    fireEvent.click(within(tarjeta).getByRole('button', { name: 'Aceptar el reemplazo' }));
+    expect(await screen.findByText('Aceptaste el reemplazo.')).toBeInTheDocument();
+    const respuesta = llamadas.find((l) => l.ruta === '/api/v1/soporte/solicitudes-cambio/sc1/respuesta');
+    expect(JSON.parse(String(respuesta?.init?.body))).toMatchObject({ acepta: true });
+    expect(screen.getByText('No hay compensaciones pendientes.')).toBeInTheDocument();
   });
 });

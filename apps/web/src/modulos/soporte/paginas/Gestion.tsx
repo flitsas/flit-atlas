@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowUp, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, FileSpreadsheet, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -57,6 +57,13 @@ export default function Gestion() {
       </Link>
       <h1 className="text-2xl font-semibold">Gestionar el soporte</h1>
       <MostrarAviso aviso={aviso} />
+      <Link
+        to="/soporte/importar"
+        className="inline-flex min-h-toque items-center gap-2 self-start rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-atlas-activo"
+      >
+        <FileSpreadsheet className="size-4" aria-hidden="true" />
+        Importar el Excel de la rotación
+      </Link>
       <SeccionConfiguracion alAvisar={setAviso} />
       <SeccionEquipos equipos={equipos.data ?? []} alAvisar={setAviso} />
       {gestionables.length > 0 && equipo && (

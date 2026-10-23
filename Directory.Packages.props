@@ -49,6 +49,9 @@
     <PackageVersion Include="MimeKit" Version="4.18.1" />
     <!-- QR del TOTP como SVG (HU 1.5). MIT, sin dependencias. -->
     <PackageVersion Include="QRCoder" Version="1.8.0" />
+    <!-- Lectura del .xlsx de la rotación de soporte (HU 2.7, ATLAS-ADR-0029). SDK de Open XML de Microsoft, MIT; 3.5.1 del
+         18/03/2026. Solo depende de System.IO.Packaging (MIT). Se prefirió a ClosedXML por tener menos dependencias. -->
+    <PackageVersion Include="DocumentFormat.OpenXml" Version="3.5.1" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />

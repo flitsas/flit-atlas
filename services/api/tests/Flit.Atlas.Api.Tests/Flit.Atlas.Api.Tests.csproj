@@ -15,6 +15,10 @@
     <ProjectReference Include="..\..\src\Flit.Atlas.Api\Flit.Atlas.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- El generador del .xlsx ficticio de la rotación (HU 2.7) es el mismo de las pruebas del módulo. -->
+    <Compile Include="..\Flit.Atlas.Modulos.Soporte.Tests\ExcelFicticio.cs" Link="Soporte\ExcelFicticio.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>
