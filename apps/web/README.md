@@ -44,7 +44,7 @@ Cada `src/modulos/<id>/modulo.ts` exporta un `ModuloAtlas` (prompt maestro §10)
 
 - Bandera: la de `GET /api/v1/plataforma/banderas` (tabla `plataforma_modulo`) o, si el servidor no la define, `banderaPorDefecto`. Con la bandera apagada, el módulo desaparece de la navegación, de Inicio y de la búsqueda, y su ruta responde «Esta página no existe».
 - Permiso: mientras `/yo` no traiga `permisos` (llegan con la HU 1.4) no se filtra. Con la lista, se filtran rutas, entradas y widgets por su `permiso`.
-- Los seis módulos del MVP (Catálogo, Equipo, Soporte, Contratos, Documentación y Asistente) están en `estado: 'proximamente'` con su página «Próximamente».
+- El Catálogo ya está disponible (HU 2.1); los demás módulos del MVP (Equipo, Soporte, Contratos, Documentación y Asistente) están en `estado: 'proximamente'` con su página «Próximamente».
 
 Para apagar un módulo en un ambiente: `INSERT INTO atlas.plataforma_modulo (id, activo, organizaciones_habilitadas, actualizado_en) VALUES ('contratos', false, '{}', now());`.
 

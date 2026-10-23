@@ -76,6 +76,13 @@ public interface IModuloAtlas
     void RegistrarServicios(IServiceCollection servicios, IConfiguration configuracion);
 
     /// <summary>
+    /// Datos iniciales del módulo (p. ej. la semilla del catálogo, ATLAS-ADR-0028). Lo llama el migrador después de migrar
+    /// el núcleo y todos los módulos, con un alcance de servicios que trae los contextos de datos (no los servicios de
+    /// atlas-api). Debe ser <b>idempotente</b>: el migrador corre en cada despliegue. Por defecto no hace nada.
+    /// </summary>
+    Task SembrarAsync(IServiceProvider servicios, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
     /// Sus endpoints, en un grupo que el host ya montó en <c>/api/v1/&lt;id&gt;</c> con la etiqueta del módulo, sesión
     /// obligatoria y la bandera (404 si está apagada para la organización de la persona). Cada endpoint declara su
     /// permiso con <c>RequierePermiso</c>.

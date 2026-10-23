@@ -1,13 +1,17 @@
 import type { ModuloAtlas } from '../../app/modulos/contrato';
 
-/** Catálogo de aplicativos (prompt maestro §8.1). Llega en F2; mientras tanto, página «Próximamente». */
+/**
+ * Catálogo de aplicativos (prompt maestro §8.1, HU 2.1, ATLAS-ADR-0028): listado con búsqueda y filtros y la ficha de
+ * cada aplicativo, con las pestañas que aportan los demás módulos (`pestanasFicha` en su manifiesto).
+ */
 export const moduloCatalogo: ModuloAtlas = {
   id: 'catalogo',
   nombre: 'Catálogo de aplicativos',
   descripcion: 'Inventario único de productos, módulos y servicios de FLIT, con su estado, repo, criticidad y responsables.',
   icono: 'catalogo',
-  estado: 'proximamente',
-  rutas: [{ path: '/catalogo', permiso: 'atlas.catalogo.ver', cargar: () => import('./paginas/Inicio') }],
+  estado: 'disponible',
+  // Una sola ruta: el listado (/catalogo) y la ficha (/catalogo/<slug>) se reparten dentro de la página.
+  rutas: [{ path: '/catalogo', permiso: 'atlas.catalogo.ver', cargar: () => import('./paginas/Catalogo') }],
   navegacion: [{ etiqueta: 'Catálogo', ruta: '/catalogo', movil: 'mas', orden: 20 }],
   widgetsInicio: [
     {
@@ -18,7 +22,8 @@ export const moduloCatalogo: ModuloAtlas = {
       cargar: () => import('./widgets/Aplicativos'),
     },
   ],
-  busqueda: { proveedor: 'catalogo', tipos: ['aplicativo', 'modulo', 'servicio'] },
+  // El proveedor `catalogo` del servidor (BusquedaCatalogo) entrega estos tipos.
+  busqueda: { proveedor: 'catalogo', tipos: ['producto', 'modulo', 'servicio'] },
   offline: { recursos: ['/api/v1/catalogo/aplicativos'], ttlHoras: 24 },
   bandera: 'modulo.catalogo',
   banderaPorDefecto: true,

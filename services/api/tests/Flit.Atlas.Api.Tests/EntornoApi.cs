@@ -79,6 +79,7 @@ public sealed class EntornoApi : IAsyncLifetime
         // Lo mismo que hace el migrador después de las migraciones (ATLAS-ADR-0023 y ATLAS-ADR-0026).
         await ExtensionesModulos.RegistrarBanderasAsync(plataforma, ModulosAtlas.Registrados, TimeProvider.System);
         await SembradorPermisos.SembrarAsync(plataforma, CatalogoPermisos.Crear(ModulosAtlas.Manifiestos));
+        await ExtensionesModulos.SembrarModulosAsync(servicios, ModulosAtlas.Registrados);
     }
 
     public async ValueTask DisposeAsync()

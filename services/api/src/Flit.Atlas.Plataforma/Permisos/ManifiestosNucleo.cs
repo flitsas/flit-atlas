@@ -29,17 +29,13 @@ public static class PermisosPlataforma
 /// <summary>
 /// Manifiestos de permisos del núcleo: la plataforma y la lista base del §7.4 de los módulos que llegan en F2–F8
 /// (ATLAS-ADR-0023). Los permisos base viven aquí para que la matriz y los roles estén completos desde F1 y la PWA filtre
-/// la navegación desde ya; cuando llegue cada módulo, usa estos códigos (son contrato) y declara en su propio manifiesto
-/// solo los permisos nuevos. Identidad agrega el suyo en <c>Flit.Atlas.Identidad</c>.
+/// la navegación desde ya; cuando llega cada módulo, su manifiesto se <b>muda</b> de aquí a su proyecto con los mismos
+/// códigos (son contrato) y las mismas concesiones, más los permisos nuevos: dos manifiestos con el mismo id no pueden
+/// convivir. El catálogo ya se mudó (<c>PermisosCatalogo</c>, ATLAS-ADR-0028). Identidad agrega el suyo en
+/// <c>Flit.Atlas.Identidad</c>.
 /// </summary>
 public static class ManifiestosNucleo
 {
-    public static ManifiestoPermisos Catalogo { get; } = new("catalogo", "Catálogo",
-    [
-        new("atlas.catalogo.ver", "Ver el catálogo de aplicativos y sus fichas.", [.. Empleados]),
-        new("atlas.catalogo.gestionar", "Crear y editar productos, módulos y servicios del catálogo.", LiderTecnico),
-    ], [TiposAlcance.Aplicativo]);
-
     public static ManifiestoPermisos Equipo { get; } = new("equipo", "Equipo y responsables",
     [
         new("atlas.equipo.ver", "Ver personas, responsables y el mapa de carga.", [.. Empleados]),
@@ -96,5 +92,5 @@ public static class ManifiestosNucleo
 
     /// <summary>Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz.</summary>
     public static IReadOnlyList<ManifiestoPermisos> Todos { get; } =
-        [PermisosPlataforma.Manifiesto, Catalogo, Equipo, SoporteSabados, Contratos, Documentacion, Diagramas, Asistente, GobiernoDeIa];
+        [PermisosPlataforma.Manifiesto, Equipo, SoporteSabados, Contratos, Documentacion, Diagramas, Asistente, GobiernoDeIa];
 }

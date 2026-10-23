@@ -60,6 +60,38 @@ export interface BusquedaModulo {
   tipos: string[];
 }
 
+/**
+ * Lo que recibe una pestaña de la ficha del aplicativo (ATLAS-ADR-0028): solo la identidad del aplicativo. La pestaña
+ * pide a su propio módulo lo que necesite (responsables, contratos…); el catálogo no conoce a los demás módulos.
+ */
+export interface AplicativoDeFicha {
+  id: string;
+  slug: string;
+  nombre: string;
+  tipo: 'producto' | 'modulo' | 'servicio';
+  grupo: string;
+}
+
+/** Carga diferida de una pestaña de la ficha: va en el chunk del módulo que la aporta. */
+export type CargadorPestana = () => Promise<{ default: ComponentType<{ aplicativo: AplicativoDeFicha }> }>;
+
+/**
+ * Pestaña que un módulo agrega a la ficha del aplicativo (`/catalogo/<slug>`), la página a la que enlazan todos los
+ * módulos (prompt maestro §8.1). Los espacios previstos son `responsables`, `contratos`, `documentos`, `diagramas`,
+ * `versiones` (versión por ambiente), `soporte` (soporte de turno) e `ia` (casos de IA): con uno de esos `id`, la
+ * pestaña ocupa su espacio (que mientras tanto muestra «Próximamente»); con otro, se agrega después.
+ */
+export interface PestanaFicha {
+  id: string;
+  titulo: string;
+  /** Orden entre las pestañas que no son espacios previstos; los espacios ya tienen el suyo. */
+  orden: number;
+  permiso?: string;
+  /** Solo para estos tipos de aplicativo; todos si no se dice. */
+  tipos?: AplicativoDeFicha['tipo'][];
+  cargar: CargadorPestana;
+}
+
 export interface OfflineModulo {
   /** Recursos de la API que se guardan en IndexedDB si los permisos lo permiten (§11). */
   recursos: string[];
@@ -77,6 +109,8 @@ export interface ModuloAtlas {
   rutas: RutaModulo[];
   navegacion: EntradaNavegacion[];
   widgetsInicio?: WidgetInicio[];
+  /** Pestañas que el módulo agrega a la ficha del aplicativo del catálogo (ATLAS-ADR-0028). */
+  pestanasFicha?: PestanaFicha[];
   busqueda?: BusquedaModulo;
   offline?: OfflineModulo;
   /** Bandera `modulo.<id>`; el servidor es la autoridad (`GET /api/v1/plataforma/banderas`). */
