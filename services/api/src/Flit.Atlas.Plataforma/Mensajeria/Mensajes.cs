@@ -83,7 +83,21 @@ public static class MensajeriaModelBuilderExtensions
     }
 
     /// <summary>
+    /// Agrega un evento declarado a la outbox. Se publica cuando el <c>SaveChanges</c> del llamador confirma la
+    /// transacción. Es la forma que usa el código de producción: el tipo queda en el catálogo que se compara con el
+    /// AsyncAPI (ATLAS-ADR-0021).
+    /// </summary>
+    /// <param name="organizacionId">Organización externa dueña del evento; <c>null</c> si es interno.</param>
+    public static SobreEvento EncolarEvento<TDatos>(
+        this ContextoAtlas contexto, TipoEvento tipo, TDatos datos, Guid? organizacionId = null)
+    {
+        ArgumentNullException.ThrowIfNull(tipo);
+        return contexto.EncolarEvento(tipo.Nombre, tipo.Version, datos, organizacionId);
+    }
+
+    /// <summary>
     /// Agrega un evento a la outbox. Se publica cuando el <c>SaveChanges</c> del llamador confirma la transacción.
+    /// En producción usa la sobrecarga con <see cref="TipoEvento"/>: una prueba rechaza los tipos sueltos en <c>src/</c>.
     /// </summary>
     /// <param name="tipo"><c>atlas.&lt;modulo&gt;.&lt;evento&gt;</c>.</param>
     /// <param name="organizacionId">Organización externa dueña del evento; <c>null</c> si es interno.</param>

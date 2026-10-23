@@ -55,6 +55,48 @@ jobs:
       - name: Pruebas
         run: dotnet test --solution Flit.Atlas.slnx -c Release --no-build
 
+  contratos:
+    # HU 1.7 (ATLAS-ADR-0010 y ATLAS-ADR-0021): lint de los contratos propios con vacuum; el CI falla con errores.
+    # Que atlas.v1.yaml coincida con el código lo comprueba ContratoOpenApiTests en el job dotnet.
+    runs-on: ubuntu-latest
+    env:
+      VACUUM_VERSION: 0.32.0
+      VACUUM_SHA256: 4edffd8e543a4320c1f8cbcd9dfdcba33edbb3e527c77e94bd2c72409ccc85e7
+      OASDIFF_VERSION: 1.33.0
+      OASDIFF_SHA256: 43a4e328e2d13ba1552d760aa68d2485c75c5621f309f6ff64ae895188345247
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Instalar vacuum y oasdiff (binarios fijados y verificados)
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-all-errors -o vacuum.tgz \
+            "https://github.com/daveshanley/vacuum/releases/download/v${VACUUM_VERSION}/vacuum_${VACUUM_VERSION}_linux_x86_64.tar.gz"
+          echo "${VACUUM_SHA256}  vacuum.tgz" | sha256sum -c -
+          curl -fsSL --retry 3 --retry-all-errors -o oasdiff.tgz \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          echo "${OASDIFF_SHA256}  oasdiff.tgz" | sha256sum -c -
+          tar -xzf vacuum.tgz vacuum
+          tar -xzf oasdiff.tgz oasdiff
+          sudo mv vacuum oasdiff /usr/local/bin/
+          rm vacuum.tgz oasdiff.tgz
+      - name: Lint OpenAPI
+        run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi.yaml contracts/openapi/atlas.v1.yaml
+      - name: Lint AsyncAPI
+        run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/asyncapi.yaml contracts/asyncapi/atlas-events.v1.yaml
+      - name: Cambios incompatibles frente a la rama base (solo advierte en F1)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
+          if ! git show "origin/${BASE_REF}:contracts/openapi/atlas.v1.yaml" > base.yaml 2>/dev/null; then
+            echo "La rama base aún no tiene contracts/openapi/atlas.v1.yaml; no hay contra qué comparar."
+            exit 0
+          fi
+          oasdiff breaking base.yaml contracts/openapi/atlas.v1.yaml --format githubactions | sed 's/^::error /::warning /'
+          oasdiff changelog base.yaml contracts/openapi/atlas.v1.yaml --format markdown >> "$GITHUB_STEP_SUMMARY"
+
   go:
     runs-on: ubuntu-latest
     defaults:
@@ -108,9 +150,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Marca FLIT sin ediciones a mano (ATLAS-ADR-0015 y ATLAS-ADR-0020)
+        run: node ../../scripts/marca/sincronizar.mjs --verificar
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm bundle
 
   imagenes:
     # Construye (sin publicar) las imágenes que publica cd.yml, para que un Dockerfile roto no llegue a staging.

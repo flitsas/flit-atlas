@@ -18,5 +18,5 @@ public class ConvertidorEnumSnakeTests
 
     [Fact]
     public void El_largo_es_el_del_valor_mas_largo() =>
-        Assert.Equal("organizacion".Length, ConvertidorEnumSnake<TipoAlcance>.Largo);
+        Assert.Equal("grupo_entra".Length, ConvertidorEnumSnake<OrigenAsignacion>.Largo);
 }

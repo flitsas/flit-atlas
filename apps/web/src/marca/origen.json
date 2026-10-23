@@ -1,0 +1,26 @@
+{
+  "repo": "flitsas/flit",
+  "sha": "ee5011eb40682612bbc51697e3d4d242cc3c6944",
+  "archivos": [
+    {
+      "origen": "packages/ui/src/styles/tokens.css",
+      "destino": "tokens.css",
+      "blob": "ff046015245e4ce3065730bda65cb8bbfbd05b48"
+    },
+    {
+      "origen": "packages/ui/src/tokens.ts",
+      "destino": "tokens.ts",
+      "blob": "a81b9c5cdf1a294e86f61ce02aebb175b2d0857d"
+    },
+    {
+      "origen": "frontend/public/assets/favicon.svg",
+      "destino": "isotipo.svg",
+      "blob": "b324784cedf7ad727ee993f1b1042f5477048313"
+    },
+    {
+      "origen": "frontend/public/assets/iso-flit.svg",
+      "destino": "isotipo-blanco.svg",
+      "blob": "1b22d2d00cda03f29c82cfa18c1668ac7765a815"
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 using System.Globalization;
 using System.Security.Claims;
-using System.Text.Json;
+using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
+using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
@@ -13,6 +14,8 @@ namespace Flit.Atlas.Identidad.Aprovisionamiento;
 
 /// <summary>Lo que sabemos de un empleado al entrar: del token de Entra (o del proveedor simulado) y de Graph.</summary>
 /// <param name="Grupos">Ids de los grupos de Entra; <c>null</c> si no se pudieron leer (no se tocan sus roles).</param>
+/// <param name="AutenticadoEn">Cuándo se autenticó en el proveedor (<c>auth_time</c> de Entra); si falta, ahora.</param>
+/// <param name="Reautenticacion">El ingreso lo pidió una acción sensible (ATLAS-ADR-0022).</param>
 public sealed record CuentaEmpleado(
     string Proveedor,
     string IdExterno,
@@ -22,9 +25,22 @@ public sealed record CuentaEmpleado(
     IReadOnlyCollection<Guid>? Grupos,
     string? Cargo,
     string? Area,
-    IReadOnlyCollection<string> Amr);
+    IReadOnlyCollection<string> Amr,
+    DateTimeOffset? AutenticadoEn = null,
+    bool Reautenticacion = false);
 
 public sealed class CorreoEnUsoException(string mensaje) : InvalidOperationException(mensaje);
+
+/// <summary>La persona no puede entrar: inactiva, suspendida o con la cuenta bloqueada.</summary>
+public sealed class IngresoNoPermitidoException(string motivo)
+    : UnauthorizedAccessException($"Ingreso no permitido: {motivo}.")
+{
+    public const string PersonaInactiva = "persona_inactiva";
+    public const string PersonaSuspendida = "persona_suspendida";
+    public const string CuentaBloqueada = "cuenta_bloqueada";
+
+    public string Motivo { get; } = motivo;
+}
 
 /// <summary>
 /// Aprovisionamiento just-in-time de empleados (prompt maestro §6.1): crea o enlaza la <see cref="Persona"/> y el
@@ -34,6 +50,7 @@ public sealed class CorreoEnUsoException(string mensaje) : InvalidOperationExcep
 public sealed class AprovisionadorEmpleados(
     PlataformaDbContext plataforma,
     UserManager<UsuarioAtlas> usuarios,
+    RegistroSeguridad registro,
     TimeProvider reloj)
 {
     public const string NombreOrganizacionInterna = "FLIT S.A.S.";
@@ -80,9 +97,14 @@ public sealed class AprovisionadorEmpleados(
 
         var organizacion = await OrganizacionInternaAsync(ct);
         var usuario = await usuarios.FindByLoginAsync(cuenta.Proveedor, cuenta.IdExterno);
+        if (usuario is not null && await usuarios.IsLockedOutAsync(usuario))
+        {
+            throw new IngresoNoPermitidoException(IngresoNoPermitidoException.CuentaBloqueada);
+        }
         var persona = usuario is null
             ? await BuscarOCrearPersonaAsync(cuenta, organizacion.Id, ct)
             : await plataforma.Personas.SingleAsync(p => p.Id == usuario.PersonaId, ct);
+        ExigirActiva(persona.Estado);
 
         // Datos que manda Entra o Graph: se refrescan en cada ingreso.
         persona.Nombre = cuenta.Nombre;
@@ -98,21 +120,37 @@ public sealed class AprovisionadorEmpleados(
 
         usuario ??= await CrearUsuarioAsync(persona, cuenta);
 
-        var roles = await RolesVigentesAsync(persona.Id, ahora, ct);
-        plataforma.Auditoria.Add(new EventoAuditoria
-        {
-            OcurridoEn = ahora,
-            ActorTipo = TipoActor.Persona,
-            ActorId = persona.Id.ToString(),
-            OrganizacionId = organizacion.Id,
-            Accion = "identidad.inicio_sesion",
-            RecursoTipo = "usuario",
-            RecursoId = usuario.Id.ToString(),
-            Datos = JsonSerializer.Serialize(new { proveedor = cuenta.Proveedor }),
-        });
-        await plataforma.SaveChangesAsync(ct);
+        // El sello va en la sesión y se lee ANTES de la última comprobación del estado; la suspensión hace lo
+        // contrario (estado y luego sello). Así una suspensión simultánea nunca deja viva esta sesión (ATLAS-ADR-0022).
+        var sello = usuario.SecurityStamp ?? string.Empty;
+        var estado = await plataforma.Personas.AsNoTracking().Where(p => p.Id == persona.Id).Select(p => p.Estado).SingleAsync(ct);
+        ExigirActiva(estado);
 
-        return Principal(usuario, persona, organizacion.Id, roles, cuenta, ahora);
+        var roles = await RolesVigentesAsync(persona.Id, ahora, ct);
+        var datos = new DatosEventoSeguridad
+        {
+            UsuarioId = usuario.Id,
+            PersonaId = persona.Id,
+            OrganizacionId = organizacion.Id,
+            Detalle = new { proveedor = cuenta.Proveedor },
+        };
+        await registro.RegistrarAsync(TiposEventoSeguridad.InicioSesion, datos, ct);
+        if (cuenta.Reautenticacion)
+        {
+            await registro.RegistrarAsync(TiposEventoSeguridad.Reautenticacion, datos, ct);
+        }
+
+        return Principal(usuario, persona, organizacion.Id, roles, cuenta, sello, cuenta.AutenticadoEn ?? ahora);
+    }
+
+    private static void ExigirActiva(EstadoPersona estado)
+    {
+        if (estado != EstadoPersona.Activa)
+        {
+            throw new IngresoNoPermitidoException(estado == EstadoPersona.Suspendida
+                ? IngresoNoPermitidoException.PersonaSuspendida
+                : IngresoNoPermitidoException.PersonaInactiva);
+        }
     }
 
     private async Task<Organizacion> OrganizacionInternaAsync(CancellationToken ct)
@@ -147,10 +185,6 @@ public sealed class AprovisionadorEmpleados(
 
         if (persona is not null)
         {
-            if (persona.Estado != EstadoPersona.Activa)
-            {
-                throw new UnauthorizedAccessException("La persona no está activa en Atlas.");
-            }
             return persona;
         }
 
@@ -219,22 +253,38 @@ public sealed class AprovisionadorEmpleados(
             .Where(a => a.PersonaId == personaId && a.Origen == OrigenAsignacion.GrupoEntra)
             .ToListAsync(ct);
 
-        foreach (var sobrante in actuales.Where(a => !rolesDeGrupos.Contains(a.RolId)))
+        var sobrantes = actuales.Where(a => !rolesDeGrupos.Contains(a.RolId)).ToList();
+        var nuevas = rolesDeGrupos.Where(r => actuales.All(a => a.RolId != r)).Select(rolId => new AsignacionRol
+        {
+            PersonaId = personaId,
+            RolId = rolId,
+            OrganizacionId = organizacionId,
+            VigenteDesde = ahora,
+            Origen = OrigenAsignacion.GrupoEntra,
+        }).ToList();
+        if (sobrantes.Count == 0 && nuevas.Count == 0)
+        {
+            return;
+        }
+
+        // Los cambios que vienen de Entra también quedan en la auditoría (HU 1.4), con el sistema como actor.
+        var ids = sobrantes.Concat(nuevas).Select(a => a.RolId).ToList();
+        var codigos = await plataforma.Roles.Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Codigo, ct);
+        foreach (var sobrante in sobrantes)
         {
             plataforma.AsignacionesRol.Remove(sobrante);
+            plataforma.Auditoria.Add(EventoGrupo(AccionesAuditoriaRoles.AsignacionRetirada, sobrante, codigos, ahora));
         }
-        foreach (var rolId in rolesDeGrupos.Where(r => actuales.All(a => a.RolId != r)))
+        foreach (var nueva in nuevas)
         {
-            plataforma.AsignacionesRol.Add(new AsignacionRol
-            {
-                PersonaId = personaId,
-                RolId = rolId,
-                OrganizacionId = organizacionId,
-                VigenteDesde = ahora,
-                Origen = OrigenAsignacion.GrupoEntra,
-            });
+            plataforma.AsignacionesRol.Add(nueva);
+            plataforma.Auditoria.Add(EventoGrupo(AccionesAuditoriaRoles.AsignacionCreada, nueva, codigos, ahora));
         }
     }
+
+    private static EventoAuditoria EventoGrupo(string accion, AsignacionRol asignacion, Dictionary<Guid, string> codigos, DateTimeOffset ahora) =>
+        AdministracionRoles.CrearEvento(ahora, accion, "asignacion_rol", asignacion.Id, asignacion.OrganizacionId, null,
+            AdministracionRoles.DatosAsignacion(asignacion, codigos.GetValueOrDefault(asignacion.RolId, "?")));
 
     private Task<List<string>> RolesVigentesAsync(Guid personaId, DateTimeOffset ahora, CancellationToken ct) =>
         plataforma.AsignacionesRol
@@ -246,7 +296,7 @@ public sealed class AprovisionadorEmpleados(
 
     private static ClaimsPrincipal Principal(
         UsuarioAtlas usuario, Persona persona, Guid organizacionId, IEnumerable<string> roles, CuentaEmpleado cuenta,
-        DateTimeOffset ahora)
+        string sello, DateTimeOffset autenticadoEn)
     {
         var identidad = new ClaimsIdentity(ClaimsAtlas.EsquemaCookie, ClaimsAtlas.Nombre, ClaimsAtlas.Rol);
         identidad.AddClaim(new Claim(ClaimsAtlas.Sub, usuario.Id.ToString()));
@@ -255,7 +305,8 @@ public sealed class AprovisionadorEmpleados(
         identidad.AddClaim(new Claim(ClaimsAtlas.OrganizacionId, organizacionId.ToString()));
         identidad.AddClaim(new Claim(ClaimsAtlas.Nombre, persona.Nombre));
         identidad.AddClaim(new Claim(ClaimsAtlas.Proveedor, cuenta.Proveedor));
-        identidad.AddClaim(new Claim(ClaimsAtlas.AuthTime, ahora.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
+        identidad.AddClaim(new Claim(ClaimsAtlas.AuthTime, autenticadoEn.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
+        identidad.AddClaim(new Claim(ClaimsAtlas.SelloSeguridad, sello));
         identidad.AddClaims(roles.Select(r => new Claim(ClaimsAtlas.Rol, r)));
         identidad.AddClaims(cuenta.Amr.Append("fed").Distinct().Select(m => new Claim(ClaimsAtlas.Amr, m)));
         return new ClaimsPrincipal(identidad);

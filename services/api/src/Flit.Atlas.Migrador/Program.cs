@@ -1,9 +1,14 @@
-// Migrador de Flit Atlas: aplica las migraciones de EF Core del núcleo (y, más adelante, de cada módulo) y termina.
+// Migrador de Flit Atlas: aplica las migraciones de EF Core del núcleo y de cada módulo registrado, crea las banderas de
+// los módulos nuevos, aplica a la base los roles y la matriz rol × permiso del código (ATLAS-ADR-0023) y termina. Los
+// módulos salen de la misma lista que usa atlas-api (ModulosAtlas, ATLAS-ADR-0026).
 // En local lo corre el AppHost antes de atlas-api; en dev/qa/pdn corre como Job o initContainer (HU 1.8).
 // Usa el usuario del servicio (flit_atlas), dueño del esquema atlas según el script de flit.
 
+using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Plataforma.Datos;
+using Flit.Atlas.Plataforma.Modulos;
+using Flit.Atlas.Plataforma.Permisos;
 using Flit.Atlas.ServiceDefaults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -22,18 +27,39 @@ builder.Services.AddDbContext<PlataformaDbContext>(o => PlataformaDbContext.Conf
 // Identity arma su modelo según IdentityOptions (esquema v3, con passkeys).
 builder.Services.Configure<IdentityOptions>(IdentidadDbContext.ConfigurarIdentity);
 builder.Services.AddDbContext<IdentidadDbContext>(o => IdentidadDbContext.Configurar(o, cadena));
+builder.Services.RegistrarDatosModulos(cadena, ModulosAtlas.Registrados);
 
 using var host = builder.Build();
 var log = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.Atlas.Migrador");
 
-// Orden por dependencia (ATLAS-ADR-0016): primero el núcleo, después cada módulo.
-await MigrarAsync<PlataformaDbContext>("plataforma");
-await MigrarAsync<IdentidadDbContext>("identidad");
+// Orden por dependencia (ATLAS-ADR-0016): primero el núcleo, después cada módulo (sus políticas RLS usan funciones del
+// núcleo).
+await MigrarAsync("plataforma", sp => sp.GetRequiredService<PlataformaDbContext>());
+await MigrarAsync("identidad", sp => sp.GetRequiredService<IdentidadDbContext>());
+foreach (var modulo in ModulosAtlas.Registrados.Where(m => m.ContextoDatos is not null))
+{
+    await MigrarAsync(modulo.Id, sp => ExtensionesModulos.ContextoDatosDe(sp, modulo)!);
+}
 
-async Task MigrarAsync<TContexto>(string nombre) where TContexto : DbContext
+using (var alcance = host.Services.CreateScope())
+{
+    var plataforma = alcance.ServiceProvider.GetRequiredService<PlataformaDbContext>();
+
+    // Banderas de los módulos nuevos, con su valor por defecto; las existentes no se tocan (las decide cada ambiente).
+    var banderas = await ExtensionesModulos.RegistrarBanderasAsync(plataforma, ModulosAtlas.Registrados, TimeProvider.System);
+    Registro.Banderas(log, ModulosAtlas.Registrados.Count, banderas);
+
+    // Roles del §7 y matriz rol × permiso de los manifiestos del núcleo y de los módulos (idempotente).
+    var catalogo = CatalogoPermisos.Crear(ModulosAtlas.Manifiestos);
+    var sembrado = await SembradorPermisos.SembrarAsync(plataforma, catalogo);
+    Registro.Permisos(log, sembrado.RolesCreados, sembrado.RolesActualizados, sembrado.PermisosCreados, sembrado.PermisosRetirados,
+        sembrado.ConcesionesCreadas, sembrado.ConcesionesRetiradas);
+}
+
+async Task MigrarAsync(string nombre, Func<IServiceProvider, DbContext> resolver)
 {
     using var alcance = host.Services.CreateScope();
-    var contexto = alcance.ServiceProvider.GetRequiredService<TContexto>();
+    var contexto = resolver(alcance.ServiceProvider);
     var pendientes = (await contexto.Database.GetPendingMigrationsAsync()).ToList();
     Registro.Pendientes(log, nombre, pendientes.Count);
     await contexto.Database.MigrateAsync();
@@ -47,4 +73,10 @@ internal static partial class Registro
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Contexto}: esquema al día")]
     public static partial void AlDia(ILogger log, string contexto);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Módulos: {Registrados} registrados; {Creadas} banderas nuevas")]
+    public static partial void Banderas(ILogger log, int registrados, int creadas);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Roles y permisos: {RolesCreados} roles creados, {RolesActualizados} actualizados; {PermisosCreados} permisos creados, {PermisosRetirados} retirados; {ConcesionesCreadas} concesiones creadas, {ConcesionesRetiradas} retiradas")]
+    public static partial void Permisos(ILogger log, int rolesCreados, int rolesActualizados, int permisosCreados, int permisosRetirados, int concesionesCreadas, int concesionesRetiradas);
 }

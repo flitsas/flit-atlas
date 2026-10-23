@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Flit.Atlas.Modulos.Hola</RootNamespace>
+    <!-- Las migraciones generadas por EF no siguen todas las reglas de análisis. -->
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Un módulo solo depende del núcleo (ATLAS-ADR-0016): nunca de otro módulo ni de Identidad. Lo verifica
+         ArquitecturaModulosTests. -->
+    <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Atlas.Modulos.Hola.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Identity;
 
 namespace Flit.Atlas.Identidad.Datos;
@@ -47,7 +48,51 @@ public sealed class Sesion
     /// <summary>Resumen del navegador y el sistema (p. ej. «Chrome en Android»), para «dispositivos conectados».</summary>
     public string? AgenteResumen { get; init; }
 
+    /// <summary>
+    /// Última IP desde la que se usó la sesión (la del cliente, detrás de los proxies confiables). Es un dato personal:
+    /// columna <c>@pii</c>, nunca va a los logs.
+    /// </summary>
+    public IPAddress? Ip { get; set; }
+
+    /// <summary>
+    /// Sello de seguridad del usuario cuando se creó la sesión. Si el sello del usuario cambia (roles, suspensión,
+    /// vencimiento, cierre administrativo), la sesión deja de valer (ATLAS-ADR-0022).
+    /// </summary>
+    public required string SelloSeguridad { get; set; }
+
     public DateTimeOffset? RevocadaEn { get; set; }
 
     public string? MotivoRevocacion { get; set; }
+}
+
+/// <summary>
+/// Evento de seguridad del módulo (prompt maestro §6 y §9): inicio, fallo, bloqueo, cierre remoto, suspensión,
+/// reautenticación, límite de tasa… Tabla de <b>solo inserción</b>. Cada evento también queda en
+/// <c>plataforma_auditoria</c> (ATLAS-ADR-0022).
+/// </summary>
+public sealed class EventoSeguridad
+{
+    public Guid Id { get; init; } = Guid.CreateVersion7();
+
+    public required DateTimeOffset OcurridoEn { get; init; }
+
+    /// <summary>Tipo sin el prefijo del módulo, p. ej. <c>cuenta_bloqueada</c> (ver <c>TiposEventoSeguridad</c>).</summary>
+    public required string Tipo { get; init; }
+
+    /// <summary>Usuario afectado. Sin llave foránea: el evento sobrevive al usuario.</summary>
+    public Guid? UsuarioId { get; init; }
+
+    public Guid? PersonaId { get; init; }
+
+    public Guid? SesionId { get; init; }
+
+    /// <summary>Quién hizo la acción cuando no es el propio afectado (p. ej. el administrador que suspende).</summary>
+    public Guid? ActorPersonaId { get; init; }
+
+    public IPAddress? Ip { get; init; }
+
+    public string? AgenteResumen { get; init; }
+
+    /// <summary>Detalle en JSON. Nunca contraseñas, tokens ni la IP.</summary>
+    public string? Datos { get; init; }
 }

@@ -23,5 +23,12 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0017](0017-aprobacion-del-lider-tecnico.md) | El líder técnico puede integrar sus propios PR sin una segunda aprobación | aceptado | ATLAS-ADR-0002 |
 | [ATLAS-ADR-0018](0018-outbox-propio-y-broker-por-ambiente.md) | Outbox e inbox propios de Atlas y RabbitMQ propio por ambiente | aceptado | N-04, N-08 |
 | [ATLAS-ADR-0019](0019-ambientes-qa-y-pdn.md) | Solo dos ambientes desplegados (qa y pdn) con hosts bajo flitsas.com | aceptado | N-01, N-02 |
+| [ATLAS-ADR-0020](0020-shell-pwa-ui-banderas-y-web-push.md) | Shell PWA: Tailwind con tokens FLIT y componentes compatibles con la CSP, banderas de módulo y Web Push | propuesto | §10, §11, HU 1.6 |
+| [ATLAS-ADR-0021](0021-contratos-propios-openapi-y-asyncapi.md) | Contratos propios: OpenAPI generado desde el código y AsyncAPI atado al catálogo de eventos | propuesto | A-09, HU 1.7 |
+| [ATLAS-ADR-0022](0022-sesiones-y-seguridad-de-identidad.md) | Sesiones y seguridad de la identidad: sello de seguridad, reautenticación, bloqueo progresivo, límite de tasa y eventos de seguridad | propuesto | A-03, §6.3, HU 1.3b |
+| [ATLAS-ADR-0023](0023-modelo-de-roles-y-permisos.md) | Modelo de roles y permisos: manifiestos en el código, permisos calculados en cada petición, predicado obligatorio y RLS | propuesto | §7, §9, §12, HU 1.4 |
+| [ATLAS-ADR-0024](0024-servidor-de-tokens-openiddict.md) | Servidor de tokens: OpenIddict embebido, clientes por configuración, scopes por módulo, llaves en certificados montados y conformidad con pruebas propias | propuesto | A-03, §6.3, HU 1.3c |
+| [ATLAS-ADR-0025](0025-organizaciones-invitaciones-y-cuentas-externas.md) | Organizaciones, invitaciones y cuentas locales de externos: enlace de un solo uso, passkeys de Identity, TOTP, recuperación, términos versionados y correo por Graph o SMTP | propuesto | §6.2, §6.3, §7.3, HU 1.5 |
+| [ATLAS-ADR-0026](0026-registro-de-modulos-y-composicion.md) | Registro de módulos: IModuloAtlas en Plataforma, lista única en Flit.Atlas.Composicion y bandera que hace cumplir el servidor | propuesto | §10, HU 1.9 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).

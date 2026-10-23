@@ -14,8 +14,17 @@ public static class ClaimsAtlas
     public const string Proveedor = "proveedor";
     public const string Nombre = "name";
 
+    /// <summary>
+    /// Sello de seguridad del usuario al entrar. Solo vive en el ticket del servidor: <see cref="AlmacenSesiones"/> lo
+    /// copia a <c>identidad_sesion.sello_seguridad</c> y lo compara con el vigente en cada petición.
+    /// </summary>
+    public const string SelloSeguridad = "atlas.sello";
+
     public const string TipoEmpleado = "empleado";
     public const string TipoExterno = "externo";
+
+    /// <summary>Servicio interno que entra con <c>client_credentials</c> (HU 1.3c); su <c>sub</c> es el client_id.</summary>
+    public const string TipoServicio = "servicio";
 
     /// <summary>Esquema de la cookie del BFF.</summary>
     public const string EsquemaCookie = "Atlas";

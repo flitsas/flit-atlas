@@ -38,7 +38,7 @@ public class AuditoriaTests(Contenedores contenedores)
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
         // Lo frena el permiso revocado (primera capa), antes de llegar al trigger.
         Assert.StartsWith("permission denied", error.MessageText, StringComparison.Ordinal);
-        Assert.Equal(["identidad.inicio_sesion"], await MigracionesTests.ConsultarAsync(bd.Servicio, "SELECT accion FROM atlas.plataforma_auditoria"));
+        Assert.Equal(["identidad.inicio_sesion"], await MigracionesTests.ConsultarAsync(bd.Servicio, "SELECT accion FROM atlas.plataforma_auditoria", comoSistema: true));
     }
 
     [Theory]
