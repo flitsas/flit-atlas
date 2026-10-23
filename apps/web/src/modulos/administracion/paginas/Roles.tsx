@@ -1,6 +1,6 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Trash2, Users } from 'lucide-react';
-import { type FormEvent, useId, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Trash2, Users } from 'lucide-react';
+import { type FormEvent, useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
@@ -10,24 +10,34 @@ import { Hoja } from '../../../app/ui/Hoja';
 import { Boton, cn, Insignia, Tarjeta } from '../../../app/ui/Tarjeta';
 import {
   type Asignacion,
+  asignarRol,
+  BUSQUEDA_MINIMA,
+  buscarPersonas,
   crearMapeo,
   eliminarMapeo,
   esGuid,
+  finDelDiaBogota,
   listarAsignaciones,
   listarMapeos,
   listarRoles,
   type MapeoGrupo,
   motivoNoRetirable,
   type OrigenAsignacion,
+  type PersonaEncontrada,
   retirarAsignacion,
   type RolAtlas,
   rolesMapeables,
+  type SolicitudAsignacion,
   type SolicitudMapeo,
 } from '../api';
 import { type Aviso, avisoDeError, claseCampo, Confirmar, MostrarAviso } from '../comunes';
 
 const CLAVE_MAPEOS = ['administracion', 'roles', 'mapeos'] as const;
 const CLAVE_ROLES = ['administracion', 'roles', 'catalogo'] as const;
+
+/** Espera tras la última tecla antes de buscar, y resultados por búsqueda (el servidor admite hasta 50). */
+const RETRASO_BUSQUEDA_MS = 300;
+const LIMITE_BUSQUEDA = 20;
 
 const ORIGENES: Record<OrigenAsignacion, string> = {
   manual: 'Manual',
@@ -38,8 +48,9 @@ const ORIGENES: Record<OrigenAsignacion, string> = {
 
 /**
  * Roles (HU 1.4, ATLAS-ADR-0023): los grupos de Entra ID que otorgan roles internos al entrar y las asignaciones de una
- * persona con su origen y vigencia. Ver exige `atlas.roles.ver`; crear o eliminar un mapeo y retirar una asignación,
- * `atlas.roles.gestionar` y un ingreso reciente (el servidor responde `reautenticacion_requerida`). Reemplaza el `fetch`
+ * persona con su origen y vigencia, que se encuentra con el buscador de personas (por nombre o correo). Ver exige
+ * `atlas.roles.ver`; crear o eliminar un mapeo y asignar o retirar un rol, `atlas.roles.gestionar` y un ingreso reciente
+ * (el servidor responde `reautenticacion_requerida`). Reemplaza el `fetch`
  * desde la consola del arranque de un ambiente con la cuenta de emergencia (ATLAS-ADR-0027).
  */
 export default function Roles() {
@@ -60,7 +71,13 @@ export default function Roles() {
       </header>
       <MostrarAviso aviso={aviso} />
       <SeccionMapeos roles={roles.data} nombreDe={nombreDe} puedeGestionar={puedeGestionar} aviso={aviso} setAviso={setAviso} />
-      <SeccionAsignaciones personaPropia={yo.personaId} puedeGestionar={puedeGestionar} setAviso={setAviso} />
+      <SeccionAsignaciones
+        personaPropia={yo.personaId}
+        roles={roles.data}
+        nombreDe={nombreDe}
+        puedeGestionar={puedeGestionar}
+        setAviso={setAviso}
+      />
     </div>
   );
 }
@@ -292,62 +309,149 @@ function FormularioMapeo({
   );
 }
 
+/** El valor después de `ms` sin cambios: la búsqueda no consulta al servidor con cada tecla. */
+function useRetrasado<T>(valor: T, ms: number): T {
+  const [retrasado, setRetrasado] = useState(valor);
+  useEffect(() => {
+    const espera = window.setTimeout(() => setRetrasado(valor), ms);
+    return () => window.clearTimeout(espera);
+  }, [valor, ms]);
+  return retrasado;
+}
+
+const ESTADOS_PERSONA: Record<PersonaEncontrada['estado'], string | null> = { activa: null, inactiva: 'Inactiva', suspendida: 'Suspendida' };
+
+/** Tipo, organización, estado y si es la cuenta de emergencia, como insignias. */
+function InsigniasPersona({ persona }: { persona: PersonaEncontrada }) {
+  const estado = ESTADOS_PERSONA[persona.estado];
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <Insignia tono="neutral">{persona.tipo === 'externo' ? `Externo · ${persona.organizacion.nombre}` : 'Empleado'}</Insignia>
+      {estado && <Insignia tono="neutral">{estado}</Insignia>}
+      {persona.emergencia && <Insignia>Emergencia</Insignia>}
+    </span>
+  );
+}
+
 function SeccionAsignaciones({
   personaPropia,
+  roles,
+  nombreDe,
   puedeGestionar,
   setAviso,
 }: {
   personaPropia: string;
+  roles: RolAtlas[] | undefined;
+  nombreDe: (codigo: string) => string;
   puedeGestionar: boolean;
   setAviso: (a: Aviso) => void;
 }) {
   const cliente = useQueryClient();
+  const idAyuda = useId();
   const [parametros, setParametros] = useSearchParams();
   const persona = parametros.get('persona') ?? '';
-  const [texto, setTexto] = useState(persona);
+  const [texto, setTexto] = useState('');
+  const consulta = useRetrasado(texto.trim(), RETRASO_BUSQUEDA_MS);
   const [todas, setTodas] = useState(false);
   const [retirando, setRetirando] = useState<Asignacion | null>(null);
+  const [asignando, setAsignando] = useState(false);
+  const [errorHoja, setErrorHoja] = useState<Aviso>(null);
   const clave = ['administracion', 'roles', 'asignaciones', persona, todas] as const;
   const asignaciones = useQuery({ queryKey: clave, queryFn: () => listarAsignaciones(persona, todas), enabled: esGuid(persona) });
+  // Un GUID completo no se busca: se abre directo con Enter. Al vaciar el campo, los resultados se van sin esperar.
+  const buscando = consulta.length >= BUSQUEDA_MINIMA && texto.trim().length >= BUSQUEDA_MINIMA && !esGuid(consulta);
+  const resultados = useQuery({
+    queryKey: ['administracion', 'roles', 'personas', consulta],
+    queryFn: ({ signal }) => buscarPersonas(consulta, LIMITE_BUSQUEDA, signal),
+    enabled: buscando,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+  // Nombre, correo y tipo de la persona abierta (también si llegó con ?persona=<id>, p. ej. desde una invitación).
+  const seleccionada = useQuery({
+    queryKey: ['administracion', 'roles', 'persona', persona],
+    queryFn: async ({ signal }) => (await buscarPersonas(persona, 1, signal)).personas[0] ?? null,
+    enabled: esGuid(persona),
+    retry: false,
+  });
 
   const ver = (id: string) => {
-    setTexto(id);
+    setTexto('');
     setParametros(id ? { persona: id } : {}, { replace: true });
   };
+
+  const recargarPersona = () => cliente.invalidateQueries({ predicate: (c) => c.queryKey[1] === 'roles' && c.queryKey[3] === persona });
 
   return (
     <Tarjeta titulo="Asignaciones de una persona">
       <p className="mb-3 text-sm text-atlas-texto-suave">
-        Roles de una persona con su origen y vigencia. Ábrela desde una invitación aceptada o con su id de persona de Atlas.
+        Busca a la persona por nombre o correo para ver sus roles con su origen y vigencia. También se abre desde una invitación
+        aceptada o pegando su id de persona de Atlas.
       </p>
       <form
         role="search"
-        aria-label="Buscar las asignaciones de una persona"
+        aria-label="Buscar personas"
         className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          ver(texto.trim());
+          const valor = texto.trim();
+          if (esGuid(valor)) ver(valor.toLowerCase());
+          else if (buscando && resultados.data?.personas.length === 1) ver(resultados.data.personas[0]!.id);
         }}
       >
         <label className="min-w-0 flex-1 basis-64 text-sm font-medium">
-          Id de la persona
+          Nombre, correo o id
           <input
+            type="search"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             autoComplete="off"
             spellCheck={false}
-            className={cn(claseCampo, 'font-mono text-sm')}
+            enterKeyHint="search"
+            maxLength={100}
+            aria-describedby={idAyuda}
+            className={claseCampo}
           />
+          <span id={idAyuda} className="mt-1 block text-xs font-normal text-atlas-texto-suave">
+            Al menos {BUSQUEDA_MINIMA} letras; no importan las mayúsculas ni las tildes.
+          </span>
         </label>
-        <Boton type="submit" className="min-h-12">
-          <Search className="size-4" aria-hidden="true" />
-          Ver
-        </Boton>
         <Boton type="button" variante="secundario" className="min-h-12" onClick={() => ver(personaPropia)}>
           <Users className="size-4" aria-hidden="true" />
           Las mías
         </Boton>
       </form>
+
+      {buscando && (
+        <div className="mt-3" aria-live="polite">
+          {resultados.isPending && <p className="text-sm text-atlas-texto-suave">Buscando…</p>}
+          {resultados.isError && <p role="alert">{avisoDeError(resultados.error, 'No se pudo buscar personas.')?.texto}</p>}
+          {resultados.data?.personas.length === 0 && <p className="text-sm text-atlas-texto-suave">Nadie coincide con «{consulta}».</p>}
+          {resultados.data && resultados.data.personas.length > 0 && (
+            <ul aria-label="Personas encontradas" className="flex flex-col divide-y divide-border rounded-2xl border border-border">
+              {resultados.data.personas.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => ver(p.id)}
+                    className="flex min-h-toque w-full min-w-0 flex-col items-start gap-1 px-4 py-3 text-left hover:bg-atlas-activo focus-visible:bg-atlas-activo focus-visible:outline-none"
+                  >
+                    <span className="font-semibold break-words">{p.nombre}</span>
+                    <span className="text-xs break-all text-atlas-texto-suave">{p.correo}</span>
+                    <InsigniasPersona persona={p} />
+                    {p.roles.length > 0 && (
+                      <span className="text-xs text-atlas-texto-suave">{p.roles.map(nombreDe).join(' · ')}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {resultados.data?.hayMas && (
+            <p className="mt-2 text-xs text-atlas-texto-suave">Hay más resultados: escribe más del nombre o el correo para afinar.</p>
+          )}
+        </div>
+      )}
 
       {persona && !esGuid(persona) && (
         <p role="alert" className="mt-3 text-sm">
@@ -356,6 +460,28 @@ function SeccionAsignaciones({
       )}
       {esGuid(persona) && (
         <div className="mt-4 flex flex-col gap-3">
+          {seleccionada.data && (
+            <div className="flex min-w-0 flex-col gap-2 rounded-2xl bg-atlas-activo p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-col gap-1">
+                <h3 className="font-semibold break-words">{seleccionada.data.nombre}</h3>
+                <p className="text-xs break-all text-atlas-texto-suave">{seleccionada.data.correo}</p>
+                <InsigniasPersona persona={seleccionada.data} />
+              </div>
+              {puedeGestionar && seleccionada.data.tipo === 'empleado' && (
+                <Boton
+                  className="self-start sm:self-center"
+                  onClick={() => {
+                    setErrorHoja(null);
+                    setAviso(null);
+                    setAsignando(true);
+                  }}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  Asignar rol
+                </Boton>
+              )}
+            </div>
+          )}
           <label className="flex min-h-toque cursor-pointer items-center gap-3 text-sm">
             <input type="checkbox" checked={todas} onChange={(e) => setTodas(e.target.checked)} className="size-5" />
             Incluir las vencidas y las que aún no empiezan
@@ -412,6 +538,34 @@ function SeccionAsignaciones({
         </div>
       )}
 
+      <Hoja abierta={asignando} alCerrar={() => setAsignando(false)} titulo="Asignar rol">
+        {asignando && errorHoja && (
+          <div className="px-4 pt-2">
+            <MostrarAviso aviso={errorHoja} />
+          </div>
+        )}
+        {asignando && seleccionada.data && (
+          <FormularioAsignacion
+            roles={roles}
+            nombrePersona={seleccionada.data.nombre}
+            alEnviar={async (solicitud) => {
+              setErrorHoja(null);
+              setAviso(null);
+              try {
+                await asignarRol(persona, solicitud);
+              } catch (e) {
+                setErrorHoja(avisoDeError(e, 'No se pudo asignar el rol.'));
+                return;
+              }
+              setAsignando(false);
+              setAviso({ tono: 'exito', texto: `${seleccionada.data!.nombre} tiene ahora ${nombreDe(solicitud.rol)}.` });
+              await recargarPersona();
+            }}
+            alError={setErrorHoja}
+          />
+        )}
+      </Hoja>
+
       <Confirmar
         abierta={retirando !== null}
         titulo="Retirar asignación"
@@ -423,7 +577,7 @@ function SeccionAsignaciones({
           if (a) {
             void ejecutar(setAviso, () => retirarAsignacion(a.id), `Se retiró ${a.rolNombre}.`, 'No se pudo retirar la asignación.').then(
               async (ok) => {
-                if (ok) await cliente.invalidateQueries({ queryKey: ['administracion', 'roles', 'asignaciones', persona] });
+                if (ok) await recargarPersona();
               },
             );
           }
@@ -434,5 +588,84 @@ function SeccionAsignaciones({
         </p>
       </Confirmar>
     </Tarjeta>
+  );
+}
+
+/** Rol interno asignable (los mismos que otorga un grupo de Entra) con vencimiento opcional, para un empleado. */
+function FormularioAsignacion({
+  roles,
+  nombrePersona,
+  alEnviar,
+  alError,
+}: {
+  roles: RolAtlas[] | undefined;
+  nombrePersona: string;
+  alEnviar: (s: SolicitudAsignacion) => Promise<void>;
+  alError: (a: Aviso) => void;
+}) {
+  const nombreRadio = useId();
+  const [rol, setRol] = useState('');
+  const [vence, setVence] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  if (!roles) return <p role="status" className="px-4 pb-5">Cargando roles…</p>;
+  const opciones = rolesMapeables(roles);
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+  async function enviar(evento: FormEvent) {
+    evento.preventDefault();
+    if (!rol) {
+      alError({ tono: 'error', texto: 'Elige el rol que vas a asignar.' });
+      return;
+    }
+    setEnviando(true);
+    await alEnviar({ rol, vigenteHasta: finDelDiaBogota(vence) });
+    setEnviando(false);
+  }
+
+  return (
+    <form onSubmit={(e) => void enviar(e)} aria-label="Datos de la asignación" className="flex min-w-0 flex-col gap-4 px-4 pt-2 pb-5 [&>*]:min-w-0">
+      <p className="text-sm text-atlas-texto-suave">
+        Se suma a los roles de {nombrePersona} desde su siguiente petición, sin cambiar los que recibe por grupos de Entra. Queda en la
+        auditoría.
+      </p>
+      <fieldset className="flex min-w-0 flex-col gap-2">
+        <legend className="text-sm font-medium">Rol</legend>
+        {opciones.map((r) => (
+          <label
+            key={r.codigo}
+            className={cn(
+              'flex min-h-toque cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm',
+              r.codigo === rol ? 'border-atlas-tinta bg-atlas-activo' : 'border-border bg-card',
+            )}
+          >
+            <input
+              type="radio"
+              name={nombreRadio}
+              value={r.codigo}
+              checked={r.codigo === rol}
+              onChange={() => setRol(r.codigo)}
+              className="mt-0.5 size-4 shrink-0 accent-[var(--flit-brand-ink)]"
+            />
+            <span className="min-w-0">
+              <span className="block font-medium">{r.nombre}</span>
+              <span className="block text-atlas-texto-suave">{r.descripcion}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <label className="text-sm font-medium">
+        Vence (opcional)
+        <input type="date" min={hoy} value={vence} onChange={(e) => setVence(e.target.value)} className={claseCampo} />
+        <span className="mt-1 block text-xs font-normal text-atlas-texto-suave">Sin fecha, no vence. Vence al final de ese día, hora de Bogotá.</span>
+      </label>
+      {rol === 'atlas.superadmin' && (
+        <p className="rounded-xl border border-[var(--badge-info-border)] bg-[var(--badge-info-bg)] p-3 text-sm text-[var(--badge-info-fg)]">
+          Superadministrador recibe todos los permisos de Atlas.
+        </p>
+      )}
+      <Boton type="submit" className="min-h-12" disabled={enviando}>
+        Asignar rol
+      </Boton>
+    </form>
   );
 }

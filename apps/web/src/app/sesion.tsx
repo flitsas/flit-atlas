@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { borrarDatosLocales, guardar, leer } from '../pwa/almacen';
 import { desactivarPush } from '../pwa/push';
 import { ErrorApi, obtenerBanderas, obtenerYo, salir, type Yo } from './api';
+import { marcarSesion } from './errores';
 import type { ModuloAtlas } from './modulos/contrato';
 import { MODULOS_REGISTRADOS } from './modulos/registro';
 import { type AccesoUsuario, type NavegacionResuelta, resolverNavegacion } from './modulos/resolver';
@@ -30,6 +31,8 @@ const esFallaDeRed = (error: unknown) => !(error instanceof ErrorApi) && (error 
 export async function cargarSesion(): Promise<EstadoSesion> {
   try {
     const yo = await obtenerYo();
+    // Los errores de la PWA solo se reportan con sesión (`errores.ts`).
+    marcarSesion(yo !== null);
     if (yo) await guardar(RECURSO_YO, yo, TTL_HORAS).catch(() => undefined);
     return { yo, sinConexion: false };
   } catch (error) {
@@ -96,6 +99,7 @@ export function ProveedorSesion({
     await desactivarPush().catch(() => undefined);
     await borrarDatosLocales().catch(() => undefined);
     await salir();
+    marcarSesion(false);
     // Clear-Site-Data también borra la preferencia de tema; no es un dato de la sesión y se conserva.
     guardarTema(tema);
     // Primero la sesión vacía (la raíz pasa al ingreso) y luego el resto de datos de la persona fuera de la memoria.

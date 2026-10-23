@@ -38,8 +38,8 @@ export function SinAcceso({ modulo }: { modulo: string }) {
 
 /**
  * Error inesperado al pintar una ruta. Si es un chunk que no se descargó (lo normal tras publicar una versión nueva),
- * recarga sola una vez; si ya lo intentó, ofrece recargar. Cualquier otro error se reporta a atlas-api y la persona ve
- * una referencia para citarla (`errores.ts`).
+ * recarga sola una vez; si ya lo intentó, ofrece recargar. Cualquier otro error se reporta a atlas-api si hay sesión y
+ * la persona ve una referencia para citarla, con sesión o sin ella (`errores.ts`).
  */
 export function ErrorDeRuta() {
   const error = useRouteError();

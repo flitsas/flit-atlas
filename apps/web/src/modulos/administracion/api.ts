@@ -158,6 +158,46 @@ export const retirarAsignacion = async (id: string) => {
   await enviarJson(`${PLATAFORMA}/asignaciones/${encodeURIComponent(id)}`, 'DELETE');
 };
 
+/** Rol interno asignado a mano: global, en la organización de la persona y con vencimiento opcional. */
+export interface SolicitudAsignacion {
+  rol: string;
+  vigenteHasta: string | null;
+}
+
+/** `POST /personas/{id}/asignaciones`: exige `atlas.roles.gestionar` y un ingreso reciente (`reautenticacion_requerida`). */
+export const asignarRol = async (personaId: string, s: SolicitudAsignacion) =>
+  json<Asignacion>(await enviarJson(`${PLATAFORMA}/personas/${encodeURIComponent(personaId)}/asignaciones`, 'POST', s));
+
+// --- Buscador de personas (`GET /api/v1/plataforma/personas`, `atlas.roles.ver`) ---
+
+export interface PersonaEncontrada {
+  id: string;
+  nombre: string;
+  correo: string;
+  tipo: 'empleado' | 'externo';
+  organizacion: { id: string; nombre: string };
+  estado: 'activa' | 'inactiva' | 'suspendida';
+  /** Cuenta de administrador de emergencia (ATLAS-ADR-0027). */
+  emergencia: boolean;
+  /** Códigos de los roles asignados y vigentes (sin `atlas.lector` ni los implícitos). */
+  roles: string[];
+}
+
+export interface ResultadoBusquedaPersonas {
+  personas: PersonaEncontrada[];
+  /** Hay más que el límite: la persona debe afinar la búsqueda. */
+  hayMas: boolean;
+}
+
+/** Mínimo de caracteres que exige el servidor (sin espacios a los lados). */
+export const BUSQUEDA_MINIMA = 2;
+
+/** Por nombre o correo, sin mayúsculas ni tildes, o por id exacto. Ordenado por nombre, hasta `limite` (máximo 50). */
+export const buscarPersonas = async (q: string, limite = 20, signal?: AbortSignal) =>
+  json<ResultadoBusquedaPersonas>(
+    await pedir(`${PLATAFORMA}/personas?q=${encodeURIComponent(q.trim())}&limite=${limite}`, signal ? { signal } : {}),
+  );
+
 /** Roles que un grupo de Entra puede otorgar: internos y asignables (`atlas.lector` ya lo tiene todo empleado). */
 export const rolesMapeables = (roles: RolAtlas[]): RolAtlas[] => roles.filter((r) => r.tipo === 'interno' && r.asignable);
 

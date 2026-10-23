@@ -39,10 +39,16 @@ public sealed class OpcionesLimiteTasa
     public int ExternosPorIp { get; set; } = 10;
 
     /// <summary>
-    /// Reportes de errores de la PWA por IP y ventana (<c>POST /api/v1/plataforma/errores-cliente</c>): público, así que
-    /// un tope bajo evita que alguien llene el log. Una pantalla de error envía un solo reporte.
+    /// Reportes de errores de la PWA por persona y ventana (<c>POST /api/v1/plataforma/errores-cliente</c>, con sesión):
+    /// una pantalla de error envía un solo reporte, así que un tope bajo evita que una sesión llene el log.
     /// </summary>
-    public int ErroresClientePorIp { get; set; } = 20;
+    public int ErroresClientePorPersona { get; set; } = 10;
+
+    /// <summary>
+    /// Reportes de errores de la PWA por IP y ventana, además del tope por persona (también cuenta los intentos sin
+    /// sesión, que responden 401). Una oficina comparte IP: es más holgado.
+    /// </summary>
+    public int ErroresClientePorIp { get; set; } = 60;
 }
 
 /// <summary>
@@ -73,6 +79,7 @@ public static partial class LimitacionTasa
                 Particion(l.TokensPorIp, l.Ventana, http => EsEmisionTokens(http.Request.Path) ? "tokens:" + Ip(http) : null),
                 Particion(l.ExternosPorIp, l.Ventana, http => Externos.EndpointsCuentasExternas.EsRutaDeIngreso(http.Request.Path) ? "externos:" + Ip(http) : null),
                 Particion(l.ErroresClientePorIp, l.Ventana, http => EsErroresCliente(http.Request.Path) ? "errores:" + Ip(http) : null),
+                Particion(l.ErroresClientePorPersona, l.Ventana, http => EsErroresCliente(http.Request.Path) && Persona(http) is { } p ? "errores-persona:" + p : null),
                 Particion(l.PorIp, l.Ventana, http => EsIdentidad(http.Request.Path) ? "ip:" + Ip(http) : null),
                 Particion(l.PorUsuario, l.Ventana, http => EsIdentidad(http.Request.Path) && Usuario(http) is { } sub ? "usuario:" + sub : null));
             o.OnRejected = AlRechazarAsync;
@@ -81,14 +88,15 @@ public static partial class LimitacionTasa
 
     /// <summary>
     /// Va <b>antes</b> de <c>UseAuthentication</c> para cubrir también el retorno de Entra (lo atiende el middleware de
-    /// autenticación). Para limitar por usuario, lee aquí la sesión de las rutas de identidad; el manejador de la cookie
-    /// guarda el resultado y <c>UseAuthentication</c> no vuelve a consultar la base.
+    /// autenticación). Para limitar por usuario o por persona, lee aquí la sesión de las rutas de identidad y del reporte
+    /// de errores de la PWA; el manejador de la cookie guarda el resultado y <c>UseAuthentication</c> no vuelve a
+    /// consultar la base.
     /// </summary>
     internal static IApplicationBuilder Usar(IApplicationBuilder app)
     {
         app.Use(async (http, siguiente) =>
         {
-            if (EsIdentidad(http.Request.Path) && !EsIngreso(http.Request.Path))
+            if ((EsIdentidad(http.Request.Path) && !EsIngreso(http.Request.Path)) || EsErroresCliente(http.Request.Path))
             {
                 var resultado = await http.AuthenticateAsync(ClaimsAtlas.EsquemaCookie);
                 if (resultado.Succeeded)
@@ -112,7 +120,7 @@ public static partial class LimitacionTasa
         || ruta.StartsWithSegments("/connect", StringComparison.OrdinalIgnoreCase)
         || ruta.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Reporte de errores de la PWA: público, con límite propio por IP.</summary>
+    /// <summary>Reporte de errores de la PWA: con sesión y límites propios por persona y por IP.</summary>
     internal static bool EsErroresCliente(PathString ruta) =>
         ruta.StartsWithSegments(EndpointsErroresCliente.Ruta, StringComparison.OrdinalIgnoreCase);
 
@@ -143,6 +151,9 @@ public static partial class LimitacionTasa
 
     private static string? Usuario(HttpContext http) =>
         http.User.Identity?.IsAuthenticated == true ? http.User.FindFirstValue(ClaimsAtlas.Sub) : null;
+
+    private static string? Persona(HttpContext http) =>
+        http.User.Identity?.IsAuthenticated == true ? http.User.FindFirstValue(ClaimsAtlas.PersonaId) : null;
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo registrar el evento de límite de tasa")]
     private static partial void NoSeRegistro(ILogger log, Exception error);

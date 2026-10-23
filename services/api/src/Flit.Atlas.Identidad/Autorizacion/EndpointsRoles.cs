@@ -82,6 +82,8 @@ public static class EndpointsRoles
                 "módulo, cada permiso con los roles que lo conceden. atlas.superadmin los recibe todos. Es la misma de " +
                 "docs/permisos/matriz-rol-permiso.md. Requiere atlas.roles.ver.");
 
+        plataforma.MapBusquedaPersonas();
+
         var asignaciones = plataforma.MapGroup("/personas/{personaId:guid}/asignaciones");
         asignaciones.MapGet("/", async (
                 [Description("Persona de Atlas (plataforma_persona).")] Guid personaId,
