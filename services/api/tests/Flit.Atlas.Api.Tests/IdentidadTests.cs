@@ -157,6 +157,19 @@ public class IdentidadTests(EntornoApi entorno)
     }
 
     [Fact]
+    public async Task El_retorno_de_Entra_no_pasa_por_la_antifalsificacion()
+    {
+        // Microsoft entrega el código con un POST desde su origen y sin la cabecera propia de Atlas.
+        await using var api = entorno.Api();
+        using var navegador = Navegador.De(api);
+
+        var respuesta = await navegador.EnviarAsync(HttpMethod.Post, EndpointsIdentidad.RutaRetornoEntra,
+            new FormUrlEncodedContent([new("code", "x"), new("state", "x")]), csrf: false, origen: "https://login.microsoftonline.com");
+
+        Assert.NotEqual(HttpStatusCode.Forbidden, respuesta.StatusCode);
+    }
+
+    [Fact]
     public async Task Los_proveedores_reflejan_la_configuracion()
     {
         await using var api = entorno.Api();

@@ -8,7 +8,7 @@ import { defineConfig } from 'vite';
  * En desarrollo, Vite hace de proxy hacia atlas-api: la PWA y la API comparten origen porque la cookie del BFF
  * es SameSite=Strict (ATLAS-ADR-0008). En dev/qa/pdn lo hace el Ingress (docs/preparacion/03-puertos-y-namespaces.md §3).
  */
-const RUTAS_DE_LA_API = ['/api', '/hubs', '/connect', '/.well-known', '/signin-oidc', '/signout-callback-oidc'];
+const RUTAS_DE_LA_API = ['/api', '/hubs', '/connect', '/.well-known'];
 
 export function urlDeLaApi(entorno: Record<string, string | undefined>): string {
   const url = entorno.ATLAS_API_URL?.trim();

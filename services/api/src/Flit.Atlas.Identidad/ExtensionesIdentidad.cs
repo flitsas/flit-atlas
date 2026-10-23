@@ -155,8 +155,7 @@ public static class ExtensionesIdentidad
                 {
                     entra.Bind(o);
                     o.Instance = string.IsNullOrWhiteSpace(o.Instance) ? "https://login.microsoftonline.com/" : o.Instance;
-                    o.CallbackPath = "/signin-oidc";
-                    o.SignedOutCallbackPath = "/signout-callback-oidc";
+                    o.CallbackPath = EndpointsIdentidad.RutaRetornoEntra;
                     o.ResponseType = "code";
                     o.UsePkce = true;
                     o.SignInScheme = ClaimsAtlas.EsquemaCookie;

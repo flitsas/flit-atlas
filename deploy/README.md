@@ -19,7 +19,7 @@ Las imágenes base están fijadas por digest. El CI construye las tres en cada P
 ```mermaid
 flowchart LR
   N[nginx del host<br/>TLS] --> W[atlas-web<br/>PWA + proxy]
-  W -->|/api, /signin-oidc, /health| A[atlas-api]
+  W -->|/api, /health| A[atlas-api]
   A --> PG[(Postgres del host)]
   A --> R[(Redis)]
   A --> MQ[(RabbitMQ)]

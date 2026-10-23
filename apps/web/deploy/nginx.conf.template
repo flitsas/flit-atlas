@@ -22,12 +22,9 @@ server {
         return 200 "ok";
     }
 
-    # Rutas del BFF: las mismas que el proxy de Vite en local (apps/web/vite.config.ts).
+    # Rutas del BFF: las mismas que el proxy de Vite en local (apps/web/vite.config.ts). La redirect URI de Entra ID
+    # (/api/auth/callback/azure-ad) entra por /api/.
     location ~ ^/(api|hubs|connect|\.well-known|health)/ {
-        proxy_pass ${ATLAS_API_URL};
-        include /etc/nginx/atlas-proxy.conf;
-    }
-    location ~ ^/(signin-oidc|signout-callback-oidc)$ {
         proxy_pass ${ATLAS_API_URL};
         include /etc/nginx/atlas-proxy.conf;
     }
