@@ -225,4 +225,47 @@ test.describe('soporte de los sábados', () => {
     await sinErroresCriticosDeAxe(page, '/soporte/gestion');
     expect(violaciones).toEqual([]);
   });
+
+  test('importador del Excel: vista previa con el informe, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, {
+      permisos: ['atlas.lector', 'atlas.soporte.ver', 'atlas.soporte.gestionar', 'atlas.soporte.aprobar'],
+      roles: ['atlas.lider_tecnico'],
+    });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte/importar');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Importar el Excel de la rotación' })).toBeVisible();
+    await page.getByLabel(/Archivo .xlsx/).setInputFiles({
+      name: 'rotacion-ficticia.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: Buffer.from('PK ficticio'),
+    });
+    await page.getByRole('button', { name: 'Ver vista previa' }).click();
+    const previa = page.getByRole('region', { name: 'Vista previa de la importación' });
+    await expect(previa.getByText('Fecha serial de Excel 46200 → 27/06/2026.')).toBeVisible();
+    await expect(previa.getByRole('checkbox', { name: /Crear a Persona Ficticia como persona inactiva/ })).toBeVisible();
+    await expect(previa.getByRole('button', { name: 'Importar 1 fila' })).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte/importar');
+    await sinErroresCriticosDeAxe(page, '/soporte/importar');
+    expect(violaciones).toEqual([]);
+  });
+
+  test('cambios de turno y compensaciones: por aprobar, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, {
+      permisos: ['atlas.lector', 'atlas.soporte.ver', 'atlas.soporte.solicitar_cambio', 'atlas.soporte.aprobar'],
+      roles: ['atlas.lider_tecnico'],
+    });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte/cambios');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Cambios de turno y compensaciones' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Aprobar el cambio' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Historial' })).toContainText('Aceptó el reemplazo');
+    await expect(page.getByRole('button', { name: 'Marcar tomada' })).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte/cambios');
+    await sinErroresCriticosDeAxe(page, '/soporte/cambios');
+    expect(violaciones).toEqual([]);
+  });
 });

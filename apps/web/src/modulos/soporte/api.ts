@@ -192,6 +192,109 @@ export interface Indicadores {
   cumplimiento: number | null;
 }
 
+// --- Importador del Excel (HU 2.7) ---
+
+export interface NombreImportacion {
+  texto: string;
+  clave: string;
+  coincidencia: 'exacta' | 'parcial' | 'ambigua' | 'ninguna';
+  personaId: string | null;
+  nombre: string | null;
+  nueva: boolean;
+}
+
+export interface FilaImportacion {
+  fila: number;
+  fecha: Dia | null;
+  textoFecha: string | null;
+  responsable: NombreImportacion | null;
+  estado: EstadoTurno;
+  reemplazo: NombreImportacion | null;
+  compensacion: { para: 'responsable' | 'reemplazo'; fecha: Dia | null; estado: EstadoCompensacion } | null;
+  observacion: string | null;
+  requiereRevision: boolean;
+  accion: 'crear' | 'ya_importado' | 'omitir';
+  motivo: string | null;
+  interpretaciones: string[];
+  ambiguedades: string[];
+}
+
+export interface ResumenImportacion {
+  filas: number;
+  importadas: number;
+  yaImportadas: number;
+  omitidas: number;
+  turnos: number;
+  compensaciones: number;
+  personasInactivas: number;
+  participantes: number;
+  generadosQuitados: number;
+  interpretaciones: number;
+  ambiguos: number;
+}
+
+export interface VistaPreviaImportacion {
+  equipo: EquipoResumen;
+  hoja: string;
+  huella: string;
+  resumen: ResumenImportacion;
+  filas: FilaImportacion[];
+  personasNuevas: { clave: string; nombre: string; filas: number; ultimaFecha: Dia | null; confirmada: boolean }[];
+  nombresAmbiguos: { clave: string; texto: string; candidatas: { id: string; nombre: string; activa: boolean }[]; elegida: string | null }[];
+  participantesNuevos: { personaId: string | null; nombre: string; activo: boolean }[];
+  avisos: string[];
+}
+
+export interface SolicitudImportacion {
+  equipoId: string | null;
+  nombreArchivo: string | null;
+  contenido: string;
+  crearInactivas: string[];
+  elegidas: { clave: string; personaId: string }[];
+  agregarParticipantes: boolean;
+  huella?: string;
+}
+
+// --- Cambios de turno y compensaciones (HU 2.9) ---
+
+export type EstadoSolicitud = 'pendiente_reemplazo' | 'pendiente_aprobacion' | 'aprobada' | 'rechazada' | 'cancelada';
+export type EstadoCompensacion = 'pendiente' | 'tomada';
+
+export interface SolicitudCambio {
+  id: string;
+  turno: Turno;
+  solicitante: PersonaSoporte;
+  reemplazo: PersonaSoporte;
+  estado: EstadoSolicitud;
+  motivo: string | null;
+  turnoNuevoId: string | null;
+  resueltaPor: PersonaSoporte | null;
+  resueltaEn: string | null;
+  creadaEn: string;
+  historial: { accion: string; persona: { id: string; nombre: string }; nota: string | null; ocurridoEn: string; hechaEn: string | null }[];
+  puedeResponder: boolean;
+  puedeResolver: boolean;
+  puedeCancelar: boolean;
+}
+
+export interface Compensacion {
+  id: string;
+  turno: { id: string; fecha: Dia; equipo: EquipoResumen };
+  persona: PersonaSoporte;
+  fechaCompensada: Dia | null;
+  estado: EstadoCompensacion;
+  aprobadaPor: PersonaSoporte | null;
+  nota: string | null;
+  puedeCambiar: boolean;
+  creadaEn: string;
+}
+
+export interface ReporteCompensaciones {
+  equipoId: string | null;
+  total: number;
+  personas: { persona: PersonaSoporte; pendientes: number; sinFecha: number; proxima: Dia | null; compensaciones: Compensacion[] }[];
+}
+
 const BASE = '/api/v1/soporte';
 const json = async <T>(respuesta: Promise<Response>): Promise<T> => (await (await respuesta).json()) as T;
 const conEquipo = (equipo: string | null | undefined) => (equipo ? `&equipo=${encodeURIComponent(equipo)}` : '');
@@ -251,6 +354,22 @@ export const confirmarGeneracion = (equipoId: string, meses: number, desde: Dia,
 export const obtenerIndicadores = (desde: Dia, hasta: Dia, equipo?: string | null) =>
   json<Indicadores>(pedir(`${BASE}/indicadores?desde=${desde}&hasta=${hasta}${conEquipo(equipo)}`));
 
+export const previsualizarImportacion = (solicitud: SolicitudImportacion) =>
+  json<VistaPreviaImportacion>(enviarJson(`${BASE}/importacion/vista-previa`, 'POST', solicitud));
+export const confirmarImportacion = (solicitud: SolicitudImportacion & { huella: string }) =>
+  json<{ importacionId: string; informe: VistaPreviaImportacion }>(enviarJson(`${BASE}/importacion/confirmar`, 'POST', solicitud));
+
+export const RUTA_SOLICITUDES = `${BASE}/solicitudes-cambio`;
+export const listarSolicitudes = (estado: 'abiertas' | 'cerradas' | 'todas' = 'abiertas') =>
+  json<SolicitudCambio[]>(pedir(`${RUTA_SOLICITUDES}?estado=${estado}`));
+export const obtenerReporteCompensaciones = () => json<ReporteCompensaciones>(pedir(`${BASE}/compensaciones/pendientes`));
+export const listarCompensaciones = (estado: 'pendiente' | 'tomada' | 'todas' = 'todas') =>
+  json<Compensacion[]>(pedir(`${BASE}/compensaciones?estado=${estado}`));
+export const registrarCompensacion = (turnoId: string, fechaCompensada: Dia | null, nota: string | null) =>
+  json<Compensacion>(enviarJson(`${BASE}/compensaciones`, 'POST', { turnoId, fechaCompensada, nota }));
+export const cambiarCompensacion = (id: string, cambio: { fechaCompensada: Dia | null; estado: EstadoCompensacion; nota: string | null }) =>
+  json<Compensacion>(enviarJson(`${BASE}/compensaciones/${encodeURIComponent(id)}`, 'PUT', cambio));
+
 export function useCalendario(desde: Dia, hasta: Dia, equipo: string | null) {
   return useQuery({
     queryKey: [...CLAVE, 'turnos', desde, hasta, equipo ?? 'todos'],
@@ -292,3 +411,20 @@ export const textoCupo = (e: Pick<Equipo, 'personasMinimo' | 'personasMaximo'>):
   e.personasMinimo === e.personasMaximo
     ? `${e.personasMaximo} ${e.personasMaximo === 1 ? 'persona' : 'personas'} por sábado`
     : `${e.personasMinimo} a ${e.personasMaximo} personas por sábado`;
+
+export const TEXTO_SOLICITUD: Record<EstadoSolicitud, string> = {
+  pendiente_reemplazo: 'Espera al reemplazo',
+  pendiente_aprobacion: 'Espera aprobación',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+  cancelada: 'Cancelada',
+};
+
+export const TEXTO_PASO: Record<string, string> = {
+  solicitada: 'Solicitó el cambio',
+  aceptada: 'Aceptó el reemplazo',
+  rechazada_por_reemplazo: 'No aceptó el reemplazo',
+  aprobada: 'Aprobó el cambio',
+  rechazada: 'Rechazó el cambio',
+  cancelada: 'Canceló la solicitud',
+};

@@ -4091,7 +4091,7 @@ paths:
       tags:
         - Soporte
       summary: Reemplazar a la persona de un turno
-      description: 'El turno queda reemplazado y se crea uno nuevo (manual, programado, con el mismo horario) para la persona del mismo equipo que lo toma, enlazado al original. El flujo con solicitud, aceptación y aprobación llega en la HU 2.9. Requiere atlas.soporte.gestionar global o con alcance al equipo.'
+      description: 'El turno queda reemplazado y se crea uno nuevo (manual, programado, con el mismo horario) para la persona del mismo equipo que lo toma, enlazado al original, sin pasar por el flujo de solicitud, aceptación y aprobación de /solicitudes-cambio. Requiere atlas.soporte.gestionar global o con alcance al equipo.'
       operationId: ReemplazarTurnoSoporte
       parameters:
         - name: id
@@ -4536,6 +4536,593 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.soporte.ver_canal
+  /api/v1/soporte/importacion/vista-previa:
+    post:
+      tags:
+        - Soporte
+      summary: Vista previa de la importación del Excel de la rotación
+      description: 'Lee el .xlsx (máximo 1024 KB y 1000 filas) y muestra qué haría la importación en el equipo destino: nombres normalizados a personas (sin tildes ni mayúsculas, nombres parciales únicos), fechas en texto y seriales de Excel, la columna Compensado interpretada (fecha → compensación; «reemplazo» → turno reemplazado; lo ambiguo, a la observación para revisión), las personas que no existen en Atlas (se proponen inactivas) y las filas ya importadas. No guarda nada. Requiere atlas.soporte.gestionar global o con alcance al equipo.'
+      operationId: PrevisualizarImportacionSoporte
+      requestBody:
+        description: 'El archivo en base64, el equipo destino y las decisiones de quien importa.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudImportacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VistaPreviaImportacionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.gestionar
+  /api/v1/soporte/importacion/confirmar:
+    post:
+      tags:
+        - Soporte
+      summary: Importar el Excel de la rotación
+      description: 'Aplica la vista previa con el mismo archivo, las mismas decisiones y su huella (409 si algo cambió). Crea los turnos con origen importado, las compensaciones, las personas inactivas confirmadas y los participantes. Reimportar no duplica (equipo + fecha + persona). Queda en la auditoría, sin nombres. Requiere atlas.soporte.gestionar global o con alcance al equipo.'
+      operationId: ConfirmarImportacionSoporte
+      requestBody:
+        description: 'Lo mismo que la vista previa, más su huella.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudImportacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoImportacionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.gestionar
+  /api/v1/soporte/solicitudes-cambio:
+    get:
+      tags:
+        - Soporte
+      summary: Solicitudes de cambio de turno
+      description: 'Las solicitudes en las que participas (las pediste o te proponen como reemplazo) y las de los equipos que puedes aprobar, con su historial. estado: abiertas (por defecto), cerradas o todas. Hasta 200, de la más reciente a la más antigua. Requiere atlas.soporte.ver.'
+      operationId: ListarSolicitudesCambioSoporte
+      parameters:
+        - name: estado
+          in: query
+          description: 'abiertas (por defecto), cerradas o todas.'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SolicitudCambioDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.soporte.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+    post:
+      tags:
+        - Soporte
+      summary: Solicitar un cambio de turno
+      description: La persona de un turno programado o confirmado (de hoy en adelante) propone a otra persona activa de la rotación del mismo equipo como reemplazo; se le avisa al reemplazo. Una solicitud abierta por turno (409). Con la misma llave de idempotencia responde 200 con la solicitud ya creada. Requiere atlas.soporte.solicitar_cambio.
+      operationId: SolicitarCambioTurnoSoporte
+      requestBody:
+        description: 'Turno, reemplazo propuesto, motivo y llave de idempotencia.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaSolicitudCambio'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCambioDto'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCambioDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.solicitar_cambio
+  '/api/v1/soporte/solicitudes-cambio/{id}':
+    get:
+      tags:
+        - Soporte
+      summary: Una solicitud de cambio de turno
+      description: 'La solicitud con su historial completo, si participas en ella o puedes aprobar o gestionar su equipo (si no, 404). Requiere atlas.soporte.ver.'
+      operationId: ObtenerSolicitudCambioSoporte
+      parameters:
+        - name: id
+          in: path
+          description: Id de la solicitud.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCambioDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.soporte.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+  '/api/v1/soporte/solicitudes-cambio/{id}/respuesta':
+    post:
+      tags:
+        - Soporte
+      summary: Aceptar o rechazar un reemplazo
+      description: 'Solo el reemplazo propuesto, mientras la solicitud espera su respuesta. Si acepta, pasa a pendiente_aprobacion y se avisa a quien la pidió y a quienes pueden aprobar; si rechaza, queda rechazada. Idempotente por llave. Requiere atlas.soporte.solicitar_cambio.'
+      operationId: ResponderSolicitudCambioSoporte
+      parameters:
+        - name: id
+          in: path
+          description: Id de la solicitud.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Si el reemplazo acepta, su nota y la llave de idempotencia.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespuestaSolicitud'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCambioDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.solicitar_cambio
+  '/api/v1/soporte/solicitudes-cambio/{id}/resolucion':
+    post:
+      tags:
+        - Soporte
+      summary: Aprobar o rechazar un cambio de turno
+      description: 'Quien tiene atlas.soporte.aprobar global o con alcance al equipo, cuando el reemplazo ya aceptó. Al aprobar, el turno original queda reemplazado y se crea el del reemplazo (manual, programado, con el mismo horario); 409 si el turno cambió entretanto. Avisa a los dos. Idempotente por llave. Requiere atlas.soporte.aprobar.'
+      operationId: ResolverSolicitudCambioSoporte
+      parameters:
+        - name: id
+          in: path
+          description: Id de la solicitud.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Si aprueba, su nota y la llave de idempotencia.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolucionSolicitud'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCambioDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.aprobar
+  '/api/v1/soporte/solicitudes-cambio/{id}/cancelacion':
+    post:
+      tags:
+        - Soporte
+      summary: Cancelar una solicitud de cambio
+      description: 'Solo quien la pidió, mientras siga abierta. Avisa al reemplazo. Idempotente por llave. Requiere atlas.soporte.solicitar_cambio.'
+      operationId: CancelarSolicitudCambioSoporte
+      parameters:
+        - name: id
+          in: path
+          description: Id de la solicitud.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Nota y llave de idempotencia.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelacionSolicitud'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCambioDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.solicitar_cambio
+  /api/v1/soporte/compensaciones:
+    get:
+      tags:
+        - Soporte
+      summary: Compensaciones
+      description: 'Días compensados por turnos, con filtros por estado (pendiente, tomada o todas), persona y equipo; hasta 500, del turno más reciente al más antiguo. La nota solo la ven la persona compensada y quien aprueba o gestiona el equipo. Requiere atlas.soporte.ver.'
+      operationId: ListarCompensacionesSoporte
+      parameters:
+        - name: estado
+          in: query
+          description: 'pendiente, tomada o todas (por defecto).'
+          schema:
+            type: string
+        - name: persona
+          in: query
+          description: Id de la persona compensada.
+          schema:
+            type: string
+            format: uuid
+        - name: equipo
+          in: query
+          description: Id del equipo del turno.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompensacionDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.soporte.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+    post:
+      tags:
+        - Soporte
+      summary: Registrar una compensación
+      description: 'Día compensado para la persona de un turno vigente (pendiente, con quien la registra como quien aprobó). Una por turno y persona (409). Avisa a la persona. Requiere atlas.soporte.aprobar global o con alcance al equipo del turno.'
+      operationId: RegistrarCompensacionSoporte
+      requestBody:
+        description: 'Turno, día compensado y nota.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaCompensacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompensacionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.aprobar
+  /api/v1/soporte/compensaciones/pendientes:
+    get:
+      tags:
+        - Soporte
+      summary: Compensaciones pendientes por persona
+      description: Reporte de las compensaciones pendientes por persona (de un equipo o de todos). Requiere atlas.soporte.ver.
+      operationId: ReporteCompensacionesPendientesSoporte
+      parameters:
+        - name: equipo
+          in: query
+          description: 'Id del equipo del turno; vacío, todos.'
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteCompensacionesDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.soporte.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+  '/api/v1/soporte/compensaciones/{id}':
+    put:
+      tags:
+        - Soporte
+      summary: Cambiar una compensación
+      description: El día compensado y el estado (tomada exige el día). Requiere atlas.soporte.aprobar global o con alcance al equipo del turno.
+      operationId: CambiarCompensacionSoporte
+      parameters:
+        - name: id
+          in: path
+          description: Id de la compensación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Día compensado, estado y nota.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambioCompensacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompensacionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.aprobar
 components:
   schemas:
     AceptacionDocumento:
@@ -4791,6 +5378,32 @@ components:
             $ref: '#/components/schemas/FestivoDto'
           description: Festivos del rango.
       description: 'Turnos y festivos de un rango de fechas, para las vistas de lista, semana y mes.'
+    CambioCompensacion:
+      required:
+        - fechaCompensada
+        - estado
+        - nota
+      type: object
+      properties:
+        fechaCompensada:
+          type:
+            - 'null'
+            - string
+          description: Día compensado.
+          format: date
+        estado:
+          maxLength: 20
+          type:
+            - 'null'
+            - string
+          description: pendiente o tomada.
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Nota.
+      description: 'Cambio de una compensación: el día y el estado (tomada exige el día).'
     CambioConfiguracion:
       required:
         - horaInicioPorDefecto
@@ -5000,6 +5613,48 @@ components:
           type: boolean
           description: Si ese sábado hay soporte programado.
       description: 'Canal de soporte del sábado para externos: sin nombres de personas.'
+    CancelacionSolicitud:
+      required:
+        - nota
+        - llaveIdempotencia
+        - hechaEn
+      type: object
+      properties:
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Nota.
+        llaveIdempotencia:
+          type: string
+          description: Llave de idempotencia de la acción.
+          format: uuid
+        hechaEn:
+          type:
+            - 'null'
+            - string
+          description: 'Cuándo la hizo la persona, si la hizo sin conexión.'
+          format: date-time
+      description: Cancelación de una solicitud por quien la pidió.
+    CandidataDto:
+      required:
+        - id
+        - nombre
+        - activa
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la persona.
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre.
+        activa:
+          type: boolean
+          description: Si está activa en Atlas.
+      description: Persona candidata para un nombre ambiguo.
     CandidatoDto:
       required:
         - id
@@ -5058,6 +5713,76 @@ components:
           type: string
           description: 'QR de la URI como imagen SVG en data URI (img-src data: de la CSP).'
       description: Clave TOTP nueva para registrar en la aplicación de autenticación.
+    CompensacionDto:
+      required:
+        - id
+        - turno
+        - persona
+        - fechaCompensada
+        - estado
+        - aprobadaPor
+        - nota
+        - puedeCambiar
+        - creadaEn
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la compensación.
+          format: uuid
+        turno:
+          description: Turno por el que se compensa.
+          $ref: '#/components/schemas/TurnoResumenDto'
+        persona:
+          description: A quién se compensa.
+          $ref: '#/components/schemas/PersonaSoporteDto'
+        fechaCompensada:
+          type:
+            - 'null'
+            - string
+          description: Día compensado; vacío mientras no se elija.
+          format: date
+        estado:
+          type: string
+          description: pendiente o tomada.
+        aprobadaPor:
+          oneOf:
+            - type: 'null'
+            - description: Quien la aprobó; vacío si vino del Excel sin ese dato.
+              $ref: '#/components/schemas/PersonaSoporteDto'
+        nota:
+          type:
+            - 'null'
+            - string
+          description: Nota; solo la ven la persona compensada y quien aprueba o gestiona el equipo.
+        puedeCambiar:
+          type: boolean
+          description: Si la persona en sesión puede cambiarla (atlas.soporte.aprobar sobre el equipo).
+        creadaEn:
+          type: string
+          description: Cuándo se registró.
+          format: date-time
+      description: Día compensado por un turno.
+    CompensacionImportacionDto:
+      required:
+        - para
+        - fecha
+        - estado
+      type: object
+      properties:
+        para:
+          type: string
+          description: 'responsable o reemplazo: a quién se compensa.'
+        fecha:
+          type:
+            - 'null'
+            - string
+          description: Día compensado; vacío si el Excel no lo dice.
+          format: date
+        estado:
+          type: string
+          description: pendiente o tomada.
+      description: Compensación leída de la columna «Compensado».
     ConfiguracionDto:
       required:
         - horaInicioPorDefecto
@@ -5214,6 +5939,23 @@ components:
           type: string
           description: 'SHA-256 (hex) del texto: queda en la evidencia de la aceptación.'
       description: 'Documento legal vigente (términos de uso o aviso de privacidad, Ley 1581) con su versión y su texto en Markdown.'
+    EleccionPersona:
+      required:
+        - clave
+        - personaId
+      type: object
+      properties:
+        clave:
+          maxLength: 200
+          type:
+            - 'null'
+            - string
+          description: Nombre normalizado del Excel (la clave que devolvió la vista previa).
+        personaId:
+          type: string
+          description: Persona elegida entre las candidatas.
+          format: uuid
+      description: Persona elegida para un nombre del Excel que encaja con varias personas.
     EquipoDto:
       required:
         - id
@@ -5500,6 +6242,37 @@ components:
             $ref: '#/components/schemas/EquipoEsteSabadoDto'
           description: Cada equipo activo con sus turnos de ese sábado.
       description: 'Soporte del próximo sábado (hoy, si es sábado), por equipo: lo que muestra el widget de Inicio.'
+    EventoSolicitudDto:
+      required:
+        - accion
+        - persona
+        - nota
+        - ocurridoEn
+        - hechaEn
+      type: object
+      properties:
+        accion:
+          type: string
+          description: 'solicitada, aceptada, rechazada_por_reemplazo, aprobada, rechazada o cancelada.'
+        persona:
+          description: Quién lo hizo.
+          $ref: '#/components/schemas/PersonaResumenDto'
+        nota:
+          type:
+            - 'null'
+            - string
+          description: Nota de quien lo hizo.
+        ocurridoEn:
+          type: string
+          description: Cuándo llegó al servidor.
+          format: date-time
+        hechaEn:
+          type:
+            - 'null'
+            - string
+          description: 'Cuándo lo hizo la persona en su dispositivo, si lo hizo sin conexión.'
+          format: date-time
+      description: Paso del historial de una solicitud de cambio.
     FestivoDto:
       required:
         - fecha
@@ -5623,6 +6396,86 @@ components:
           type: string
           format: date-time
       description: 'Ficha de un aplicativo: sus datos, su ruta en la jerarquía y sus hijos. Las pestañas de los demás módulos las pinta la PWA.'
+    FilaImportacionDto:
+      required:
+        - fila
+        - fecha
+        - textoFecha
+        - responsable
+        - estado
+        - reemplazo
+        - compensacion
+        - observacion
+        - requiereRevision
+        - accion
+        - motivo
+        - interpretaciones
+        - ambiguedades
+      type: object
+      properties:
+        fila:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de la fila en Excel.
+          format: int32
+        fecha:
+          type:
+            - 'null'
+            - string
+          description: 'Sábado del turno, si la fecha se pudo leer.'
+          format: date
+        textoFecha:
+          type:
+            - 'null'
+            - string
+          description: Valor original de la celda de la fecha.
+        responsable:
+          oneOf:
+            - type: 'null'
+            - description: Responsable de la fila.
+              $ref: '#/components/schemas/NombreImportacionDto'
+        estado:
+          type: string
+          description: 'Estado del turno que queda vigente (el del reemplazo, si lo hubo).'
+        reemplazo:
+          oneOf:
+            - type: 'null'
+            - description: 'Quien tomó el turno, si la columna «Compensado» habla de un reemplazo.'
+              $ref: '#/components/schemas/NombreImportacionDto'
+        compensacion:
+          oneOf:
+            - type: 'null'
+            - description: 'Compensación, si la hay.'
+              $ref: '#/components/schemas/CompensacionImportacionDto'
+        observacion:
+          type:
+            - 'null'
+            - string
+          description: Observación que queda en el turno.
+        requiereRevision:
+          type: boolean
+          description: Si el turno queda marcado para revisión humana.
+        accion:
+          type: string
+          description: 'crear (se importa), ya_importado (no se duplica) u omitir.'
+        motivo:
+          type:
+            - 'null'
+            - string
+          description: Por qué se omite o por qué no se duplica.
+        interpretaciones:
+          type: array
+          items:
+            type: string
+          description: Cada interpretación hecha en la fila.
+        ambiguedades:
+          type: array
+          items:
+            type: string
+          description: 'Cada caso ambiguo de la fila (queda en la observación, para revisión).'
+      description: 'Una fila del Excel, lo que se entendió de ella y lo que hará la importación.'
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -6000,6 +6853,66 @@ components:
           items:
             $ref: '#/components/schemas/PermisoMatriz'
       description: Módulo y los permisos que declara en su manifiesto.
+    NombreAmbiguoDto:
+      required:
+        - clave
+        - texto
+        - candidatas
+        - elegida
+      type: object
+      properties:
+        clave:
+          type: string
+          description: Clave para elegirla.
+        texto:
+          type: string
+          description: Texto del Excel.
+        candidatas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidataDto'
+          description: Personas que encajan.
+        elegida:
+          type:
+            - 'null'
+            - string
+          description: 'La elegida, si ya se eligió.'
+          format: uuid
+      description: 'Nombre del Excel que encaja con varias personas: quien importa elige una en elegidas.'
+    NombreImportacionDto:
+      required:
+        - texto
+        - clave
+        - coincidencia
+        - personaId
+        - nombre
+        - nueva
+      type: object
+      properties:
+        texto:
+          type: string
+          description: Texto del Excel.
+        clave:
+          type: string
+          description: Nombre normalizado (sin tildes ni mayúsculas).
+        coincidencia:
+          type: string
+          description: 'exacta, parcial, ambigua o ninguna.'
+        personaId:
+          type:
+            - 'null'
+            - string
+          description: Persona de Atlas; vacía si es ambigua sin elegir o si no existe.
+          format: uuid
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: Nombre de la persona en Atlas.
+        nueva:
+          type: boolean
+          description: Persona nueva que se crea inactiva al confirmar.
+      description: Nombre del Excel y la persona de Atlas que le corresponde.
     NotificacionDto:
       required:
         - id
@@ -6060,6 +6973,64 @@ components:
             - string
           description: 'vacaciones, incapacidad u otra.'
       description: Ausencia nueva.
+    NuevaCompensacion:
+      required:
+        - turnoId
+        - fechaCompensada
+        - nota
+      type: object
+      properties:
+        turnoId:
+          type: string
+          description: Turno por el que se compensa (a su persona).
+          format: uuid
+        fechaCompensada:
+          type:
+            - 'null'
+            - string
+          description: 'Día compensado, si ya se sabe.'
+          format: date
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Nota.
+      description: Compensación nueva para la persona de un turno.
+    NuevaSolicitudCambio:
+      required:
+        - turnoId
+        - reemplazoPersonaId
+        - motivo
+        - llaveIdempotencia
+        - hechaEn
+      type: object
+      properties:
+        turnoId:
+          type: string
+          description: Turno de la persona en sesión.
+          format: uuid
+        reemplazoPersonaId:
+          type: string
+          description: Persona del mismo equipo que tomaría el turno.
+          format: uuid
+        motivo:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Motivo.
+        llaveIdempotencia:
+          type: string
+          description: Llave de idempotencia de la acción (uuid que genera el cliente).
+          format: uuid
+        hechaEn:
+          type:
+            - 'null'
+            - string
+          description: 'Cuándo la hizo la persona, si la hizo sin conexión.'
+          format: date-time
+      description: Solicitud nueva de cambio de turno.
     NuevoFestivo:
       required:
         - fecha
@@ -6327,6 +7298,26 @@ components:
           type: string
           description: 'Estado de la persona en Atlas: activa, inactiva o suspendida.'
       description: Participante de la rotación de un equipo.
+    ParticipanteNuevoDto:
+      required:
+        - personaId
+        - nombre
+        - activo
+      type: object
+      properties:
+        personaId:
+          type:
+            - 'null'
+            - string
+          description: Id de la persona; vacío si es una persona nueva.
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre.
+        activo:
+          type: boolean
+          description: Si entra activa (los nuevos y las personas inactivas entran inactivos).
+      description: Persona que se agrega a la rotación del equipo al confirmar.
     PasoIngreso:
       required:
         - paso
@@ -6340,6 +7331,44 @@ components:
           type: string
           description: Id del paso; vence en 5 minutos.
       description: Siguiente paso del ingreso.
+    PendientesPersonaDto:
+      required:
+        - persona
+        - pendientes
+        - sinFecha
+        - proxima
+        - compensaciones
+      type: object
+      properties:
+        persona:
+          description: La persona.
+          $ref: '#/components/schemas/PersonaSoporteDto'
+        pendientes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Compensaciones pendientes.
+          format: int32
+        sinFecha:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Pendientes sin día elegido.
+          format: int32
+        proxima:
+          type:
+            - 'null'
+            - string
+          description: 'Próximo día compensado (hoy o después), si hay.'
+          format: date
+        compensaciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompensacionDto'
+          description: Sus compensaciones pendientes.
+      description: Compensaciones pendientes de una persona.
     PermisoMatriz:
       required:
         - codigo
@@ -6468,6 +7497,38 @@ components:
             type: string
           description: 'Códigos de los roles asignados y vigentes, ordenados. No incluye atlas.lector (lo tiene todo empleado) ni los implícitos.'
       description: 'Persona encontrada: lo mínimo para elegirla y abrir sus asignaciones.'
+    PersonaNuevaDto:
+      required:
+        - clave
+        - nombre
+        - filas
+        - ultimaFecha
+        - confirmada
+      type: object
+      properties:
+        clave:
+          type: string
+          description: Clave para confirmarla en crearInactivas.
+        nombre:
+          type: string
+          description: Nombre como viene en el Excel.
+        filas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Filas en las que es responsable.
+          format: int32
+        ultimaFecha:
+          type:
+            - 'null'
+            - string
+          description: Su último turno en el Excel.
+          format: date
+        confirmada:
+          type: boolean
+          description: Si quien importa ya confirmó crearla.
+      description: 'Persona del Excel que no existe en Atlas: se propone crearla inactiva (no entra en la generación).'
     PersonaPreviaDto:
       required:
         - personaId
@@ -6486,6 +7547,20 @@ components:
           type: boolean
           description: 'Si es un turno nuevo (falso: ya publicado y no cambia).'
       description: Persona de un sábado de la vista previa.
+    PersonaResumenDto:
+      required:
+        - id
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la persona.
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre.
+      description: Persona de un paso del historial.
     PersonaSoporteDto:
       required:
         - id
@@ -6659,6 +7734,32 @@ components:
         nombre:
           type: string
       description: 'Aplicativo de la ruta de otro (un ancestro o un hijo), para enlazarlo.'
+    ReporteCompensacionesDto:
+      required:
+        - equipoId
+        - total
+        - personas
+      type: object
+      properties:
+        equipoId:
+          type:
+            - 'null'
+            - string
+          description: 'Equipo filtrado; vacío, todos.'
+          format: uuid
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Total de compensaciones pendientes.
+          format: int32
+        personas:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendientesPersonaDto'
+          description: 'Por persona, de más a menos pendientes.'
+      description: Reporte de compensaciones pendientes por persona.
     ReporteErrorCliente:
       required:
         - referencia
@@ -6700,6 +7801,62 @@ components:
             - string
           description: Versión de la PWA.
       description: Error de la PWA que la persona vio en la pantalla «Algo salió mal». Solo datos técnicos.
+    ResolucionSolicitud:
+      required:
+        - aprueba
+        - nota
+        - llaveIdempotencia
+        - hechaEn
+      type: object
+      properties:
+        aprueba:
+          type: boolean
+          description: Si aprueba.
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Nota.
+        llaveIdempotencia:
+          type: string
+          description: Llave de idempotencia de la acción.
+          format: uuid
+        hechaEn:
+          type:
+            - 'null'
+            - string
+          description: 'Cuándo la hizo la persona, si la hizo sin conexión.'
+          format: date-time
+      description: Decisión de quien aprueba.
+    RespuestaSolicitud:
+      required:
+        - acepta
+        - nota
+        - llaveIdempotencia
+        - hechaEn
+      type: object
+      properties:
+        acepta:
+          type: boolean
+          description: Si acepta.
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Nota.
+        llaveIdempotencia:
+          type: string
+          description: Llave de idempotencia de la acción.
+          format: uuid
+        hechaEn:
+          type:
+            - 'null'
+            - string
+          description: 'Cuándo la hizo la persona, si la hizo sin conexión.'
+          format: date-time
+      description: 'Respuesta del reemplazo: acepta o rechaza tomar el turno.'
     ResultadoBusquedaPersonas:
       required:
         - personas
@@ -6772,6 +7929,20 @@ components:
           description: Turnos generados antes que se quitaron.
           format: int32
       description: Resultado de publicar la generación.
+    ResultadoImportacionDto:
+      required:
+        - importacionId
+        - informe
+      type: object
+      properties:
+        importacionId:
+          type: string
+          description: Id de la importación (en la auditoría).
+          format: uuid
+        informe:
+          description: 'El informe: lo mismo que la vista previa confirmada.'
+          $ref: '#/components/schemas/VistaPreviaImportacionDto'
+      description: 'Resultado de la importación, con el informe final.'
     ResultadoRestablecimiento:
       required:
         - correoEnviado
@@ -6781,6 +7952,99 @@ components:
           type: boolean
           description: false si el correo con el enlace no salió.
       description: Resultado del restablecimiento forzado.
+    ResumenImportacionDto:
+      required:
+        - filas
+        - importadas
+        - yaImportadas
+        - omitidas
+        - turnos
+        - compensaciones
+        - personasInactivas
+        - participantes
+        - generadosQuitados
+        - interpretaciones
+        - ambiguos
+      type: object
+      properties:
+        filas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Filas de datos leídas.
+          format: int32
+        importadas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Filas que se importan (o se importaron).
+          format: int32
+        yaImportadas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Filas que ya estaban importadas: no se duplican.'
+          format: int32
+        omitidas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Filas omitidas.
+          format: int32
+        turnos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Turnos que se crean (un reemplazo crea dos: el reemplazado y el del reemplazo).'
+          format: int32
+        compensaciones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Compensaciones que se crean.
+          format: int32
+        personasInactivas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Personas inactivas que se crean.
+          format: int32
+        participantes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Participantes que se agregan al equipo.
+          format: int32
+        generadosQuitados:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Turnos generados (programados) que se quitan porque el Excel trae otra persona ese sábado.
+          format: int32
+        interpretaciones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Interpretaciones hechas.
+          format: int32
+        ambiguos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Casos ambiguos (filas marcadas para revisión).
+          format: int32
+      description: Conteos de la vista previa o de la importación.
     RolConPermisos:
       required:
         - codigo
@@ -7100,6 +8364,81 @@ components:
           description: Hasta cuándo vale; obligatoria para roles externos.
           format: date-time
       description: Rol que se asigna a una persona. Un rol externo exige vencimiento (máximo 90 días) y queda en la organización de la persona.
+    SolicitudCambioDto:
+      required:
+        - id
+        - turno
+        - solicitante
+        - reemplazo
+        - estado
+        - motivo
+        - turnoNuevoId
+        - resueltaPor
+        - resueltaEn
+        - creadaEn
+        - historial
+        - puedeResponder
+        - puedeResolver
+        - puedeCancelar
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la solicitud.
+          format: uuid
+        turno:
+          description: Turno que se quiere cambiar.
+          $ref: '#/components/schemas/TurnoDto'
+        solicitante:
+          description: Quien pide el cambio (la persona de turno).
+          $ref: '#/components/schemas/PersonaSoporteDto'
+        reemplazo:
+          description: Quien tomaría el turno.
+          $ref: '#/components/schemas/PersonaSoporteDto'
+        estado:
+          type: string
+          description: 'pendiente_reemplazo, pendiente_aprobacion, aprobada, rechazada o cancelada.'
+        motivo:
+          type:
+            - 'null'
+            - string
+          description: Motivo del cambio.
+        turnoNuevoId:
+          type:
+            - 'null'
+            - string
+          description: Turno creado para el reemplazo al aprobar.
+          format: uuid
+        resueltaPor:
+          oneOf:
+            - type: 'null'
+            - description: Quien aprobó o rechazó.
+              $ref: '#/components/schemas/PersonaSoporteDto'
+        resueltaEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo se aprobó o rechazó.
+          format: date-time
+        creadaEn:
+          type: string
+          description: Cuándo se creó.
+          format: date-time
+        historial:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventoSolicitudDto'
+          description: 'Historial completo: quién, cuándo y su nota.'
+        puedeResponder:
+          type: boolean
+          description: Si la persona en sesión (el reemplazo) puede aceptarla o rechazarla.
+        puedeResolver:
+          type: boolean
+          description: Si la persona en sesión puede aprobarla o rechazarla (atlas.soporte.aprobar global o con alcance al equipo).
+        puedeCancelar:
+          type: boolean
+          description: Si la persona en sesión (quien la pidió) puede cancelarla.
+      description: 'Solicitud de cambio de turno: la persona de turno propone un reemplazo, el reemplazo acepta y alguien con permiso aprueba.'
     SolicitudCompletarRecuperacion:
       required:
         - enlace
@@ -7193,6 +8532,63 @@ components:
           description: 'Primer día de la ventana; vacío, mañana. Debe ser posterior a hoy.'
           format: date
       description: Ventana de la generación automática de un equipo.
+    SolicitudImportacion:
+      required:
+        - equipoId
+        - nombreArchivo
+        - contenido
+        - crearInactivas
+        - elegidas
+        - agregarParticipantes
+        - huella
+      type: object
+      properties:
+        equipoId:
+          type:
+            - 'null'
+            - string
+          description: 'Equipo destino; vacío, Desarrollo TI (el del Excel).'
+          format: uuid
+        nombreArchivo:
+          maxLength: 200
+          type:
+            - 'null'
+            - string
+          description: 'Nombre del archivo, solo para el informe.'
+        contenido:
+          maxLength: 1398104
+          type:
+            - 'null'
+            - string
+          description: Contenido del .xlsx en base64 (máximo 1 MB antes de codificar).
+        crearInactivas:
+          maxItems: 100
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: Claves de las personas que no existen en Atlas y que quien importa confirma crear como inactivas.
+        elegidas:
+          maxItems: 100
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/EleccionPersona'
+          description: Persona elegida para cada nombre ambiguo.
+        agregarParticipantes:
+          type:
+            - 'null'
+            - boolean
+          description: 'Si agrega al equipo a los responsables que aún no están en su rotación (activos o, los nuevos, inactivos); vacío, sí.'
+        huella:
+          maxLength: 64
+          type:
+            - 'null'
+            - string
+          description: 'Solo al confirmar: la huella de la vista previa que se aplica.'
+      description: 'El .xlsx de la rotación (hoja «Rotacion Soporte»: Fecha, Responsable, Estado, Compensado, Observación) en base64 y las decisiones de quien importa. La vista previa y la confirmación reciben lo mismo; la confirmación, además, la huella.'
     SolicitudIngresoLocal:
       required:
         - correo
@@ -7464,6 +8860,25 @@ components:
           type: boolean
           description: Marcado para revisión humana (importación del Excel).
       description: Turno de una persona de un equipo en un sábado.
+    TurnoResumenDto:
+      required:
+        - id
+        - fecha
+        - equipo
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id del turno.
+          format: uuid
+        fecha:
+          type: string
+          description: Sábado del turno.
+          format: date
+        equipo:
+          description: Equipo del turno.
+          $ref: '#/components/schemas/EquipoResumenDto'
+      description: Turno de una compensación.
     VersionApi:
       required:
         - servicio
@@ -7542,6 +8957,57 @@ components:
             type: string
           description: Avisos para quien publica.
       description: 'Vista previa de la generación de un equipo: nada se publica hasta que alguien con permiso de aprobar la confirme.'
+    VistaPreviaImportacionDto:
+      required:
+        - equipo
+        - hoja
+        - huella
+        - resumen
+        - filas
+        - personasNuevas
+        - nombresAmbiguos
+        - participantesNuevos
+        - avisos
+      type: object
+      properties:
+        equipo:
+          description: Equipo destino.
+          $ref: '#/components/schemas/EquipoResumenDto'
+        hoja:
+          type: string
+          description: Hoja leída.
+        huella:
+          type: string
+          description: Huella para confirmar exactamente esta vista previa.
+        resumen:
+          description: Conteos.
+          $ref: '#/components/schemas/ResumenImportacionDto'
+        filas:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilaImportacionDto'
+          description: Cada fila con sus interpretaciones y casos ambiguos (el informe).
+        personasNuevas:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaNuevaDto'
+          description: Personas que no existen en Atlas.
+        nombresAmbiguos:
+          type: array
+          items:
+            $ref: '#/components/schemas/NombreAmbiguoDto'
+          description: Nombres que encajan con varias personas.
+        participantesNuevos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipanteNuevoDto'
+          description: Personas que entran a la rotación del equipo.
+        avisos:
+          type: array
+          items:
+            type: string
+          description: Avisos para quien importa.
+      description: 'Vista previa de la importación: nada se guarda hasta confirmar con la misma huella.'
     VistaSincronizacion:
       required:
         - disponible
@@ -7675,4 +9141,4 @@ tags:
   - name: Hola
     description: 'Módulo de ejemplo de docs/como-crear-un-modulo.md: saludos por organización con permisos, predicado obligatorio y RLS. Apagado por defecto (bandera modulo.hola).'
   - name: Soporte
-    description: 'Soporte de los sábados por equipos de cada área: configuración, equipos, participantes, turnos con estados y horario, ausencias, festivos de Colombia, generación automática con vista previa e indicadores.'
+    description: 'Soporte de los sábados por equipos de cada área: configuración, equipos, participantes, turnos con estados y horario, ausencias, festivos de Colombia, generación automática con vista previa, indicadores, importador del Excel con revisión, cambios de turno y compensaciones.'

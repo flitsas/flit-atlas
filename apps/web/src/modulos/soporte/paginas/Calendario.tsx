@@ -1,13 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { BarChart3, ChevronLeft, ChevronRight, Plus, Settings2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { ArrowLeftRight, BarChart3, ChevronLeft, ChevronRight, Plus, Settings2 } from 'lucide-react';
+import { type FormEvent, type ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 
 import { tienePermiso } from '../../../app/modulos/resolver';
 import { useSesion } from '../../../app/sesion';
 import { Hoja } from '../../../app/ui/Hoja';
 import { Icono } from '../../../app/ui/Icono';
-import { Boton, cn } from '../../../app/ui/Tarjeta';
+import { Boton, cn, Insignia } from '../../../app/ui/Tarjeta';
 import {
   type Calendario as DatosCalendario,
   cambiarEstadoTurno,
@@ -16,13 +16,15 @@ import {
   crearTurno,
   type Equipo,
   reemplazarTurno,
+  registrarCompensacion,
   textoCupo,
   type Turno,
   useCalendario,
   useEquipos,
   useParticipantes,
 } from '../api';
-import { type Aviso, avisoDeError, claseCampo, FiltroEquipo, MostrarAviso, Opciones, TarjetaTurno } from '../componentes';
+import { solicitarCambio, textoResultado, usePendientesSoporte } from '../acciones';
+import { type Aviso, avisoDeError, claseCampo, FiltroEquipo, MostrarAviso, Opciones, PendientesDeEnviar, TarjetaTurno } from '../componentes';
 import {
   cuadriculaDelMes,
   DIAS_CORTOS,
@@ -71,10 +73,13 @@ function mover(vista: Vista, ancla: Dia, paso: number): Dia {
  * gestiona el equipo sobre cada turno.
  */
 export default function Calendario() {
-  const { acceso } = useSesion();
+  const { acceso, yo } = useSesion();
   const equipos = useEquipos();
   const gestionables = (equipos.data ?? []).filter((e) => e.puedeGestionar);
   const gestiona = tienePermiso('atlas.soporte.gestionar', acceso.permisos);
+  const solicita = tienePermiso('atlas.soporte.solicitar_cambio', acceso.permisos);
+  const pendientes = usePendientesSoporte();
+  const [pidiendo, setPidiendo] = useState<Turno | null>(null);
   const [vista, setVista] = useState<Vista>(vistaInicial);
   const [ancla, setAncla] = useState<Dia>(() => hoy());
   const [equipo, setEquipo] = useState<string | null>(null);
@@ -84,6 +89,30 @@ export default function Calendario() {
   const { desde, hasta, titulo } = rango(vista, ancla);
   const calendario = useCalendario(desde, hasta, equipo);
   const puedeGestionarTurno = (t: Turno) => gestionables.some((e) => e.id === t.equipo.id);
+  const enCola = new Set(pendientes.map((p) => p.recurso));
+  /** Acciones de cada turno: la solicitud de cambio de la persona de turno y la gestión de quien gestiona el equipo. */
+  const acciones = (t: Turno): ReactNode => {
+    const abierto = t.estado === 'programado' || t.estado === 'confirmado';
+    const pedir = solicita && abierto && yo?.personaId === t.persona.id && t.fecha >= hoy() && !enCola.has(t.id);
+    const gestionar = puedeGestionarTurno(t) && abierto;
+    if (!pedir && !gestionar && !enCola.has(t.id)) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {enCola.has(t.id) && <Insignia tono="neutral">Cambio pendiente de enviar</Insignia>}
+        {pedir && (
+          <Boton variante="secundario" onClick={() => setPidiendo(t)} aria-label={`Solicitar el cambio del turno del ${formatearDia(t.fecha)}`}>
+            <ArrowLeftRight className="size-4" aria-hidden="true" />
+            Solicitar cambio
+          </Boton>
+        )}
+        {gestionar && (
+          <Boton variante="secundario" onClick={() => setEditando(t)} aria-label={`Gestionar el turno del ${formatearDia(t.fecha)}`}>
+            Gestionar turno
+          </Boton>
+        )}
+      </div>
+    );
+  };
 
   function cambiarVista(nueva: Vista) {
     setVista(nueva);
@@ -107,6 +136,10 @@ export default function Calendario() {
           <BarChart3 className="size-4" aria-hidden="true" />
           Indicadores
         </Link>
+        <Link to="/soporte/cambios" className="inline-flex min-h-toque items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-atlas-activo">
+          <ArrowLeftRight className="size-4" aria-hidden="true" />
+          Cambios y compensaciones
+        </Link>
         {gestiona && (
           <>
             <Link to="/soporte/gestion" className="inline-flex min-h-toque items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-atlas-activo">
@@ -124,6 +157,7 @@ export default function Calendario() {
       </div>
 
       <MostrarAviso aviso={aviso} />
+      <PendientesDeEnviar acciones={pendientes} />
       {equipos.data && equipos.data.length > 1 && <FiltroEquipo equipos={equipos.data} valor={equipo} alCambiar={setEquipo} />}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -160,13 +194,19 @@ export default function Calendario() {
           No pudimos cargar el calendario. Revisa tu conexión.
         </p>
       )}
-      {calendario.data && vista === 'lista' && <VistaLista datos={calendario.data} gestiona={puedeGestionarTurno} alGestionar={setEditando} />}
-      {calendario.data && vista === 'semana' && <VistaSemana datos={calendario.data} gestiona={puedeGestionarTurno} alGestionar={setEditando} />}
-      {calendario.data && vista === 'mes' && <VistaMes datos={calendario.data} mes={ancla} gestiona={puedeGestionarTurno} alGestionar={setEditando} />}
+      {calendario.data && vista === 'lista' && <VistaLista datos={calendario.data} acciones={acciones} />}
+      {calendario.data && vista === 'semana' && <VistaSemana datos={calendario.data} acciones={acciones} />}
+      {calendario.data && vista === 'mes' && <VistaMes datos={calendario.data} mes={ancla} acciones={acciones} />}
 
+      {solicita && <SolicitarCambio turno={pidiendo} alCerrar={() => setPidiendo(null)} alTerminar={setAviso} />}
       {gestiona && (
         <>
-          <GestionTurno turno={editando} alCerrar={() => setEditando(null)} alTerminar={setAviso} />
+          <GestionTurno
+            turno={editando}
+            aprueba={(equipos.data ?? []).some((e) => e.id === editando?.equipo.id && e.puedeAprobar)}
+            alCerrar={() => setEditando(null)}
+            alTerminar={setAviso}
+          />
           {creando && <NuevoTurno abierta equipos={gestionables} alCerrar={() => setCreando(false)} alTerminar={setAviso} />}
         </>
       )}
@@ -176,20 +216,10 @@ export default function Calendario() {
 
 interface PropsVista {
   datos: DatosCalendario;
-  gestiona: (turno: Turno) => boolean;
-  alGestionar: (turno: Turno) => void;
+  acciones: (turno: Turno) => ReactNode;
 }
 
-function AccionGestionar({ turno, alGestionar }: { turno: Turno; alGestionar: (t: Turno) => void }) {
-  if (turno.estado === 'aplicado' || turno.estado === 'reemplazado' || turno.estado === 'cancelado') return null;
-  return (
-    <Boton variante="secundario" className="self-start" onClick={() => alGestionar(turno)} aria-label={`Gestionar el turno del ${formatearDia(turno.fecha)}`}>
-      Gestionar turno
-    </Boton>
-  );
-}
-
-function VistaLista({ datos, gestiona, alGestionar }: PropsVista) {
+function VistaLista({ datos, acciones }: PropsVista) {
   if (datos.turnos.length === 0) {
     return (
       <p className="rounded-2xl border border-border bg-card px-6 py-10 text-center text-sm text-atlas-texto-suave shadow-tarjeta">
@@ -201,14 +231,14 @@ function VistaLista({ datos, gestiona, alGestionar }: PropsVista) {
     <ul aria-label="Turnos" className="grid grid-cols-1 gap-3 md:grid-cols-2">
       {datos.turnos.map((t) => (
         <li key={t.id} className="min-w-0">
-          <TarjetaTurno turno={t} acciones={gestiona(t) && <AccionGestionar turno={t} alGestionar={alGestionar} />} />
+          <TarjetaTurno turno={t} acciones={acciones(t)} />
         </li>
       ))}
     </ul>
   );
 }
 
-function VistaSemana({ datos, gestiona, alGestionar }: PropsVista) {
+function VistaSemana({ datos, acciones }: PropsVista) {
   const dias = Array.from({ length: 7 }, (_, i) => sumarDias(datos.desde, i));
   const festivos = new Map(datos.festivos.map((f) => [f.fecha, f.nombre]));
   return (
@@ -224,7 +254,7 @@ function VistaSemana({ datos, gestiona, alGestionar }: PropsVista) {
             </p>
             {sabado && turnos.length === 0 && <p className="text-sm text-atlas-texto-suave">Sin turno.</p>}
             {turnos.map((t) => (
-              <TarjetaTurno key={t.id} turno={t} mostrarFecha={false} acciones={gestiona(t) && <AccionGestionar turno={t} alGestionar={alGestionar} />} />
+              <TarjetaTurno key={t.id} turno={t} mostrarFecha={false} acciones={acciones(t)} />
             ))}
           </li>
         );
@@ -233,7 +263,7 @@ function VistaSemana({ datos, gestiona, alGestionar }: PropsVista) {
   );
 }
 
-function VistaMes({ datos, mes, gestiona, alGestionar }: PropsVista & { mes: Dia }) {
+function VistaMes({ datos, mes, acciones }: PropsVista & { mes: Dia }) {
   const dias = cuadriculaDelMes(mes);
   const delMes = mes.slice(0, 7);
   const festivos = new Map(datos.festivos.map((f) => [f.fecha, f.nombre]));
@@ -286,7 +316,7 @@ function VistaMes({ datos, mes, gestiona, alGestionar }: PropsVista & { mes: Dia
         <ul aria-label={`Turnos de ${formatearMes(mes)}`} className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {turnosDelMes.map((t) => (
             <li key={t.id} className="min-w-0">
-              <TarjetaTurno turno={t} acciones={gestiona(t) && <AccionGestionar turno={t} alGestionar={alGestionar} />} />
+              <TarjetaTurno turno={t} acciones={acciones(t)} />
             </li>
           ))}
         </ul>
@@ -298,21 +328,42 @@ function VistaMes({ datos, mes, gestiona, alGestionar }: PropsVista & { mes: Dia
 }
 
 /** Acciones de quien gestiona el equipo sobre un turno: estado, horario propio y reemplazo. */
-function GestionTurno({ turno, alCerrar, alTerminar }: { turno: Turno | null; alCerrar: () => void; alTerminar: (aviso: Aviso) => void }) {
+function GestionTurno({
+  turno,
+  aprueba,
+  alCerrar,
+  alTerminar,
+}: {
+  turno: Turno | null;
+  aprueba: boolean;
+  alCerrar: () => void;
+  alTerminar: (aviso: Aviso) => void;
+}) {
   return (
     <Hoja abierta={turno !== null} alCerrar={alCerrar} titulo={turno ? `Turno del ${formatearDia(turno.fecha)}` : 'Turno'}>
-      {turno && <CamposGestion key={turno.id} turno={turno} alCerrar={alCerrar} alTerminar={alTerminar} />}
+      {turno && <CamposGestion key={turno.id} turno={turno} aprueba={aprueba} alCerrar={alCerrar} alTerminar={alTerminar} />}
     </Hoja>
   );
 }
 
-function CamposGestion({ turno, alCerrar, alTerminar }: { turno: Turno; alCerrar: () => void; alTerminar: (aviso: Aviso) => void }) {
+function CamposGestion({
+  turno,
+  aprueba,
+  alCerrar,
+  alTerminar,
+}: {
+  turno: Turno;
+  aprueba: boolean;
+  alCerrar: () => void;
+  alTerminar: (aviso: Aviso) => void;
+}) {
   const cliente = useQueryClient();
   const participantes = useParticipantes(turno.equipo.id);
   const [inicio, setInicio] = useState(turno.horaInicio ?? '');
   const [fin, setFin] = useState(turno.horaFin ?? '');
   const [observacion, setObservacion] = useState(turno.observacion ?? '');
   const [reemplazo, setReemplazo] = useState<string | null>(null);
+  const [compensado, setCompensado] = useState('');
   const [error, setError] = useState<Aviso>(null);
   const [enviando, setEnviando] = useState(false);
   const pasado = turno.fecha <= hoy();
@@ -410,7 +461,91 @@ function CamposGestion({ turno, alCerrar, alTerminar }: { turno: Turno; alCerrar
           Reemplazar
         </Boton>
       </form>
+
+      {aprueba && turno.estado !== 'reemplazado' && turno.estado !== 'cancelado' && (
+        <form
+          aria-label="Compensación"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void hacer(
+              () => registrarCompensacion(turno.id, compensado || null, null),
+              `Se registró la compensación de ${turno.persona.nombre}.`,
+              'No se pudo registrar la compensación.',
+            );
+          }}
+          className="flex min-w-0 flex-col gap-3"
+        >
+          <label className="font-medium">
+            Día compensado (opcional)
+            <input type="date" value={compensado} onChange={(e) => setCompensado(e.target.value)} className={claseCampo} />
+          </label>
+          <Boton type="submit" variante="secundario" disabled={enviando} className="self-start">
+            Registrar compensación
+          </Boton>
+        </form>
+      )}
     </div>
+  );
+}
+
+/** La persona de turno pide el cambio y propone un reemplazo de su equipo; sin conexión, queda en la cola. */
+function SolicitarCambio({ turno, alCerrar, alTerminar }: { turno: Turno | null; alCerrar: () => void; alTerminar: (aviso: Aviso) => void }) {
+  return (
+    <Hoja abierta={turno !== null} alCerrar={alCerrar} titulo={turno ? `Cambiar el turno del ${formatearDia(turno.fecha)}` : 'Cambio de turno'}>
+      {turno && <CamposSolicitud key={turno.id} turno={turno} alCerrar={alCerrar} alTerminar={alTerminar} />}
+    </Hoja>
+  );
+}
+
+function CamposSolicitud({ turno, alCerrar, alTerminar }: { turno: Turno; alCerrar: () => void; alTerminar: (aviso: Aviso) => void }) {
+  const cliente = useQueryClient();
+  const participantes = useParticipantes(turno.equipo.id);
+  const [reemplazo, setReemplazo] = useState<string | null>(null);
+  const [motivo, setMotivo] = useState('');
+  const [error, setError] = useState<Aviso>(null);
+  const [enviando, setEnviando] = useState(false);
+  const opciones = (participantes.data ?? []).filter((p) => p.activo && p.personaId !== turno.persona.id);
+
+  async function enviar(evento: FormEvent) {
+    evento.preventDefault();
+    if (!reemplazo) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      const resultado = await solicitarCambio(turno, reemplazo, motivo.trim() || null);
+      if (resultado.estado === 'enviada') await cliente.invalidateQueries({ queryKey: CLAVE });
+      alTerminar({ tono: 'exito', texto: textoResultado(resultado, 'Se envió la solicitud: tu reemplazo debe aceptarla y luego se aprueba.') });
+      alCerrar();
+    } catch (e) {
+      setError(avisoDeError(e, 'No se pudo solicitar el cambio.'));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <form aria-label="Solicitud de cambio" onSubmit={(e) => void enviar(e)} className="flex min-w-0 flex-col gap-4 px-4 pt-2 pb-5 text-sm">
+      <p>
+        {turno.equipo.nombre} · {formatearDiaLargo(turno.fecha)}
+      </p>
+      <MostrarAviso aviso={error} />
+      {participantes.isPending && <p role="status">Cargando el equipo…</p>}
+      <Opciones
+        leyenda="¿Quién te reemplaza?"
+        nombre={`reemplazo-solicitud-${turno.id}`}
+        valor={reemplazo}
+        opciones={opciones.map((p) => ({ valor: p.personaId, texto: p.nombre }))}
+        alCambiar={setReemplazo}
+      />
+      {participantes.data && opciones.length === 0 && <p className="text-atlas-texto-suave">No hay otras personas activas en la rotación del equipo.</p>}
+      <label className="font-medium">
+        Motivo (opcional)
+        <textarea value={motivo} maxLength={500} rows={2} onChange={(e) => setMotivo(e.target.value)} className={cn(claseCampo, 'py-2')} />
+      </label>
+      <Boton type="submit" className="min-h-12" disabled={!reemplazo || enviando}>
+        Solicitar el cambio
+      </Boton>
+    </form>
   );
 }
 

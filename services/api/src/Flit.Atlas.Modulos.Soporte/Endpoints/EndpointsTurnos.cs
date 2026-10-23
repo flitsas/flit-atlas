@@ -94,8 +94,8 @@ internal static class EndpointsTurnos
             .WithSummary("Reemplazar a la persona de un turno")
             .WithDescription(
                 "El turno queda reemplazado y se crea uno nuevo (manual, programado, con el mismo horario) para la persona del " +
-                "mismo equipo que lo toma, enlazado al original. El flujo con solicitud, aceptación y aprobación llega en la " +
-                "HU 2.9. Requiere atlas.soporte.gestionar global o con alcance al equipo.")
+                "mismo equipo que lo toma, enlazado al original, sin pasar por el flujo de solicitud, aceptación y aprobación " +
+                "de /solicitudes-cambio. Requiere atlas.soporte.gestionar global o con alcance al equipo.")
             .Produces<TurnoDto>(StatusCodes.Status201Created)
             .Produces<ErrorSoporte>(StatusCodes.Status403Forbidden)
             .Produces<ErrorSoporte>(StatusCodes.Status404NotFound)
