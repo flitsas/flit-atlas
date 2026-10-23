@@ -45,7 +45,9 @@ Para el arranque de un ambiente (nadie tiene aún `atlas.superadmin` para crear 
 2. **Abre el enlace de inmediato**, en el navegador donde vas a usar la cuenta: sirve una sola vez y vence en 1 h. No lo pegues en chats, tickets ni documentos; el enlace solo existe en la salida del comando (no queda en el log).
 3. Registra una passkey (preferida) o una contraseña de 12+ caracteres con una aplicación de autenticación, y guarda los códigos de recuperación fuera de línea.
 4. Entra por la pantalla de ingreso de Atlas (`https://qa.atlas.flitsas.com/`), en la sección de cuentas locales («passkey» o correo, contraseña y código). El shell muestra «Cuenta de emergencia».
-5. Haz solo lo que falta y cierra la sesión. Para el arranque, el paso es mapear el grupo de Entra de administración a `atlas.superadmin`. La PWA aún no tiene pantalla de mapeos: en los 10 minutos siguientes al ingreso (la reautenticación lo exige), desde la consola del navegador en la pestaña de Atlas:
+5. Haz solo lo que falta y cierra la sesión. Para el arranque, el paso es mapear el grupo de Entra de administración a `atlas.superadmin`, desde la PWA: **Más → Asignación de roles** (`/administracion/roles`) → **Nuevo mapeo**, con el object id del grupo (Entra ID → Grupos → el grupo → Id. de objeto), su nombre y el rol Superadministrador. La reautenticación lo exige en los 10 minutos siguientes al ingreso; si la pantalla pide confirmar tu identidad, usa «Salir y volver a entrar».
+
+   Como alternativa (sin la pantalla), desde la consola del navegador en la pestaña de Atlas, en esos mismos 10 minutos:
 
    ```js
    await fetch('/api/v1/plataforma/mapeos-grupos-entra', {

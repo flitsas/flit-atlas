@@ -54,6 +54,66 @@ paths:
                 description: Problem Details (RFC 9457) con el código que interpreta la PWA.
       security:
         - sesionAtlas: [ ]
+  /api/v1/plataforma/errores-cliente:
+    post:
+      tags:
+        - Plataforma
+      summary: Reportar un error de la PWA
+      description: 'La PWA envía aquí los errores de la pantalla «Algo salió mal» (salvo los de descarga de un módulo tras un despliegue, que se resuelven recargando). Se escriben como advertencia en el log estructurado con la referencia que la persona ve; no se guardan en la base. No requiere sesión, tiene límite de tasa por IP y un cuerpo de máximo 8 KB. El servidor recorta los campos y tacha correos, números largos y cadenas con forma de token.'
+      operationId: ReportarErrorDeCliente
+      requestBody:
+        description: Error de la PWA que la persona vio en la pantalla «Algo salió mal». Solo datos técnicos.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReporteErrorCliente'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorClienteRegistrado'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '413':
+          description: Payload Too Large
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
   /api/v1/version:
     get:
       tags:
@@ -3091,6 +3151,14 @@ components:
           type: string
           description: 'SHA-256 (hex) del texto: queda en la evidencia de la aceptación.'
       description: 'Documento legal vigente (términos de uso o aviso de privacidad, Ley 1581) con su versión y su texto en Markdown.'
+    ErrorClienteRegistrado:
+      required:
+        - referencia
+      type: object
+      properties:
+        referencia:
+          type: string
+      description: 'Reporte recibido: la referencia con la que quedó en el log.'
     ErrorExternos:
       required:
         - error
@@ -3637,6 +3705,47 @@ components:
           description: Dispositivos a los que llegó el push.
           format: int32
       description: Resultado de la notificación de prueba.
+    ReporteErrorCliente:
+      required:
+        - referencia
+        - nombre
+        - mensaje
+        - pila
+        - ruta
+        - version
+      type: object
+      properties:
+        referencia:
+          type:
+            - 'null'
+            - string
+          description: 'Referencia corta que la PWA mostró a la persona (6 a 12 letras mayúsculas o dígitos). Si no es válida, el servidor asigna otra.'
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: 'Tipo del error (TypeError, Error…).'
+        mensaje:
+          type:
+            - 'null'
+            - string
+          description: Mensaje del error (se recorta a 500 caracteres).
+        pila:
+          type:
+            - 'null'
+            - string
+          description: Pila del error (se recorta a 4000 caracteres).
+        ruta:
+          type:
+            - 'null'
+            - string
+          description: 'Ruta de la PWA donde ocurrió, sin consulta ni fragmento.'
+        version:
+          type:
+            - 'null'
+            - string
+          description: Versión de la PWA.
+      description: Error de la PWA que la persona vio en la pantalla «Algo salió mal». Solo datos técnicos.
     ResultadoCierre:
       required:
         - cerradas

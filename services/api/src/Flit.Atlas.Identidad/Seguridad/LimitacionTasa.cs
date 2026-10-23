@@ -37,6 +37,12 @@ public sealed class OpcionesLimiteTasa
     /// recuperación): más estricto que el ingreso de empleados (§12, HU 1.5). Se suma a los demás límites.
     /// </summary>
     public int ExternosPorIp { get; set; } = 10;
+
+    /// <summary>
+    /// Reportes de errores de la PWA por IP y ventana (<c>POST /api/v1/plataforma/errores-cliente</c>): público, así que
+    /// un tope bajo evita que alguien llene el log. Una pantalla de error envía un solo reporte.
+    /// </summary>
+    public int ErroresClientePorIp { get; set; } = 20;
 }
 
 /// <summary>
@@ -66,6 +72,7 @@ public static partial class LimitacionTasa
                 Particion(l.IngresoPorIp, l.Ventana, http => EsIngreso(http.Request.Path) ? "ingreso:" + Ip(http) : null),
                 Particion(l.TokensPorIp, l.Ventana, http => EsEmisionTokens(http.Request.Path) ? "tokens:" + Ip(http) : null),
                 Particion(l.ExternosPorIp, l.Ventana, http => Externos.EndpointsCuentasExternas.EsRutaDeIngreso(http.Request.Path) ? "externos:" + Ip(http) : null),
+                Particion(l.ErroresClientePorIp, l.Ventana, http => EsErroresCliente(http.Request.Path) ? "errores:" + Ip(http) : null),
                 Particion(l.PorIp, l.Ventana, http => EsIdentidad(http.Request.Path) ? "ip:" + Ip(http) : null),
                 Particion(l.PorUsuario, l.Ventana, http => EsIdentidad(http.Request.Path) && Usuario(http) is { } sub ? "usuario:" + sub : null));
             o.OnRejected = AlRechazarAsync;
@@ -104,6 +111,10 @@ public static partial class LimitacionTasa
         || ruta.StartsWithSegments("/api/v1/plataforma/yo", StringComparison.OrdinalIgnoreCase)
         || ruta.StartsWithSegments("/connect", StringComparison.OrdinalIgnoreCase)
         || ruta.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Reporte de errores de la PWA: público, con límite propio por IP.</summary>
+    internal static bool EsErroresCliente(PathString ruta) =>
+        ruta.StartsWithSegments(EndpointsErroresCliente.Ruta, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Rutas que emiten códigos o tokens (HU 1.3c): límite propio por IP.</summary>
     internal static bool EsEmisionTokens(PathString ruta) =>
