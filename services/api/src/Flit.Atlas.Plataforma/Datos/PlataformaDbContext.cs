@@ -247,6 +247,9 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
         // Predicado obligatorio por organización (persona, asignación, invitación, auditoría y la organización misma).
         AplicarPredicadoDeOrganizacion(modelBuilder, typeof(Organizacion));
 
+        // translate() para las búsquedas sin tildes (no cambia el esquema).
+        FuncionesSql.Registrar(modelBuilder);
+
         // Las claves uuid v7 las genera la aplicación (Entidad.Id); la base no las inventa.
         foreach (var entidad in modelBuilder.Model.GetEntityTypes())
         {

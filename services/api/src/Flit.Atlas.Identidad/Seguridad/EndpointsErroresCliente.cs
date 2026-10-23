@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Flit.Atlas.Identidad.Sesiones;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -14,12 +16,15 @@ namespace Flit.Atlas.Identidad.Seguridad;
 /// <summary>
 /// Reporte de los errores de la PWA que llegan a la pantalla «Algo salió mal» (<c>POST /api/v1/plataforma/errores-cliente</c>).
 /// Se escriben como advertencia en el log estructurado (Loki), con la referencia corta que la persona ve en pantalla; no
-/// van a la base ni a la auditoría. Es público porque el error puede ocurrir antes de tener sesión (invitación, ingreso),
-/// y por eso tiene su propio límite de tasa por IP (<see cref="OpcionesLimiteTasa.ErroresClientePorIp"/>) y un tope de
-/// tamaño del cuerpo. Vive en la identidad porque usa su limitación de tasa.
+/// van a la base ni a la auditoría. Exige la sesión del BFF (empleado, externo o la cuenta de emergencia; un token Bearer
+/// de OpenIddict no sirve): así nadie de fuera llena el log. Los errores antes de tener sesión (invitación, ingreso) no
+/// se reportan; la PWA igual muestra la referencia. Tiene límite de tasa por persona
+/// (<see cref="OpcionesLimiteTasa.ErroresClientePorPersona"/>) y por IP (<see cref="OpcionesLimiteTasa.ErroresClientePorIp"/>)
+/// y un tope de tamaño del cuerpo. Vive en la identidad porque usa su sesión y su limitación de tasa.
 /// <para>
 /// Sin datos personales (prompt maestro §13): solo viaja lo técnico, la ruta se guarda sin consulta ni fragmento, y el
 /// servidor tacha además correos, números largos (cédulas, teléfonos) y cadenas con forma de token antes de registrar.
+/// De la persona solo queda su id (nunca su correo ni su nombre), para cruzar el error con su sesión.
 /// </para>
 /// </summary>
 public static partial class EndpointsErroresCliente
@@ -59,6 +64,7 @@ public static partial class EndpointsErroresCliente
     internal static void MapErroresCliente(this IEndpointRouteBuilder rutas)
     {
         rutas.MapPost(Ruta, RegistrarAsync)
+            .RequireAuthorization()
             .WithMetadata(new MetadatoLimiteTasa(), new LimiteCuerpo())
             .Accepts<ReporteErrorCliente>("application/json")
             .WithName("ReportarErrorDeCliente")
@@ -67,15 +73,17 @@ public static partial class EndpointsErroresCliente
             .WithDescription(
                 "La PWA envía aquí los errores de la pantalla «Algo salió mal» (salvo los de descarga de un módulo tras un " +
                 "despliegue, que se resuelven recargando). Se escriben como advertencia en el log estructurado con la " +
-                "referencia que la persona ve; no se guardan en la base. No requiere sesión, tiene límite de tasa por IP y " +
-                $"un cuerpo de máximo {TamanoMaximo / 1024} KB. El servidor recorta los campos y tacha correos, números " +
-                "largos y cadenas con forma de token.")
+                "referencia que la persona ve y el id de la persona (no su correo); no se guardan en la base. Requiere la " +
+                "sesión de la PWA (empleado, externo o cuenta de emergencia; no acepta tokens Bearer): sin sesión responde " +
+                "401 y la PWA no reporta. Tiene límite de tasa por persona y por IP y un cuerpo de máximo " +
+                $"{TamanoMaximo / 1024} KB. El servidor recorta los campos y tacha correos, números largos y cadenas con " +
+                "forma de token.")
             .Produces<ErrorClienteRegistrado>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status413PayloadTooLarge);
     }
 
-    private static async Task<IResult> RegistrarAsync(HttpContext http, ILoggerFactory logs, CancellationToken ct)
+    private static async Task<IResult> RegistrarAsync(HttpContext http, ClaimsPrincipal usuario, ILoggerFactory logs, CancellationToken ct)
     {
         if (http.Request.ContentLength > TamanoMaximo)
         {
@@ -121,7 +129,7 @@ public static partial class EndpointsErroresCliente
             Limpiar(reporte.Mensaje, LargoMensaje) ?? string.Empty,
             LimpiarRuta(reporte.Ruta),
             version,
-            http.User.Identity?.IsAuthenticated == true,
+            Guid.TryParse(usuario.FindFirstValue(ClaimsAtlas.PersonaId), out var persona) ? persona : null,
             Limpiar(reporte.Pila, LargoPila, multilinea: true));
 
         return Results.Accepted(value: new ErrorClienteRegistrado(referencia));
@@ -165,9 +173,9 @@ public static partial class EndpointsErroresCliente
     }
 
     [LoggerMessage(EventId = 7001, Level = LogLevel.Warning,
-        Message = "Error en la PWA {Referencia}: {Nombre}: {Mensaje} (ruta {Ruta}, versión {Version}, con sesión {ConSesion}) {Pila}")]
+        Message = "Error en la PWA {Referencia}: {Nombre}: {Mensaje} (ruta {Ruta}, versión {Version}, persona {PersonaId}) {Pila}")]
     private static partial void ErrorRegistrado(
-        ILogger log, string referencia, string nombre, string mensaje, string? ruta, string? version, bool conSesion, string? pila);
+        ILogger log, string referencia, string nombre, string mensaje, string? ruta, string? version, Guid? personaId, string? pila);
 
     [GeneratedRegex("^[A-Z0-9]{6,12}$")]
     private static partial Regex ReferenciaValida();

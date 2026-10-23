@@ -8,6 +8,8 @@ import { CABECERA_CSRF } from './api';
  * - Los demás errores se envían a `POST /api/v1/plataforma/errores-cliente`, que los escribe como advertencia en el log
  *   estructurado. Solo viaja lo técnico (tipo, mensaje, pila, ruta sin consulta ni fragmento, versión) y el servidor
  *   tacha además correos y números largos. La persona ve una referencia corta para citarla al equipo de Atlas.
+ * - El endpoint exige sesión: sin ella (páginas públicas como `/invitacion` o `/emergencia`, o antes de entrar) no se
+ *   envía nada, pero la persona igual ve la referencia y el botón de recargar.
  */
 
 export const RUTA_ERRORES_CLIENTE = '/api/v1/plataforma/errores-cliente';
@@ -94,8 +96,22 @@ export function armarReporte(error: unknown, referencia: string, ruta = window.l
 
 const reportados = new WeakSet<object>();
 
-/** Envía el reporte sin esperar ni fallar: si la red o la API no responden, la persona igual tiene su referencia. */
+/**
+ * Si la PWA tiene sesión, según la última respuesta de `/yo` (la marca `sesion.tsx`). Es una variable del módulo y no
+ * el contexto de la sesión porque la pantalla de error reemplaza al shell y también sale en las páginas públicas.
+ */
+let conSesion = false;
+
+export function marcarSesion(activa: boolean): void {
+  conSesion = activa;
+}
+
+/**
+ * Envía el reporte sin esperar ni fallar: si la red o la API no responden, la persona igual tiene su referencia. Sin
+ * sesión no envía nada (el servidor respondería 401).
+ */
 export function reportarError(error: unknown, referencia: string): void {
+  if (!conSesion) return;
   if (typeof error === 'object' && error !== null) {
     // React vuelve a pintar el error (y en desarrollo, dos veces): un solo reporte por error.
     if (reportados.has(error)) return;

@@ -2,21 +2,36 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Seguridad;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Atlas.Api.Tests;
 
 /// <summary>
-/// Reporte de errores de la PWA (<c>POST /api/v1/plataforma/errores-cliente</c>): público, con límite de tasa y tope
-/// de tamaño, y sin datos personales en el log.
+/// Reporte de errores de la PWA (<c>POST /api/v1/plataforma/errores-cliente</c>): solo con sesión, con límite de tasa
+/// por persona y por IP y tope de tamaño, y sin datos personales en el log (solo el id de la persona).
 /// </summary>
 public class ErroresClienteTests(EntornoApi entorno)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static string IpNueva() => $"2001:db8::{Random.Shared.Next(1, 0xffff):x}:{Random.Shared.Next(1, 0xffff):x}";
+
+    /// <summary>Navegador con la sesión de un empleado nuevo (simulado), desde la IP dada o una nueva, y su id de persona.</summary>
+    private static async Task<(Navegador Navegador, Guid PersonaId)> ConSesionAsync(WebApplicationFactory<Program> api, string? ip = null)
+    {
+        var navegador = Navegador.De(api);
+        navegador.Ip = ip ?? IpNueva();
+        Assert.Equal(HttpStatusCode.NoContent, (await navegador.EntrarSimuladoAsync($"errores.{Guid.NewGuid():N}@ejemplo.com", "Persona Demo")).StatusCode);
+        var yo = await (await navegador.GetAsync("/api/v1/plataforma/yo")).Content.ReadFromJsonAsync<EndpointsIdentidad.Yo>(Ct);
+        return (navegador, yo!.PersonaId);
+    }
+
+    private static Task<HttpResponseMessage> ReportarAsync(Navegador navegador) =>
+        navegador.EnviarAsync(HttpMethod.Post, EndpointsErroresCliente.Ruta, JsonContent.Create(Reporte()));
 
     private static object Reporte(string referencia = "ABCD2345", string? mensaje = null, string? ruta = "/administracion/roles") => new
     {
@@ -29,13 +44,28 @@ public class ErroresClienteTests(EntornoApi entorno)
     };
 
     [Fact]
-    public async Task Sin_sesion_registra_una_advertencia_con_la_referencia_y_sin_datos_personales()
+    public async Task Sin_sesion_responde_401_y_no_registra_nada()
     {
         var logs = new CapturaDeLogs();
         await using var base_ = entorno.Api();
         await using var api = base_.WithWebHostBuilder(b => b.ConfigureLogging(l => l.AddProvider(logs)));
-        using var navegador = Navegador.De(api);
-        navegador.Ip = IpNueva();
+        using var anonimo = Navegador.De(api);
+        anonimo.Ip = IpNueva();
+
+        var respuesta = await ReportarAsync(anonimo);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, respuesta.StatusCode);
+        Assert.DoesNotContain(logs.Entradas, e => e.Categoria == "Flit.Atlas.ErroresCliente");
+    }
+
+    [Fact]
+    public async Task Con_sesion_registra_una_advertencia_con_la_referencia_y_el_id_de_la_persona_sin_datos_personales()
+    {
+        var logs = new CapturaDeLogs();
+        await using var base_ = entorno.Api();
+        await using var api = base_.WithWebHostBuilder(b => b.ConfigureLogging(l => l.AddProvider(logs)));
+        var (navegador, personaId) = await ConSesionAsync(api);
+        using var _ = navegador;
 
         var respuesta = await navegador.EnviarAsync(HttpMethod.Post, EndpointsErroresCliente.Ruta, JsonContent.Create(Reporte(
             mensaje: "No se encontró a usuaria.demo@ejemplo.com con cédula 1012345678 y token eyJhbGciOiJIUzI1NiJ9abcdefghijklmnopqrstuvwxyz0123",
@@ -50,6 +80,7 @@ public class ErroresClienteTests(EntornoApi entorno)
         Assert.Contains("TypeError", entrada.Texto, StringComparison.Ordinal);
         Assert.Contains("ruta /invitacion,", entrada.Texto, StringComparison.Ordinal);
         Assert.Contains("versión 0.1.0+abc1234", entrada.Texto, StringComparison.Ordinal);
+        Assert.Contains($"persona {personaId}", entrada.Texto, StringComparison.Ordinal);
         // Línea y columna de la pila se conservan (sirven con el mapa de fuentes).
         Assert.Contains(":12:3456", entrada.Texto, StringComparison.Ordinal);
         Assert.DoesNotContain("ejemplo.com", entrada.Texto, StringComparison.Ordinal);
@@ -63,8 +94,8 @@ public class ErroresClienteTests(EntornoApi entorno)
     public async Task Una_referencia_invalida_se_reemplaza_por_una_del_servidor()
     {
         await using var api = entorno.Api();
-        using var navegador = Navegador.De(api);
-        navegador.Ip = IpNueva();
+        var (navegador, _) = await ConSesionAsync(api);
+        using var __ = navegador;
 
         var respuesta = await navegador.EnviarAsync(HttpMethod.Post, EndpointsErroresCliente.Ruta,
             JsonContent.Create(Reporte(referencia: "<script>alert(1)</script>")));
@@ -80,8 +111,8 @@ public class ErroresClienteTests(EntornoApi entorno)
         var logs = new CapturaDeLogs();
         await using var base_ = entorno.Api();
         await using var api = base_.WithWebHostBuilder(b => b.ConfigureLogging(l => l.AddProvider(logs)));
-        using var navegador = Navegador.De(api);
-        navegador.Ip = IpNueva();
+        var (navegador, _) = await ConSesionAsync(api);
+        using var __ = navegador;
 
         var grande = await navegador.EnviarAsync(HttpMethod.Post, EndpointsErroresCliente.Ruta,
             JsonContent.Create(Reporte(mensaje: new string('x', EndpointsErroresCliente.TamanoMaximo))));
@@ -96,23 +127,50 @@ public class ErroresClienteTests(EntornoApi entorno)
     }
 
     [Fact]
-    public async Task Tiene_limite_de_tasa_por_ip()
+    public async Task Tiene_limite_de_tasa_por_persona()
     {
-        await using var api = entorno.Api(configuracion: new Dictionary<string, string> { [$"{OpcionesLimiteTasa.Seccion}:ErroresClientePorIp"] = "2" });
-        using var navegador = Navegador.De(api);
-        navegador.Ip = IpNueva();
+        await using var api = entorno.Api(configuracion: new Dictionary<string, string> { [$"{OpcionesLimiteTasa.Seccion}:ErroresClientePorPersona"] = "2" });
+        var ip = IpNueva();
+        var (navegador, _) = await ConSesionAsync(api, ip);
+        using var __ = navegador;
 
         var estados = new List<HttpStatusCode>();
         for (var i = 0; i < 3; i++)
         {
-            estados.Add((await navegador.EnviarAsync(HttpMethod.Post, EndpointsErroresCliente.Ruta, JsonContent.Create(Reporte()))).StatusCode);
+            estados.Add((await ReportarAsync(navegador)).StatusCode);
         }
-        using var otraIp = Navegador.De(api);
-        otraIp.Ip = IpNueva();
-        var deOtraIp = await otraIp.EnviarAsync(HttpMethod.Post, EndpointsErroresCliente.Ruta, JsonContent.Create(Reporte()));
+        // Otra persona desde la misma IP tiene su propio cupo.
+        var (otraPersona, _) = await ConSesionAsync(api, ip);
+        using var ___ = otraPersona;
+        var deOtraPersona = await ReportarAsync(otraPersona);
 
         Assert.Equal([HttpStatusCode.Accepted, HttpStatusCode.Accepted, HttpStatusCode.TooManyRequests], estados);
-        Assert.Equal(HttpStatusCode.Accepted, deOtraIp.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, deOtraPersona.StatusCode);
+    }
+
+    [Fact]
+    public async Task Tiene_ademas_limite_de_tasa_por_ip()
+    {
+        await using var api = entorno.Api(configuracion: new Dictionary<string, string> { [$"{OpcionesLimiteTasa.Seccion}:ErroresClientePorIp"] = "2" });
+        var ip = IpNueva();
+        var (una, _) = await ConSesionAsync(api, ip);
+        var (otra, _) = await ConSesionAsync(api, ip);
+        var (deOtraIp, _) = await ConSesionAsync(api);
+        using var __ = una;
+        using var ___ = otra;
+        using var ____ = deOtraIp;
+
+        // Dos personas desde la misma IP comparten el tope por IP.
+        var estados = new List<HttpStatusCode>
+        {
+            (await ReportarAsync(una)).StatusCode,
+            (await ReportarAsync(otra)).StatusCode,
+            (await ReportarAsync(otra)).StatusCode,
+        };
+        var otraIp = await ReportarAsync(deOtraIp);
+
+        Assert.Equal([HttpStatusCode.Accepted, HttpStatusCode.Accepted, HttpStatusCode.TooManyRequests], estados);
+        Assert.Equal(HttpStatusCode.Accepted, otraIp.StatusCode);
     }
 
     [Theory]

@@ -59,7 +59,7 @@ paths:
       tags:
         - Plataforma
       summary: Reportar un error de la PWA
-      description: 'La PWA envía aquí los errores de la pantalla «Algo salió mal» (salvo los de descarga de un módulo tras un despliegue, que se resuelven recargando). Se escriben como advertencia en el log estructurado con la referencia que la persona ve; no se guardan en la base. No requiere sesión, tiene límite de tasa por IP y un cuerpo de máximo 8 KB. El servidor recorta los campos y tacha correos, números largos y cadenas con forma de token.'
+      description: 'La PWA envía aquí los errores de la pantalla «Algo salió mal» (salvo los de descarga de un módulo tras un despliegue, que se resuelven recargando). Se escriben como advertencia en el log estructurado con la referencia que la persona ve y el id de la persona (no su correo); no se guardan en la base. Requiere la sesión de la PWA (empleado, externo o cuenta de emergencia; no acepta tokens Bearer): sin sesión responde 401 y la PWA no reporta. Tiene límite de tasa por persona y por IP y un cuerpo de máximo 8 KB. El servidor recorta los campos y tacha correos, números largos y cadenas con forma de token.'
       operationId: ReportarErrorDeCliente
       requestBody:
         description: Error de la PWA que la persona vio en la pantalla «Algo salió mal». Solo datos técnicos.
@@ -83,6 +83,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '413':
           description: Payload Too Large
+        '401':
+          description: No hay una sesión activa o venció.
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
@@ -113,7 +115,8 @@ paths:
                     format: int32
                 description: Problem Details (RFC 9457) con el código que interpreta la PWA.
       security:
-        - csrfAtlas: [ ]
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
   /api/v1/version:
     get:
       tags:
@@ -1853,6 +1856,60 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.roles.ver
+  /api/v1/plataforma/personas:
+    get:
+      tags:
+        - Permisos
+      summary: Buscar personas
+      description: 'Personas de Atlas por nombre o correo, sin distinguir mayúsculas ni tildes (cada palabra debe estar en el nombre o en el correo), o por su id exacto. Mínimo 2 caracteres; hasta 50 resultados ordenados por nombre, sin paginación (hayMas pide afinar la búsqueda). Devuelve lo mínimo para abrir las asignaciones de la persona, con sus roles asignados vigentes. Un externo solo vería personas de su organización (predicado obligatorio y RLS). Requiere atlas.roles.ver.'
+      operationId: BuscarPersonas
+      parameters:
+        - name: q
+          in: query
+          description: 'Texto a buscar en el nombre o el correo (mínimo 2 caracteres, máximo 100), o el id de la persona.'
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          description: 'empleado o externo; vacío, ambos.'
+          schema:
+            type: string
+        - name: organizacion
+          in: query
+          description: 'Id de la organización de las personas; vacío, todas las visibles.'
+          schema:
+            type: string
+            format: uuid
+        - name: limite
+          in: query
+          description: 'Máximo de resultados, de 1 a 50 (por defecto 20).'
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoBusquedaPersonas'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
   '/api/v1/plataforma/asignaciones/{id}':
     delete:
       tags:
@@ -3524,6 +3581,20 @@ components:
         adminOrganizacionHabilitado:
           type: boolean
       description: Organización a la que se puede invitar.
+    OrganizacionResumen:
+      required:
+        - id
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la organización.
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre de la organización.
+      description: Organización de la persona.
     OrganizacionVista:
       required:
         - id
@@ -3597,6 +3668,46 @@ components:
           items:
             type: string
       description: Permiso atlas.<modulo>.<accion> y los roles que lo conceden.
+    PersonaEncontrada:
+      required:
+        - id
+        - nombre
+        - correo
+        - tipo
+        - organizacion
+        - estado
+        - emergencia
+        - roles
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la persona (plataforma_persona).
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre de la persona.
+        correo:
+          type: string
+          description: 'Correo de la persona, en minúsculas.'
+        tipo:
+          type: string
+          description: empleado o externo.
+        organizacion:
+          description: Organización de la persona.
+          $ref: '#/components/schemas/OrganizacionResumen'
+        estado:
+          type: string
+          description: 'activa, inactiva o suspendida.'
+        emergencia:
+          type: boolean
+          description: Si es la cuenta de administrador de emergencia (ATLAS-ADR-0027).
+        roles:
+          type: array
+          items:
+            type: string
+          description: 'Códigos de los roles asignados y vigentes, ordenados. No incluye atlas.lector (lo tiene todo empleado) ni los implícitos.'
+      description: 'Persona encontrada: lo mínimo para elegirla y abrir sus asignaciones.'
     PortadorToken:
       required:
         - sub
@@ -3746,6 +3857,21 @@ components:
             - string
           description: Versión de la PWA.
       description: Error de la PWA que la persona vio en la pantalla «Algo salió mal». Solo datos técnicos.
+    ResultadoBusquedaPersonas:
+      required:
+        - personas
+        - hayMas
+      type: object
+      properties:
+        personas:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaEncontrada'
+          description: 'Personas encontradas, hasta el límite pedido.'
+        hayMas:
+          type: boolean
+          description: 'Si hay más personas que el límite: la búsqueda se debe afinar.'
+      description: 'Resultado de la búsqueda de personas, ordenado por nombre.'
     ResultadoCierre:
       required:
         - cerradas
