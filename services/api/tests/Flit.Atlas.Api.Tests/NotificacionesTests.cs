@@ -342,8 +342,10 @@ public class NotificacionesTests(EntornoApi entorno)
             bd.Modulos.AddRange(
                 new Modulo { Id = "soporte", Activo = true },
                 new Modulo { Id = "contratos", Activo = false },
-                new Modulo { Id = "catalogo", Activo = true, OrganizacionesHabilitadas = [Guid.NewGuid()] },
                 new Modulo { Id = "equipo", Activo = true, OrganizacionesHabilitadas = [yo!.OrganizacionId] });
+            // El catálogo ya es un módulo registrado (ATLAS-ADR-0028): su fila la creó el migrador, encendida.
+            var catalogo = await bd.Modulos.SingleAsync(m => m.Id == "catalogo", Ct);
+            catalogo.OrganizacionesHabilitadas = [Guid.NewGuid()];
             await bd.SaveChangesAsync(Ct);
         }
 

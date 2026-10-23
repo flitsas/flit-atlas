@@ -52,6 +52,31 @@ export interface OpcionesApi {
 const json = (route: Route, cuerpo: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(cuerpo) });
 
+/** Unos pocos aplicativos del catálogo (HU 2.1), con nombres largos para probar el móvil a 360 px. */
+const APLICATIVOS = [
+  {
+    id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0', tipo: 'producto', grupo: 'flit2', estado: 'activo', criticidad: 'alta',
+    manejaDatosPersonales: true, padreId: null, descripcion: 'Plataforma FLIT 2.0 en el monorepo flitsas/flit.', tecnologias: ['.NET 10', 'Next 16'],
+    etiquetas: ['monorepo'], ancestros: [], hijos: 1,
+  },
+  {
+    id: 'a2', slug: 'flit2-notificaciones', nombre: 'Notificaciones', tipo: 'modulo', grupo: 'flit2', estado: 'activo', criticidad: 'media',
+    manejaDatosPersonales: false, padreId: 'a1', descripcion: null, tecnologias: [], etiquetas: [],
+    ancestros: [{ id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0' }], hijos: 0,
+  },
+  {
+    id: 'a3', slug: 'legado-back-api-external-transact-vali-query-ext', nombre: 'BackApiExternalTransactValiQueryExt', tipo: 'servicio',
+    grupo: 'legado', estado: 'en_retiro', criticidad: 'media', manejaDatosPersonales: false, padreId: 'a4',
+    descripcion: 'API externa de validaciones y consultas (ICT).', tecnologias: ['Node', 'Express', 'tsoa'], etiquetas: ['ict'],
+    ancestros: [{ id: 'a4', slug: 'legados-v1', nombre: 'FLIT V1 (legados)' }], hijos: 0,
+  },
+  {
+    id: 'a5', slug: 'sentinel', nombre: 'Sentinel', tipo: 'producto', grupo: 'satelite', estado: 'activo', criticidad: 'media',
+    manejaDatosPersonales: false, padreId: null, descripcion: '[por verificar] Confirmar con el líder técnico qué es.', tecnologias: [],
+    etiquetas: [], ancestros: [], hijos: 0,
+  },
+];
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
@@ -91,8 +116,29 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         }
         return json(route, saludos);
       }
-      default:
+      case '/api/v1/catalogo/aplicativos': {
+        if (!opciones.permisos.includes('atlas.catalogo.ver')) return route.fulfill({ status: 403 });
+        const grupo = url.searchParams.get('grupo');
+        const elementos = APLICATIVOS.filter((a) => !grupo || a.grupo === grupo);
+        return json(route, { total: elementos.length, elementos });
+      }
+      default: {
+        const ficha = /^\/api\/v1\/catalogo\/aplicativos\/([a-z0-9-]+)$/.exec(url.pathname);
+        const aplicativo = ficha && APLICATIVOS.find((a) => a.slug === ficha[1]);
+        if (aplicativo) {
+          return json(route, {
+            ...aplicativo,
+            repo: 'flitsas/flit',
+            rutaEnRepo: 'services/core-notificaciones',
+            ambientes: ['dev', 'qa', 'pdn'],
+            hijos: APLICATIVOS.filter((a) => a.padreId === aplicativo.id),
+            permisos: { editar: opciones.permisos.includes('atlas.catalogo.editar'), gestionar: opciones.permisos.includes('atlas.catalogo.gestionar') },
+            creadoEn: '2026-10-23T12:00:00Z',
+            actualizadoEn: '2026-10-23T12:00:00Z',
+          });
+        }
         return route.fulfill({ status: 404 });
+      }
     }
   });
 }

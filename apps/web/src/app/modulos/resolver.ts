@@ -1,4 +1,4 @@
-import type { EntradaNavegacion, ModuloAtlas, WidgetInicio } from './contrato';
+import type { AplicativoDeFicha, EntradaNavegacion, ModuloAtlas, PestanaFicha, WidgetInicio } from './contrato';
 
 /**
  * Qué ve cada persona: módulos activos por bandera y entradas filtradas por permiso. Funciones puras, para que el
@@ -86,6 +86,40 @@ export function resolverNavegacion(modulos: readonly ModuloAtlas[], acceso: Acce
     .sort(porOrden);
 
   return { modulos: activos, lateral: todas, barraInferior, mas, widgets };
+}
+
+export interface PestanaResuelta extends PestanaFicha {
+  modulo: ModuloAtlas;
+}
+
+export interface PestanasFichaResueltas {
+  /** Las que se muestran: módulo con la bandera activa, permiso de la persona y tipo del aplicativo. */
+  visibles: PestanaResuelta[];
+  /** Ids que aporta un módulo activo pero la persona no tiene el permiso: su espacio no se muestra. */
+  sinPermiso: Set<string>;
+}
+
+/**
+ * Pestañas de la ficha del aplicativo (ATLAS-ADR-0028) que aportan los módulos: el catálogo las pinta sin importar a
+ * ningún módulo. Si dos módulos aportan el mismo id, gana el primero registrado.
+ */
+export function resolverPestanasFicha(
+  modulos: readonly ModuloAtlas[],
+  acceso: AccesoUsuario,
+  tipo?: AplicativoDeFicha['tipo'],
+): PestanasFichaResueltas {
+  const visibles: PestanaResuelta[] = [];
+  const sinPermiso = new Set<string>();
+  const vistos = new Set<string>();
+  for (const modulo of modulos.filter((m) => banderaActiva(m, acceso.banderas))) {
+    for (const pestana of modulo.pestanasFicha ?? []) {
+      if (vistos.has(pestana.id) || (tipo && pestana.tipos && !pestana.tipos.includes(tipo))) continue;
+      vistos.add(pestana.id);
+      if (tienePermiso(pestana.permiso, acceso.permisos)) visibles.push({ ...pestana, modulo });
+      else sinPermiso.add(pestana.id);
+    }
+  }
+  return { visibles: visibles.sort(porOrden), sinPermiso };
 }
 
 /** Módulo dueño de una ruta (`/soporte/turnos` → soporte), aunque esté apagado. */

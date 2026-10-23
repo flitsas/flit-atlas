@@ -139,6 +139,24 @@ public static partial class ExtensionesModulos
     }
 
     /// <summary>
+    /// Migrador y pruebas: corre <see cref="IModuloAtlas.SembrarAsync"/> de cada módulo, en el orden de la lista, cada uno
+    /// en su propio alcance de servicios. Va después de todas las migraciones.
+    /// </summary>
+    public static async Task SembrarModulosAsync(IServiceProvider servicios, IEnumerable<IModuloAtlas> modulos, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(servicios);
+        ArgumentNullException.ThrowIfNull(modulos);
+        foreach (var modulo in modulos)
+        {
+            var alcance = servicios.CreateAsyncScope();
+            await using (alcance.ConfigureAwait(false))
+            {
+                await modulo.SembrarAsync(alcance.ServiceProvider, ct).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
     /// Crea en <c>plataforma_modulo</c> la bandera de cada módulo que aún no la tiene, con su
     /// <see cref="IModuloAtlas.ActivoPorDefecto"/>. Nunca cambia una fila existente: encenderla o apagarla es una decisión
     /// de cada ambiente. Devuelve cuántas creó.

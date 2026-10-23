@@ -9,12 +9,14 @@
     <Project Path="services/api/src/Flit.Atlas.Composicion/Flit.Atlas.Composicion.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Identidad/Flit.Atlas.Identidad.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Migrador/Flit.Atlas.Migrador.csproj" />
+    <Project Path="services/api/src/Flit.Atlas.Modulos.Catalogo/Flit.Atlas.Modulos.Catalogo.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Modulos.Hola/Flit.Atlas.Modulos.Hola.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Plataforma/Flit.Atlas.Plataforma.csproj" />
     <Project Path="services/api/src/Flit.Atlas.ServiceDefaults/Flit.Atlas.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/services/api/tests/">
     <Project Path="services/api/tests/Flit.Atlas.Api.Tests/Flit.Atlas.Api.Tests.csproj" />
+    <Project Path="services/api/tests/Flit.Atlas.Modulos.Catalogo.Tests/Flit.Atlas.Modulos.Catalogo.Tests.csproj" />
     <Project Path="services/api/tests/Flit.Atlas.Modulos.Hola.Tests/Flit.Atlas.Modulos.Hola.Tests.csproj" />
     <Project Path="services/api/tests/Flit.Atlas.Plataforma.Tests/Flit.Atlas.Plataforma.Tests.csproj" />
   </Folder>

@@ -152,3 +152,41 @@ test.describe('módulo de ejemplo «hola»', () => {
     expect(violaciones).toEqual([]);
   });
 });
+
+test.describe('catálogo de aplicativos (HU 2.1)', () => {
+  test('listado con filtros y ficha con pestañas: accesibles, sin scroll horizontal a 360 px y sin violar la CSP', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.catalogo.ver', 'atlas.catalogo.editar', 'atlas.catalogo.gestionar'] });
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Aplicativos de FLIT' }).getByText(/4 aplicativos en total/)).toBeVisible();
+
+    await abrirDesdeNavegacion(page, esMovil(info), 'Catálogo');
+    await expect(page).toHaveURL(/\/catalogo$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Catálogo de aplicativos' })).toBeVisible();
+    await expect(page.getByText('BackApiExternalTransactValiQueryExt')).toBeVisible();
+    if (esMovil(info)) {
+      await page.setViewportSize({ width: 360, height: 740 });
+      await sinScrollHorizontal(page, '/catalogo a 360 px');
+    }
+    await page.getByText(/^Filtros/).click();
+    await page.getByRole('group', { name: 'Grupo' }).getByText('Legados', { exact: true }).click();
+    await expect(page).toHaveURL(/grupo=legado/);
+    await expect(page.getByText('1 aplicativo', { exact: true })).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, '/catalogo con filtros a 360 px');
+    await sinErroresCriticosDeAxe(page, '/catalogo');
+
+    await page.goto('/catalogo/flit2');
+    await expect(page.getByRole('heading', { level: 1, name: 'FLIT 2.0' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Resumen' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: /Responsables/ }).click();
+    await expect(page.getByText(/Llega con el módulo Equipo y responsables/)).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, '/catalogo/flit2 a 360 px');
+    await sinErroresCriticosDeAxe(page, '/catalogo/flit2');
+
+    await page.getByRole('button', { name: 'Editar' }).click();
+    await expect(page.getByRole('form', { name: 'Datos del aplicativo' })).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, 'formulario a 360 px');
+    await sinErroresCriticosDeAxe(page, 'formulario del aplicativo');
+    expect(violaciones).toEqual([]);
+  });
+});

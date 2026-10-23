@@ -3066,6 +3066,248 @@ paths:
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+  /api/v1/catalogo/aplicativos:
+    get:
+      tags:
+        - Catálogo
+      summary: Catálogo de aplicativos
+      description: 'Productos, módulos y servicios que cumplen el filtro, ordenados por grupo y por su ruta en la jerarquía (máximo 500). Cada filtro admite varios valores. Requiere atlas.catalogo.ver.'
+      operationId: ListarAplicativos
+      parameters:
+        - name: texto
+          in: query
+          description: 'Texto a buscar en el nombre, el slug, la descripción, el repo o una etiqueta exacta; sin distinguir tildes ni mayúsculas.'
+          schema:
+            type: string
+        - name: grupo
+          in: query
+          description: 'Grupos: flit2, flito, satelite, legado, infraestructura.'
+          schema:
+            type: array
+            items:
+              type: string
+        - name: estado
+          in: query
+          description: 'Estados: planeado, activo, en_retiro, retirado.'
+          schema:
+            type: array
+            items:
+              type: string
+        - name: criticidad
+          in: query
+          description: 'Criticidades: alta, media, baja.'
+          schema:
+            type: array
+            items:
+              type: string
+        - name: tipo
+          in: query
+          description: 'Tipos: producto, modulo, servicio.'
+          schema:
+            type: array
+            items:
+              type: string
+        - name: padreId
+          in: query
+          description: Solo los hijos directos de este aplicativo.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoAplicativos'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.catalogo.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.ver
+    post:
+      tags:
+        - Catálogo
+      summary: Crear un aplicativo
+      description: 'Producto, módulo o servicio nuevo. Queda en la auditoría. Requiere atlas.catalogo.gestionar (para un hijo, sobre el padre o un ancestro; para un producto, global).'
+      operationId: CrearAplicativo
+      requestBody:
+        description: Datos del aplicativo nuevo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAplicativo'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaAplicativo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.gestionar
+  '/api/v1/catalogo/aplicativos/{slug}':
+    get:
+      tags:
+        - Catálogo
+      summary: Ficha de un aplicativo
+      description: 'Datos del aplicativo, su ruta (ancestros), sus hijos y lo que la persona puede hacer con él. 404 si no existe. Requiere atlas.catalogo.ver.'
+      operationId: ObtenerFichaAplicativo
+      parameters:
+        - name: slug
+          in: path
+          description: Slug del aplicativo.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaAplicativo'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.catalogo).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.catalogo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.ver
+  '/api/v1/catalogo/aplicativos/{id}':
+    put:
+      tags:
+        - Catálogo
+      summary: Editar un aplicativo
+      description: 'Reemplaza sus datos. Cambiar slug, tipo, padre o grupo exige además atlas.catalogo.gestionar; el grupo de un producto se propaga a sus descendientes. Queda en la auditoría. Requiere atlas.catalogo.editar sobre el aplicativo o un ancestro.'
+      operationId: ActualizarAplicativo
+      parameters:
+        - name: id
+          in: path
+          description: Id del aplicativo.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Todos los datos del aplicativo, con los cambios.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAplicativo'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaAplicativo'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.catalogo).'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.editar
+    delete:
+      tags:
+        - Catálogo
+      summary: Eliminar un aplicativo sin hijos
+      description: 'Solo si no tiene hijos (si los tiene, elimínalos primero o márcalo retirado). La semilla no lo vuelve a crear. Queda en la auditoría. Requiere atlas.catalogo.gestionar.'
+      operationId: EliminarAplicativo
+      parameters:
+        - name: id
+          in: path
+          description: Id del aplicativo.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.catalogo).'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.gestionar
   /api/v1/hola/saludos:
     get:
       tags:
@@ -3191,6 +3433,79 @@ components:
             - string
           description: Id del recurso; vacío si es global.
       description: 'Alcance de una asignación: global o un recurso (organizacion, aplicativo, paquete, documento, ambiente…).'
+    AplicativoResumen:
+      required:
+        - id
+        - slug
+        - nombre
+        - tipo
+        - grupo
+        - estado
+        - criticidad
+        - manejaDatosPersonales
+        - padreId
+        - descripcion
+        - tecnologias
+        - etiquetas
+        - ancestros
+        - hijos
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          description: 'Clave natural (minúsculas, números y guiones).'
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'producto, modulo o servicio.'
+        grupo:
+          type: string
+          description: 'flit2, flito, satelite, legado o infraestructura.'
+        estado:
+          type: string
+          description: 'planeado, activo, en_retiro o retirado.'
+        criticidad:
+          type: string
+          description: 'alta, media o baja.'
+        manejaDatosPersonales:
+          type: boolean
+          description: Si trata datos personales.
+        padreId:
+          type:
+            - 'null'
+            - string
+          description: Padre directo; vacío en un producto.
+          format: uuid
+        descripcion:
+          type:
+            - 'null'
+            - string
+          description: 'Descripción; lo que falta confirmar lleva «[por verificar]».'
+        tecnologias:
+          type: array
+          items:
+            type: string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        ancestros:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenciaAplicativo'
+          description: Del producto al padre directo.
+        hijos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántos hijos directos tiene.
+          format: int32
+      description: Aplicativo del catálogo en un listado.
     AsignacionVista:
       required:
         - id
@@ -3386,6 +3701,18 @@ components:
           type: string
           description: 'SHA-256 (hex) del texto: queda en la evidencia de la aceptación.'
       description: 'Documento legal vigente (términos de uso o aviso de privacidad, Ley 1581) con su versión y su texto en Markdown.'
+    ErrorCatalogo:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'slug_en_uso, tiene_hijos o requiere_permiso (falta el permiso sobre este aplicativo).'
+        mensaje:
+          type: string
+      description: Error del catálogo con un código estable.
     ErrorClienteRegistrado:
       required:
         - referencia
@@ -3524,6 +3851,100 @@ components:
             - string
           description: 'Tipo de la excepción si la corrida falló (sin el mensaje, que podría traer datos).'
       description: 'Resultado de la última corrida de la sincronización de personas con Microsoft Graph. Solo conteos, sin datos personales.'
+    FichaAplicativo:
+      required:
+        - id
+        - slug
+        - nombre
+        - tipo
+        - grupo
+        - estado
+        - criticidad
+        - manejaDatosPersonales
+        - padreId
+        - descripcion
+        - repo
+        - rutaEnRepo
+        - tecnologias
+        - ambientes
+        - etiquetas
+        - ancestros
+        - hijos
+        - permisos
+        - creadoEn
+        - actualizadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'producto, modulo o servicio.'
+        grupo:
+          type: string
+          description: 'flit2, flito, satelite, legado o infraestructura.'
+        estado:
+          type: string
+          description: 'planeado, activo, en_retiro o retirado.'
+        criticidad:
+          type: string
+          description: 'alta, media o baja.'
+        manejaDatosPersonales:
+          type: boolean
+        padreId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        descripcion:
+          type:
+            - 'null'
+            - string
+        repo:
+          type:
+            - 'null'
+            - string
+          description: Repositorio de GitHub como dueño/nombre.
+        rutaEnRepo:
+          type:
+            - 'null'
+            - string
+          description: Carpeta dentro del repo.
+        tecnologias:
+          type: array
+          items:
+            type: string
+        ambientes:
+          type: array
+          items:
+            type: string
+          description: 'dev, qa y pdn.'
+        etiquetas:
+          type: array
+          items:
+            type: string
+        ancestros:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenciaAplicativo'
+        hijos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AplicativoResumen'
+        permisos:
+          $ref: '#/components/schemas/PermisosFicha'
+        creadoEn:
+          type: string
+          format: date-time
+        actualizadoEn:
+          type: string
+          format: date-time
+      description: 'Ficha de un aplicativo: sus datos, su ruta en la jerarquía y sus hijos. Las pestañas de los demás módulos las pinta la PWA.'
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -3697,6 +4118,24 @@ components:
           type: string
           format: date-time
       description: 'Invitación de una persona externa, con su estado calculado en este momento.'
+    ListadoAplicativos:
+      required:
+        - total
+        - elementos
+      type: object
+      properties:
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántos cumplen el filtro (el listado trae a lo sumo 500).
+          format: int32
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AplicativoResumen'
+      description: 'Listado del catálogo filtrado, ordenado por grupo y por la ruta en la jerarquía.'
     MapeoGrupoVista:
       required:
         - id
@@ -3952,6 +4391,19 @@ components:
           items:
             type: string
       description: Permiso atlas.<modulo>.<accion> y los roles que lo conceden.
+    PermisosFicha:
+      required:
+        - editar
+        - gestionar
+      type: object
+      properties:
+        editar:
+          type: boolean
+          description: 'Cambiar sus datos (atlas.catalogo.editar sobre él o un ancestro, o gestionar).'
+        gestionar:
+          type: boolean
+          description: 'Crear hijos, cambiar la jerarquía y eliminarlo (atlas.catalogo.gestionar).'
+      description: Qué puede hacer la persona en sesión con este aplicativo.
     PersonaDirectorio:
       required:
         - id
@@ -4159,6 +4611,22 @@ components:
           description: Dispositivos a los que llegó el push.
           format: int32
       description: Resultado de la notificación de prueba.
+    ReferenciaAplicativo:
+      required:
+        - id
+        - slug
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          description: Clave natural del aplicativo; es la URL de su ficha.
+        nombre:
+          type: string
+      description: 'Aplicativo de la ruta de otro (un ancestro o un hijo), para enlazarlo.'
     ReporteErrorCliente:
       required:
         - referencia
@@ -4405,6 +4873,97 @@ components:
         factor:
           $ref: '#/components/schemas/SolicitudFactor'
       description: Enlace de activación y el factor de la cuenta de emergencia.
+    SolicitudAplicativo:
+      required:
+        - slug
+        - nombre
+        - tipo
+        - padreId
+        - grupo
+        - descripcion
+        - estado
+        - criticidad
+        - manejaDatosPersonales
+        - repo
+        - rutaEnRepo
+        - tecnologias
+        - ambientes
+        - etiquetas
+      type: object
+      properties:
+        slug:
+          maxLength: 80
+          minLength: 1
+          type: string
+          description: 'Clave natural única: minúsculas, números y guiones (hasta 80).'
+        nombre:
+          maxLength: 120
+          minLength: 1
+          type: string
+          description: Nombre para mostrar (hasta 120).
+        tipo:
+          type: string
+          description: 'producto, modulo o servicio.'
+        padreId:
+          type:
+            - 'null'
+            - string
+          description: 'Padre: vacío en un producto; un producto para un módulo; un producto o un módulo para un servicio.'
+          format: uuid
+        grupo:
+          type:
+            - 'null'
+            - string
+          description: 'flit2, flito, satelite, legado o infraestructura. Obligatorio en un producto; un módulo o servicio hereda el de su padre.'
+        descripcion:
+          maxLength: 2000
+          type:
+            - 'null'
+            - string
+          description: Descripción (hasta 2000).
+        estado:
+          type: string
+          description: 'planeado, activo, en_retiro o retirado.'
+        criticidad:
+          type: string
+          description: 'alta, media o baja.'
+        manejaDatosPersonales:
+          type: boolean
+          description: Si trata datos personales.
+        repo:
+          maxLength: 200
+          type:
+            - 'null'
+            - string
+          description: Repositorio de GitHub como dueño/nombre.
+        rutaEnRepo:
+          maxLength: 300
+          type:
+            - 'null'
+            - string
+          description: Carpeta dentro del repo.
+        tecnologias:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Tecnologías (hasta 20, de hasta 50 caracteres).'
+        ambientes:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Ambientes donde corre: dev, qa, pdn.'
+        etiquetas:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Etiquetas (hasta 20, de hasta 50 caracteres; se guardan en minúsculas).'
+      description: Datos de un aplicativo nuevo o los cambios de uno existente (se reemplazan todos los campos).
     SolicitudAsignacion:
       required:
         - rol
@@ -4853,5 +5412,7 @@ tags:
     description: 'Directorio interno de empleados sincronizado a diario con Microsoft Graph: nombre, cargo, área, foto y estado; el teléfono solo con atlas.equipo.ver_contacto (ATLAS-ADR-0030).'
   - name: Permisos
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
+  - name: Catálogo
+    description: 'Catálogo de aplicativos de FLIT: productos, módulos y servicios con su repo, tecnología, ambientes, criticidad, datos personales, estado y etiquetas, y la ficha de cada uno.'
   - name: Hola
     description: 'Módulo de ejemplo de docs/como-crear-un-modulo.md: saludos por organización con permisos, predicado obligatorio y RLS. Apagado por defecto (bandera modulo.hola).'

@@ -34,13 +34,6 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.organizaciones.gestionar` | Crear y editar organizaciones (interna, clientes y proveedores). | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.auditoria.ver` | Leer la auditoría y las evidencias. | ✔ |   |   |   |   |   | ✔ |   |   |   |   |   |   |   |
 
-## Catálogo (`catalogo`)
-
-| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.catalogo.ver` | Ver el catálogo de aplicativos y sus fichas. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
-| `atlas.catalogo.gestionar` | Crear y editar productos, módulos y servicios del catálogo. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
-
 ## Equipo y responsables (`equipo`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
@@ -107,6 +100,14 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla; ver y pedir la sincronización de personas con Graph. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
+
+## Catálogo (`catalogo`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.catalogo.ver` | Ver el catálogo de aplicativos y sus fichas. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
+| `atlas.catalogo.gestionar` | Crear y editar productos, módulos y servicios del catálogo. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.catalogo.editar` | Editar los datos de un aplicativo existente (descripción, repo, tecnología, ambientes, criticidad, estado, etiquetas) sin cambiar la jerarquía; el responsable, solo los suyos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 
 ## Hola (ejemplo) (`hola`)
 

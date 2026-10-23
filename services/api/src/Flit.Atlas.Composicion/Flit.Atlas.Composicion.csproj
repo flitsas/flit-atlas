@@ -11,6 +11,7 @@
     <ProjectReference Include="..\Flit.Atlas.Identidad\Flit.Atlas.Identidad.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
     <!-- Módulos funcionales (uno por línea). -->
+    <ProjectReference Include="..\Flit.Atlas.Modulos.Catalogo\Flit.Atlas.Modulos.Catalogo.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Modulos.Hola\Flit.Atlas.Modulos.Hola.csproj" />
   </ItemGroup>
 </Project>
