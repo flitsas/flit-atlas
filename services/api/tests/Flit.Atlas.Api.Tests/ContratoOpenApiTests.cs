@@ -2,8 +2,10 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Flit.Atlas.Identidad;
+using Flit.Atlas.Identidad.Tokens;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 
 namespace Flit.Atlas.Api.Tests;
 
@@ -25,16 +27,21 @@ public class ContratoOpenApiTests
     /// Tiene el proveedor simulado encendido a propósito: no debe aparecer en el contrato. No toca la base, Redis ni
     /// RabbitMQ: generar el documento no abre conexiones.
     /// </summary>
-    private static WebApplicationFactory<Program> ApiComoQa(string ambiente = "local", Action<IWebHostBuilder>? extra = null) =>
+    internal static WebApplicationFactory<Program> ApiComoQa(string ambiente = "local", Action<IWebHostBuilder>? extra = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("ConnectionStrings:atlas", "Host=127.0.0.1;Port=1;Database=atlas;Username=x;Password=x");
             b.UseSetting("ConnectionStrings:redis", "127.0.0.1:1,abortConnect=false");
             b.UseSetting("ConnectionStrings:rabbitmq", "amqp://x:x@127.0.0.1:1");
             b.UseSetting("Atlas:Ambiente", ambiente);
+            b.ConfigureTestServices(s => s.SinRegistroDeEventosDeWindows());
             b.UseSetting(ExtensionesIdentidad.ClaveSimulado, ambiente is "local" or "dev" ? "true" : "false");
             b.UseSetting($"{ExtensionesIdentidad.SeccionEntra}:TenantId", "00000000-0000-0000-0000-00000000a71a");
             b.UseSetting($"{ExtensionesIdentidad.SeccionEntra}:ClientId", "00000000-0000-0000-0000-00000000c11e");
+            b.UseSetting("Atlas:UrlPublica", "https://qa.atlas.ejemplo.com");
+            b.UseSetting("Plataforma:Correo:Proveedor", "smtp");
+            b.UseSetting("Plataforma:Correo:Remitente", "atlas@ejemplo.com");
+            b.UseSetting("Plataforma:Correo:Smtp:Host", "127.0.0.1");
             extra?.Invoke(b);
         });
 
@@ -94,12 +101,20 @@ public class ContratoOpenApiTests
         try
         {
             await using var api = ApiComoQa(ambiente, b =>
-                b.UseSetting(ExtensionesIdentidad.ClaveCertificadoProteccion, certificado));
-            using var cliente = api.CreateClient();
+            {
+                b.UseSetting(ExtensionesIdentidad.ClaveCertificadoProteccion, certificado);
+                // Sin extensión de uso de llave, el mismo certificado sirve para firmar y cifrar tokens (HU 1.3c).
+                b.UseSetting(OpcionesTokens.ClaveCertificadosFirma, certificado);
+                b.UseSetting(OpcionesTokens.ClaveCertificadosCifrado, certificado);
+            });
+            using var cliente = api.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
 
             using var respuesta = await cliente.GetAsync(new Uri("/openapi/v1.yaml", UriKind.Relative), Ct);
+            using var jwks = await cliente.GetAsync(new Uri(ServidorTokens.RutaJwks, UriKind.Relative), Ct);
 
             Assert.Equal(HttpStatusCode.NotFound, respuesta.StatusCode);
+            // El contrato del protocolo sí se publica: descubrimiento y JWKS con la llave del certificado montado.
+            Assert.Equal(HttpStatusCode.OK, jwks.StatusCode);
         }
         finally
         {

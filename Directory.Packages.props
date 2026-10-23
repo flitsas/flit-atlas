@@ -32,12 +32,23 @@
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" Version="10.0.13" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Identity.Web" Version="4.16.0" />
+    <!-- Servidor de tokens (HU 1.3c, ATLAS-ADR-0024). Apache-2.0; 7.7.1 del 17/09/2026 ya trae el arreglo de
+         GHSA-925x-4h4v-2792. La 7.7.2 (10/10/2026) no tiene 2 semanas y no trae arreglos de seguridad. -->
+    <PackageVersion Include="OpenIddict.AspNetCore" Version="7.7.1" />
+    <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.7.1" />
   </ItemGroup>
   <ItemGroup Label="Contratos">
     <!-- OpenAPI 3.1 generado desde el código (HU 1.7, ATLAS-ADR-0021). Mismo conjunto 10.0.13 de ASP.NET Core. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup Label="Plataforma">
+    <!-- Web Push con VAPID (HU 1.6, ATLAS-ADR-0020). MIT; en net6+ usa la criptografía de .NET, sin BouncyCastle. -->
+    <PackageVersion Include="Lib.Net.Http.WebPush" Version="3.3.1" />
+    <!-- Correo por SMTP (HU 1.5, ATLAS-ADR-0025). MIT. MimeKit se fija en la misma versión (4.18.2 tiene menos de 2 semanas). -->
+    <PackageVersion Include="MailKit" Version="4.18.1" />
+    <PackageVersion Include="MimeKit" Version="4.18.1" />
+    <!-- QR del TOTP como SVG (HU 1.5). MIT, sin dependencias. -->
+    <PackageVersion Include="QRCoder" Version="1.8.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />

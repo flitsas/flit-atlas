@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Composición del host (ATLAS-ADR-0026): la única lista de módulos, compartida por atlas-api y el migrador. Agregar
+       un módulo es una referencia aquí y una línea en ModulosAtlas.cs. -->
+  <PropertyGroup>
+    <RootNamespace>Flit.Atlas.Composicion</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Atlas.Identidad\Flit.Atlas.Identidad.csproj" />
+    <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
+    <!-- Módulos funcionales (uno por línea). -->
+    <ProjectReference Include="..\Flit.Atlas.Modulos.Hola\Flit.Atlas.Modulos.Hola.csproj" />
+  </ItemGroup>
+</Project>

@@ -9,6 +9,7 @@ Aplicación central de conocimiento de FLIT S.A.S.: catálogo de aplicativos, eq
 1. Lee [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](docs/atlas/prompts/00-prompt-maestro-flit-atlas.md), la fuente que prevalece.
 2. Lee el bloque de tu fase en [`docs/atlas/prompts/01-prompts-por-fase-flit-atlas.md`](docs/atlas/prompts/01-prompts-por-fase-flit-atlas.md).
 3. Revisa las decisiones en [`docs/adr/`](docs/adr/README.md).
+4. Para agregar una capacidad, sigue [`docs/como-crear-un-modulo.md`](docs/como-crear-un-modulo.md) (módulo de ejemplo «hola»).
 
 ## Estructura
 

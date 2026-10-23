@@ -1,7 +1,9 @@
 using Flit.Atlas.Api;
+using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Plataforma;
 using Flit.Atlas.Plataforma.Datos;
+using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.ServiceDefaults;
 using Microsoft.AspNetCore.HttpOverrides;
 
@@ -24,6 +26,8 @@ builder.EnrichNpgsqlDbContext<PlataformaDbContext>(s => s.DisableRetry = true);
 builder.AddRedisClient(Dependencias.Redis);
 builder.AddRabbitMQClient(Dependencias.RabbitMq);
 builder.AgregarIdentidad(ambiente, cadenaAtlas);
+// Módulos funcionales: la lista única de Flit.Atlas.Composicion, con sus permisos y scopes (ATLAS-ADR-0026).
+builder.Services.AgregarModulosAtlas(builder.Configuration, cadenaAtlas);
 builder.Services.AgregarContratoOpenApi();
 
 // Detrás del proxy de Vite (local) o del nginx del host y el de atlas-web (qa y pdn) el esquema real llega en
@@ -47,9 +51,12 @@ app.UseForwardedHeaders();
 
 app.MapEndpointsDeSalud();
 app.UseAntifalsificacionApi();
+app.UseSeguridadIdentidad();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapIdentidad();
+app.MapPlataforma();
+app.MapModulos();
 app.MapContratoOpenApi(ambiente);
 
 app.MapGet("/api/v1/version", () => new VersionApi("atlas-api", typeof(Program).Assembly.GetName().Version?.ToString()))

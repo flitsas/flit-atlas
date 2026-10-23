@@ -150,9 +150,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Marca FLIT sin ediciones a mano (ATLAS-ADR-0015 y ATLAS-ADR-0020)
+        run: node ../../scripts/marca/sincronizar.mjs --verificar
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm bundle
 
   imagenes:
     # Construye (sin publicar) las imágenes que publica cd.yml, para que un Dockerfile roto no llegue a staging.

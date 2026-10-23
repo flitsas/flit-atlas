@@ -1,12 +1,22 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Aprovisionamiento;
+using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Entra;
+using Flit.Atlas.Identidad.Externos;
+using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Identidad.Tokens;
+using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Flit.Atlas.Plataforma.Datos;
+using Flit.Atlas.Plataforma.Entidades;
 
 namespace Flit.Atlas.Identidad;
 
@@ -21,12 +31,22 @@ public static class EndpointsIdentidad
     /// </summary>
     public const string RutaRetornoEntra = "/api/auth/callback/azure-ad";
 
-    public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos);
+    /// <param name="Reautenticar">La PWA vuelve a pedir el ingreso porque una acción sensible lo exigió.</param>
+    /// <param name="Administrador">
+    /// Solo local y dev: suma el grupo de <see cref="ExtensionesIdentidad.ClaveSimuladoGrupoAdministracion"/>, que da
+    /// <c>atlas.superadmin</c>, para probar la administración sin Entra (HU 1.5). Sin esa variable, se ignora.
+    /// </param>
+    public sealed record SolicitudSimulada(string Correo, string Nombre, Guid[]? Grupos, bool Reautenticar = false, bool Administrador = false);
 
-    [Description("Usuario de la sesión actual: persona, organización, proveedor con el que entró y roles de Atlas.")]
+    /// <param name="Roles">Roles vigentes en este momento (incluye atlas.lector de todo empleado y los implícitos).</param>
+    /// <param name="Permisos">Permisos efectivos en este momento, calculados en el servidor (ATLAS-ADR-0023).</param>
+    [Description("Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.")]
     public sealed record Yo(
         Guid Sub, Guid PersonaId, string Nombre, string TipoPrincipal, Guid OrganizacionId, string Proveedor,
-        IReadOnlyList<string> Roles);
+        [property: Description("Códigos de los roles vigentes en este momento, ordenados; incluye atlas.lector de todo empleado.")]
+        IReadOnlyList<string> Roles,
+        [property: Description("Permisos efectivos (atlas.<modulo>.<accion>) en este momento, ordenados: la PWA filtra la navegación con ellos. Se recalculan en cada petición.")]
+        IReadOnlyList<string> Permisos);
 
     public static IEndpointRouteBuilder MapIdentidad(this IEndpointRouteBuilder rutas)
     {
@@ -34,7 +54,7 @@ public static class EndpointsIdentidad
         var proveedores = rutas.ServiceProvider.GetService(typeof(ProveedoresHabilitados)) as ProveedoresHabilitados
             ?? throw new InvalidOperationException("Falta AgregarIdentidad en el arranque.");
 
-        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad");
+        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad").WithMetadata(new MetadatoLimiteTasa());
 
         identidad.MapGet("/proveedores", () => proveedores)
             .WithName("ListarProveedoresDeIngreso")
@@ -44,21 +64,31 @@ public static class EndpointsIdentidad
         if (proveedores.Microsoft)
         {
             // Navegación completa del navegador (no fetch): termina en RutaRetornoEntra y vuelve a la PWA.
+            // Con reautenticar=true, Entra vuelve a pedir las credenciales (prompt=login) aunque haya sesión de Microsoft.
             identidad.MapGet("/entrar/microsoft", (
-                    [Description("Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).")] string? volver) =>
-                    Results.Challenge(new AuthenticationProperties { RedirectUri = RutaLocal(volver) }, [ClaimsAtlas.EsquemaEntra]))
+                    [Description("Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).")] string? volver,
+                    [Description("true cuando una acción sensible pidió reautenticación (responde 401 con codigo reautenticacion_requerida).")] bool? reautenticar) =>
+                {
+                    var propiedades = new AuthenticationProperties { RedirectUri = RutaLocal(volver) };
+                    if (reautenticar == true)
+                    {
+                        propiedades.Items[IngresoEntra.ClaveReautenticar] = "1";
+                    }
+                    return Results.Challenge(propiedades, [ClaimsAtlas.EsquemaEntra]);
+                })
                 .WithName("EntrarConMicrosoft")
                 .WithSummary("Iniciar sesión con Microsoft")
                 .WithDescription(
                     "Navegación completa del navegador (no fetch). Redirige a Entra ID (OIDC con PKCE); al volver por " +
-                    $"{RutaRetornoEntra} crea la sesión y lleva a «volver», que solo puede ser una ruta local de la PWA.")
+                    $"{RutaRetornoEntra} crea una sesión nueva y lleva a «volver», que solo puede ser una ruta local de la PWA. " +
+                    "Con reautenticar=true, Entra vuelve a pedir las credenciales (prompt=login).")
                 .Produces(StatusCodes.Status302Found);
         }
 
         if (proveedores.Simulado)
         {
             identidad.MapPost("/simulado/entrar", async (SolicitudSimulada solicitud, AprovisionadorEmpleados aprovisionador,
-                HttpContext http, CancellationToken ct) =>
+                RegistroSeguridad registro, HttpContext http, CancellationToken ct) =>
             {
                 if (string.IsNullOrWhiteSpace(solicitud.Correo) || string.IsNullOrWhiteSpace(solicitud.Nombre))
                 {
@@ -68,9 +98,16 @@ public static class EndpointsIdentidad
                     });
                 }
                 var correo = solicitud.Correo.Trim().ToLowerInvariant();
+                var grupos = (solicitud.Grupos ?? []).ToList();
+                if (solicitud.Administrador
+                    && Guid.TryParse(http.RequestServices.GetRequiredService<IConfiguration>()[ExtensionesIdentidad.ClaveSimuladoGrupoAdministracion], out var grupoAdmin))
+                {
+                    await AsegurarGrupoAdministracionAsync(http.RequestServices.GetRequiredService<PlataformaDbContext>(), grupoAdmin, ct);
+                    grupos.Add(grupoAdmin);
+                }
                 var cuenta = new CuentaEmpleado(
                     AprovisionadorEmpleados.ProveedorSimulado, correo, null, correo, solicitud.Nombre.Trim(),
-                    solicitud.Grupos ?? [], null, null, []);
+                    grupos, null, null, [], Reautenticacion: solicitud.Reautenticar);
                 try
                 {
                     var principal = await aprovisionador.AprovisionarAsync(cuenta, ct);
@@ -83,17 +120,23 @@ public static class EndpointsIdentidad
                 {
                     return Results.Conflict(new { error = "correo_en_uso" });
                 }
+                catch (IngresoNoPermitidoException ex)
+                {
+                    await registro.RegistrarAsync(TiposEventoSeguridad.InicioRechazado, new DatosEventoSeguridad
+                    {
+                        Detalle = new { proveedor = AprovisionadorEmpleados.ProveedorSimulado, motivo = ex.Motivo },
+                    }, ct);
+                    // Mensaje genérico: no revela si la cuenta existe, está suspendida o bloqueada.
+                    return Results.Json(new { error = "ingreso_no_permitido" }, statusCode: StatusCodes.Status403Forbidden);
+                }
             })
             // Solo existe en local y dev: no es parte del contrato de qa y pdn (ATLAS-ADR-0021).
             .ExcludeFromDescription();
         }
 
-        identidad.MapPost("/salir", async (HttpContext http) =>
+        identidad.MapPost("/salir", async (HttpContext http, RegistroSeguridad registro, CancellationToken ct) =>
         {
-            // Revoca la sesión en el servidor (AlmacenSesiones.RemoveAsync) y borra la cookie.
-            await http.SignOutAsync(ClaimsAtlas.EsquemaCookie);
-            // El navegador borra la caché, el almacenamiento (IndexedDB, service worker) y las cookies del origen.
-            http.Response.Headers["Clear-Site-Data"] = "\"cache\", \"cookies\", \"storage\"";
+            await EndpointsSesiones.SalirAsync(http, registro, ct);
             return Results.NoContent();
         })
             .WithName("CerrarSesion")
@@ -103,20 +146,36 @@ public static class EndpointsIdentidad
                 "caché, almacenamiento y cookies del origen. Responde 204 aunque no haya sesión.")
             .Produces(StatusCodes.Status204NoContent);
 
-        rutas.MapGet("/api/v1/plataforma/yo", (ClaimsPrincipal usuario) => new Yo(
-                Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.Sub)!),
-                Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.PersonaId)!),
-                usuario.FindFirstValue(ClaimsAtlas.Nombre) ?? string.Empty,
-                usuario.FindFirstValue(ClaimsAtlas.TipoPrincipal)!,
-                Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.OrganizacionId)!),
-                usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
-                usuario.FindAll(ClaimsAtlas.Rol).Select(c => c.Value).ToList()))
+        identidad.MapSesiones();
+        // Servidor de tokens (HU 1.3c): /connect/* fuera del contrato y GET /api/v1/identidad/token/yo con Bearer.
+        rutas.MapServidorTokens(identidad);
+        identidad.MapCuentasExternas();
+
+        rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, CancellationToken ct) =>
+            {
+                var permisos = await permisosDeSesion.ObtenerAsync(usuario, ct);
+                return new Yo(
+                    Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.Sub)!),
+                    Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.PersonaId)!),
+                    usuario.FindFirstValue(ClaimsAtlas.Nombre) ?? string.Empty,
+                    usuario.FindFirstValue(ClaimsAtlas.TipoPrincipal)!,
+                    Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.OrganizacionId)!),
+                    usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
+                    permisos.Roles,
+                    permisos.Permisos);
+            })
             .RequireAuthorization()
+            .WithMetadata(new MetadatoLimiteTasa())
             .WithName("ObtenerUsuarioActual")
             .WithTags("Plataforma")
             .WithSummary("Usuario en sesión")
-            .WithDescription("Persona, organización, proveedor de ingreso y roles de la sesión actual.");
+            .WithDescription(
+                "Persona, organización, proveedor de ingreso, roles vigentes y permisos efectivos de la sesión actual. Roles " +
+                "y permisos se calculan en el servidor en cada petición con las asignaciones vigentes: un rol vencido o retirado " +
+                "ya no aparece (ATLAS-ADR-0023).");
 
+        rutas.MapRoles();
+        rutas.MapAdministracionExternos();
         return rutas;
     }
 
@@ -125,7 +184,9 @@ public static class EndpointsIdentidad
     /// cambia estado trae la cabecera propia (un formulario de otro sitio no puede ponerla sin CORS, y Atlas no habilita
     /// CORS) y, si el navegador manda <c>Origin</c>, debe ser el mismo host. Se exceptúa <see cref="RutaRetornoEntra"/>:
     /// Microsoft la llama con un POST desde su propio origen, y la protegen el <c>state</c>, el <c>nonce</c> y la cookie
-    /// de correlación de OIDC.
+    /// de correlación de OIDC. Tampoco se exige a las peticiones con <c>Authorization: Bearer</c> (HU 1.3c): esa cabecera
+    /// ya prueba lo mismo que la propia (un sitio ajeno no puede ponerla sin CORS) y el token no es una credencial que el
+    /// navegador mande solo; esas peticiones solo valen en endpoints con <c>RequiereScope</c>, nunca con la cookie.
     /// </summary>
     public static IApplicationBuilder UseAntifalsificacionApi(this IApplicationBuilder app) =>
         app.Use(async (http, siguiente) =>
@@ -133,7 +194,8 @@ public static class EndpointsIdentidad
             var peticion = http.Request;
             var cambia = !(HttpMethods.IsGet(peticion.Method) || HttpMethods.IsHead(peticion.Method) || HttpMethods.IsOptions(peticion.Method));
             if (cambia && peticion.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
-                && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase))
+                && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase)
+                && !peticion.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
                 var origen = peticion.Headers.Origin.ToString();
                 var mismoOrigen = string.IsNullOrEmpty(origen)
@@ -146,6 +208,18 @@ public static class EndpointsIdentidad
             }
             await siguiente(http);
         });
+
+    /// <summary>Solo con el proveedor simulado: el grupo de administración otorga atlas.superadmin (idempotente).</summary>
+    private static async Task AsegurarGrupoAdministracionAsync(PlataformaDbContext plataforma, Guid grupo, CancellationToken ct)
+    {
+        var rol = await plataforma.Roles.Where(r => r.Codigo == RolesAtlas.Superadmin).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
+        if (rol is null || await plataforma.MapeosGrupoEntra.AnyAsync(m => m.GrupoId == grupo && m.RolId == rol, ct))
+        {
+            return;
+        }
+        plataforma.MapeosGrupoEntra.Add(new MapeoGrupoEntra { GrupoId = grupo, GrupoNombre = "Simulado: administración (solo local y dev)", RolId = rol.Value });
+        await plataforma.SaveChangesAsync(ct);
+    }
 
     /// <summary>Evita redirecciones abiertas: solo rutas locales de la PWA.</summary>
     internal static string RutaLocal(string? volver) =>

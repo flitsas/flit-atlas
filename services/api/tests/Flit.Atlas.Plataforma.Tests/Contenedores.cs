@@ -96,4 +96,17 @@ public sealed record BaseDePrueba(string Admin, string Servicio)
         PlataformaDbContext.Configurar(opciones, cadena ?? Servicio);
         return new PlataformaDbContext(opciones.Options);
     }
+
+    /// <summary>Contexto con el usuario del servicio y un alcance de datos fijo (p. ej. el de un externo de una organización).</summary>
+    public PlataformaDbContext Contexto(AlcanceDatos alcance)
+    {
+        var opciones = new DbContextOptionsBuilder<PlataformaDbContext>();
+        PlataformaDbContext.Configurar(opciones, Servicio);
+        return new PlataformaDbContext(opciones.Options, new AlcanceFijo(alcance));
+    }
+
+    private sealed class AlcanceFijo(AlcanceDatos alcance) : IAlcanceDatos
+    {
+        public AlcanceDatos Actual => alcance;
+    }
 }

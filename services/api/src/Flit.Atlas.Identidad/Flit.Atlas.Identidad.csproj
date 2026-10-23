@@ -15,6 +15,14 @@
     </PackageReference>
     <PackageReference Include="Microsoft.Identity.Web" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="OpenIddict.AspNetCore" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" />
+    <PackageReference Include="QRCoder" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Lista local de contraseñas comunes y textos legales (HU 1.5, ATLAS-ADR-0025). -->
+    <EmbeddedResource Include="Externos\contrasenas-comunes.txt" />
+    <EmbeddedResource Include="Externos\Legal\*.md" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
