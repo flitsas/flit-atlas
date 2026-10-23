@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MailPlus, Plus, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { Link } from 'react-router';
 
 import { useSesion } from '../../../app/sesion';
 import { formatearFecha } from '../../../app/ui/formato';
@@ -54,6 +55,8 @@ export default function Invitaciones() {
   const [revocando, setRevocando] = useState<Invitacion | null>(null);
   const [aviso, setAviso] = useState<Aviso>(null);
   const puedeRestablecer = yo.permisos?.includes('atlas.identidad.administrar') ?? false;
+  const puedeVerRoles = yo.permisos?.includes('atlas.roles.ver') ?? false;
+  const puedeCrearOrganizaciones = yo.permisos?.includes('atlas.organizaciones.gestionar') ?? false;
 
   async function accion(trabajo: () => Promise<Aviso>, error: string) {
     setAviso(null);
@@ -168,6 +171,15 @@ export default function Invitaciones() {
                     Forzar restablecimiento
                   </Boton>
                 )}
+                {puedeVerRoles && i.personaId && (
+                  <Link
+                    to={`/administracion/roles?persona=${encodeURIComponent(i.personaId)}`}
+                    className="inline-flex min-h-toque items-center rounded-xl px-3 text-sm font-medium hover:bg-atlas-activo"
+                    aria-label={`Ver los roles de ${i.correo}`}
+                  >
+                    Ver roles
+                  </Link>
+                )}
               </div>
             </li>
           ))}
@@ -182,6 +194,7 @@ export default function Invitaciones() {
         )}
         {nueva && (
           <FormularioInvitacion
+            puedeCrearOrganizaciones={puedeCrearOrganizaciones}
             alEnviar={async (solicitud) => {
               const ok = await accion(
                 async () => resultadoEnvio(await crearInvitacion(solicitud), `Se envió la invitación a ${solicitud.correo}.`),
@@ -234,7 +247,13 @@ export default function Invitaciones() {
   );
 }
 
-function FormularioInvitacion({ alEnviar }: { alEnviar: (s: Parameters<typeof crearInvitacion>[0]) => Promise<void> }) {
+function FormularioInvitacion({
+  puedeCrearOrganizaciones,
+  alEnviar,
+}: {
+  puedeCrearOrganizaciones: boolean;
+  alEnviar: (s: Parameters<typeof crearInvitacion>[0]) => Promise<void>;
+}) {
   const opciones = useQuery({ queryKey: ['administracion', 'invitaciones', 'opciones'], queryFn: opcionesInvitacion });
   const [correo, setCorreo] = useState('');
   const [nombre, setNombre] = useState('');
@@ -248,6 +267,8 @@ function FormularioInvitacion({ alEnviar }: { alEnviar: (s: Parameters<typeof cr
   if (opciones.isPending) return <p role="status" className="px-4 pb-5">Cargando…</p>;
   if (opciones.isError) return <p role="alert" className="px-4 pb-5">No se pudieron cargar las opciones.</p>;
   const o = opciones.data;
+  // Solo se invita a organizaciones cliente o proveedor activas: sin ninguna, el formulario no serviría.
+  if (o.organizaciones.length === 0) return <SinOrganizaciones puedeCrear={puedeCrearOrganizaciones} />;
   const organizacionElegida = organizacion || o.organizaciones[0]?.id || '';
   const rolElegido = rol || o.roles[0]?.codigo || '';
   const proveedor = rolElegido === 'ext.proveedor';
@@ -367,6 +388,28 @@ function FormularioInvitacion({ alEnviar }: { alEnviar: (s: Parameters<typeof cr
         Enviar invitación
       </Boton>
     </form>
+  );
+}
+
+function SinOrganizaciones({ puedeCrear }: { puedeCrear: boolean }) {
+  return (
+    <div role="status" className="flex flex-col gap-3 px-4 pt-2 pb-5 text-sm">
+      <p className="font-semibold">Aún no hay a quién invitar</p>
+      <p>
+        Cada persona externa entra en una organización cliente o proveedor activa, y todavía no hay ninguna. FLIT es la
+        organización interna: sus empleados entran con Microsoft, sin invitación.
+      </p>
+      {puedeCrear ? (
+        <Link
+          to="/administracion/organizaciones"
+          className="inline-flex min-h-12 items-center justify-center rounded-xl bg-flit-primary px-5 font-medium text-white dark:bg-flit-brand dark:text-[#0b1220]"
+        >
+          Crear una organización
+        </Link>
+      ) : (
+        <p className="text-atlas-texto-suave">Pídele a quien administra las organizaciones de Atlas que cree la del cliente o el proveedor.</p>
+      )}
+    </div>
   );
 }
 

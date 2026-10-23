@@ -96,3 +96,84 @@ export const restablecerCuenta = async (personaId: string) =>
 
 /** Fecha `aaaa-mm-dd` de un `<input type="date">` → fin de ese día en Bogotá (UTC−5), en ISO 8601. */
 export const finDelDiaBogota = (fecha: string): string | null => (fecha ? `${fecha}T23:59:00-05:00` : null);
+
+// --- Roles: mapeos de grupos de Entra y asignaciones (HU 1.4, ATLAS-ADR-0023; endpoints de la etiqueta «Permisos») ---
+
+/** `GET /api/v1/plataforma/roles` (`RolConPermisos`). */
+export interface RolAtlas {
+  codigo: string;
+  nombre: string;
+  tipo: 'interno' | 'externo' | 'implicito';
+  descripcion: string;
+  /** Los implícitos y `atlas.lector` no se asignan ni se mapean. */
+  asignable: boolean;
+  permisos: string[];
+}
+
+export interface MapeoGrupo {
+  id: string;
+  /** Object id del grupo en Entra ID. */
+  grupoId: string;
+  grupoNombre: string;
+  rol: string;
+  creadoEn: string;
+}
+
+export interface SolicitudMapeo {
+  grupoId: string;
+  grupoNombre: string;
+  rol: string;
+}
+
+export type OrigenAsignacion = 'manual' | 'grupo_entra' | 'invitacion' | 'emergencia';
+
+export interface Asignacion {
+  id: string;
+  personaId: string;
+  rol: string;
+  rolNombre: string;
+  tipoRol: 'interno' | 'externo';
+  organizacionId: string | null;
+  alcance: { tipo: string; id: string | null };
+  vigenteDesde: string;
+  vigenteHasta: string | null;
+  origen: OrigenAsignacion;
+  vigente: boolean;
+  asignadoPor: string | null;
+  creadoEn: string;
+}
+
+const PLATAFORMA = '/api/v1/plataforma';
+
+export const listarRoles = async () => json<RolAtlas[]>(await pedir(`${PLATAFORMA}/roles`));
+export const listarMapeos = async () => json<MapeoGrupo[]>(await pedir(`${PLATAFORMA}/mapeos-grupos-entra`));
+export const crearMapeo = async (s: SolicitudMapeo) => json<MapeoGrupo>(await enviarJson(`${PLATAFORMA}/mapeos-grupos-entra`, 'POST', s));
+export const eliminarMapeo = async (id: string) => {
+  await enviarJson(`${PLATAFORMA}/mapeos-grupos-entra/${encodeURIComponent(id)}`, 'DELETE');
+};
+/** Con `todas`, también las vencidas y las que aún no empiezan. */
+export const listarAsignaciones = async (personaId: string, todas = false) =>
+  json<Asignacion[]>(await pedir(`${PLATAFORMA}/personas/${encodeURIComponent(personaId)}/asignaciones${todas ? '?todas=true' : ''}`));
+export const retirarAsignacion = async (id: string) => {
+  await enviarJson(`${PLATAFORMA}/asignaciones/${encodeURIComponent(id)}`, 'DELETE');
+};
+
+/** Roles que un grupo de Entra puede otorgar: internos y asignables (`atlas.lector` ya lo tiene todo empleado). */
+export const rolesMapeables = (roles: RolAtlas[]): RolAtlas[] => roles.filter((r) => r.tipo === 'interno' && r.asignable);
+
+/** Object id de Entra ID (o id de persona de Atlas): un GUID. */
+export const esGuid = (valor: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(valor.trim());
+
+/** Por qué una asignación no se retira desde esta pantalla, o `null` si se puede retirar (las manuales). */
+export function motivoNoRetirable(a: Pick<Asignacion, 'origen'>): string | null {
+  switch (a.origen) {
+    case 'grupo_entra':
+      return 'Viene de un grupo de Entra: se quita sacando a la persona del grupo en Entra ID o eliminando el mapeo.';
+    case 'emergencia':
+      return 'Es la cuenta de administrador de emergencia: no se desarma desde Atlas; se rota con el comando de consola.';
+    case 'invitacion':
+      return 'Viene de una invitación: se retira revocando la invitación en Invitaciones.';
+    default:
+      return null;
+  }
+}
