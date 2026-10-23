@@ -122,6 +122,74 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         const elementos = APLICATIVOS.filter((a) => !grupo || a.grupo === grupo);
         return json(route, { total: elementos.length, elementos });
       }
+      // Soporte de los sábados (HU 2.6): los dos equipos de la migración y un turno con nombre y correo largos.
+      case '/api/v1/soporte/equipos':
+        return json(
+          route,
+          [
+            { id: 'e1', nombre: 'Desarrollo TI', personasMinimo: 1, personasMaximo: 1 },
+            { id: 'e2', nombre: 'Operaciones', personasMinimo: 1, personasMaximo: 2 },
+          ].map((e) => ({
+            ...e,
+            area: null,
+            horaInicio: null,
+            horaFin: null,
+            horarioEfectivo: '08:00 a 12:00',
+            activo: true,
+            puedeGestionar: opciones.permisos.includes('atlas.soporte.gestionar'),
+            puedeAprobar: opciones.permisos.includes('atlas.soporte.aprobar'),
+          })),
+        );
+      case '/api/v1/soporte/este-sabado':
+        return json(route, {
+          fecha: '2026-10-24',
+          festivo: null,
+          equipos: [
+            { equipo: { id: 'e1', nombre: 'Desarrollo TI' }, turnos: [], faltan: 1 },
+            { equipo: { id: 'e2', nombre: 'Operaciones' }, turnos: [], faltan: 1 },
+          ],
+        });
+      case '/api/v1/soporte/turnos':
+        return json(route, {
+          desde: url.searchParams.get('desde') ?? '2026-10-24',
+          hasta: url.searchParams.get('hasta') ?? '2027-01-23',
+          equipoId: url.searchParams.get('equipo'),
+          turnos: [
+            {
+              id: 't1',
+              equipo: { id: 'e2', nombre: 'Operaciones' },
+              fecha: url.searchParams.get('desde') ?? '2026-10-24',
+              persona: { id: 'p2', nombre: 'Persona Demo Con Un Nombre Bastante Largo', correo: 'persona.demo.con.correo.largo@ejemplo.com', cargo: 'Desarrollo', telefono: null },
+              horaInicio: null,
+              horaFin: null,
+              estado: 'programado',
+              origen: 'manual',
+              turnoReemplazadoId: null,
+              festivo: null,
+              observacion: null,
+              requiereRevision: false,
+            },
+          ],
+          festivos: [],
+        });
+      case '/api/v1/soporte/configuracion':
+        return json(route, {
+          horaInicioPorDefecto: '08:00',
+          horaFinPorDefecto: '12:00',
+          reglaFestivos: 'sin_turno',
+          diasAnticipacionRecordatorio: null,
+          canalExterno: null,
+          actualizadoEn: null,
+        });
+      case '/api/v1/soporte/equipos/e1/participantes':
+      case '/api/v1/soporte/equipos/e2/participantes':
+        return json(route, [
+          { id: 'pa1', equipoId: 'e1', personaId: 'p2', nombre: 'Persona Demo', correo: 'persona@ejemplo.com', orden: 1, activo: true, estadoPersona: 'activa' },
+        ]);
+      case '/api/v1/soporte/ausencias':
+        return json(route, []);
+      case '/api/v1/soporte/festivos':
+        return json(route, [{ fecha: '2026-12-25', nombre: 'Navidad', tipo: 'fijo', trasladado: false, id: null }]);
       default: {
         const ficha = /^\/api\/v1\/catalogo\/aplicativos\/([a-z0-9-]+)$/.exec(url.pathname);
         const aplicativo = ficha && APLICATIVOS.find((a) => a.slug === ficha[1]);

@@ -1,6 +1,7 @@
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Modulos.Catalogo;
 using Flit.Atlas.Modulos.Hola;
+using Flit.Atlas.Modulos.Soporte;
 using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 
@@ -17,6 +18,7 @@ public static class ModulosAtlas
     [
         new ModuloCatalogo(),
         new ModuloHola(),
+        new ModuloSoporte(),
     ];
 
     /// <summary>
