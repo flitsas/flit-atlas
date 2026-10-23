@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
@@ -44,7 +45,7 @@ public class MatrizPermisosTests(EntornoApi entorno)
     {
         await using var api = ContratoOpenApiTests.ApiComoQa();
         var deLaApi = api.Services.GetRequiredService<CatalogoPermisos>();
-        var delMigrador = CatalogoPermisos.Crear(PermisosIdentidad.ManifiestosDelNucleo);
+        var delMigrador = CatalogoPermisos.Crear(ModulosAtlas.Manifiestos);
 
         Assert.Equal(delMigrador.MatrizEnMarkdown(), deLaApi.MatrizEnMarkdown());
     }

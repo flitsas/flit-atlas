@@ -107,3 +107,10 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
+
+## Hola (ejemplo) (`hola`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.hola.ver` | Ver los saludos de tu organización (módulo de ejemplo). | ✔ |   |   |   |   |   |   | ✔ | ✔ |   |   |   |   |   |
+| `atlas.hola.gestionar` | Escribir saludos en tu organización (módulo de ejemplo). | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |

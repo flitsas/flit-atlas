@@ -22,6 +22,22 @@ public abstract class ContextoAtlas(DbContextOptions opciones, IAlcanceDatos? al
     /// <summary>Organizaciones que puede ver quien usa este contexto; se lee en cada consulta y al abrir la conexión.</summary>
     public AlcanceDatos Alcance => alcance?.Actual ?? AlcanceDatos.Sistema;
 
+    /// <summary>
+    /// Opciones comunes de los contextos de los módulos (ATLAS-ADR-0026): Npgsql con su historial de migraciones propio en
+    /// el esquema <c>atlas</c>, snake_case y el interceptor que fija el alcance de datos de RLS en cada conexión. Es lo
+    /// mismo que hace <see cref="PlataformaDbContext.Configurar"/> para el núcleo.
+    /// </summary>
+    /// <param name="tablaHistorial"><c>__ef_migraciones_&lt;id&gt;</c>.</param>
+    public static DbContextOptionsBuilder ConfigurarOpciones(DbContextOptionsBuilder opciones, string cadenaConexion, string tablaHistorial)
+    {
+        ArgumentNullException.ThrowIfNull(opciones);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tablaHistorial);
+        return opciones
+            .UseNpgsql(cadenaConexion, n => n.MigrationsHistoryTable(tablaHistorial, Esquema))
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(InterceptorAlcanceDatos.Instancia);
+    }
+
     // EF Core evalúa estos miembros con el contexto de cada consulta (los filtros globales los parametrizan).
     private bool AlcanceTotal => Alcance.Total;
 

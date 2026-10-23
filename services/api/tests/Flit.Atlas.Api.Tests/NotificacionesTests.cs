@@ -356,6 +356,8 @@ public class NotificacionesTests(EntornoApi entorno)
                 ["modulo.contratos"] = false,
                 ["modulo.catalogo"] = false,
                 ["modulo.equipo"] = true,
+                // La crea el migrador para cada módulo registrado, apagada por defecto (ATLAS-ADR-0026).
+                ["modulo.hola"] = false,
             },
             banderas);
     }

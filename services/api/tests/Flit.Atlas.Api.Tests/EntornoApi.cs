@@ -2,12 +2,14 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -62,13 +64,19 @@ public sealed class EntornoApi : IAsyncLifetime
             .Configure<IdentityOptions>(IdentidadDbContext.ConfigurarIdentity)
             .AddDbContext<PlataformaDbContext>(o => PlataformaDbContext.Configurar(o, cadena))
             .AddDbContext<IdentidadDbContext>(o => IdentidadDbContext.Configurar(o, cadena))
+            .RegistrarDatosModulos(cadena, ModulosAtlas.Registrados)
             .BuildServiceProvider();
         await using var alcance = servicios.CreateAsyncScope();
         var plataforma = alcance.ServiceProvider.GetRequiredService<PlataformaDbContext>();
         await plataforma.Database.MigrateAsync();
         await alcance.ServiceProvider.GetRequiredService<IdentidadDbContext>().Database.MigrateAsync();
-        // Lo mismo que hace el migrador después de las migraciones (ATLAS-ADR-0023).
-        await SembradorPermisos.SembrarAsync(plataforma, CatalogoPermisos.Crear(PermisosIdentidad.ManifiestosDelNucleo));
+        foreach (var modulo in ModulosAtlas.Registrados.Where(m => m.ContextoDatos is not null))
+        {
+            await ExtensionesModulos.ContextoDatosDe(alcance.ServiceProvider, modulo)!.Database.MigrateAsync();
+        }
+        // Lo mismo que hace el migrador después de las migraciones (ATLAS-ADR-0023 y ATLAS-ADR-0026).
+        await ExtensionesModulos.RegistrarBanderasAsync(plataforma, ModulosAtlas.Registrados, TimeProvider.System);
+        await SembradorPermisos.SembrarAsync(plataforma, CatalogoPermisos.Crear(ModulosAtlas.Manifiestos));
     }
 
     public async ValueTask DisposeAsync()

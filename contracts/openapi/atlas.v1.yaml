@@ -1083,6 +1083,101 @@ paths:
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+  /api/v1/hola/saludos:
+    get:
+      tags:
+        - Hola
+      summary: Saludos de tu organización
+      description: 'Los saludos que puedes ver, del más reciente al más viejo (máximo 50). Un externo solo ve los de su organización.'
+      operationId: ListarSaludos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SaludoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.hola.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.hola).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.hola.ver
+    post:
+      tags:
+        - Hola
+      summary: Escribir un saludo
+      description: Crea un saludo en la organización de la persona en sesión.
+      operationId: CrearSaludo
+      requestBody:
+        description: Texto del saludo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoSaludo'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaludoDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.hola.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.hola).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.hola.gestionar
+  '/api/v1/hola/saludos/{id}':
+    get:
+      tags:
+        - Hola
+      summary: Un saludo
+      description: Un saludo por su id. 404 si no existe o es de una organización que no puedes ver.
+      operationId: ObtenerSaludo
+      parameters:
+        - name: id
+          in: path
+          description: Id del saludo.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaludoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.hola).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.hola.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.hola.ver
 components:
   schemas:
     AlcanceVista:
@@ -1344,6 +1439,17 @@ components:
             - string
           format: date-time
       description: Notificación del centro de notificaciones.
+    NuevoSaludo:
+      required:
+        - texto
+      type: object
+      properties:
+        texto:
+          maxLength: 280
+          minLength: 1
+          type: string
+          description: Texto del saludo; se recortan los espacios de los extremos.
+      description: Saludo nuevo; queda en la organización de la persona en sesión.
     PermisoMatriz:
       required:
         - codigo
@@ -1528,6 +1634,29 @@ components:
         asignable:
           type: boolean
       description: 'Rol de Atlas: interno (§7.2), externo (§7.3) o implícito por propiedad.'
+    SaludoDto:
+      required:
+        - id
+        - texto
+        - organizacionId
+        - creadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        texto:
+          maxLength: 280
+          type: string
+          description: Texto del saludo.
+        organizacionId:
+          type: string
+          description: Organización a la que pertenece el saludo.
+          format: uuid
+        creadoEn:
+          type: string
+          format: date-time
+      description: Saludo de una organización (módulo de ejemplo).
     SesionDispositivo:
       required:
         - id
@@ -1721,3 +1850,5 @@ tags:
     description: Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API.
   - name: Permisos
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
+  - name: Hola
+    description: 'Módulo de ejemplo de docs/como-crear-un-modulo.md: saludos por organización con permisos, predicado obligatorio y RLS. Apagado por defecto (bandera modulo.hola).'

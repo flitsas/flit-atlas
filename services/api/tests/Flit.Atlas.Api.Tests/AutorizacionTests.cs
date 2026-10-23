@@ -119,7 +119,7 @@ public class AutorizacionTests(EntornoApi entorno)
     [Fact]
     public async Task Todo_endpoint_declara_un_permiso_o_esta_en_una_lista_explicita()
     {
-        var catalogo = CatalogoPermisos.Crear(Identidad.Autorizacion.PermisosIdentidad.ManifiestosDelNucleo);
+        var catalogo = CatalogoPermisos.Crear(Composicion.ModulosAtlas.Manifiestos);
         // Las dos configuraciones: la de pruebas (simulado) y la de qa/pdn (Entra), que mapean endpoints distintos.
         await using var local = entorno.Api();
         await using var comoQa = ContratoOpenApiTests.ApiComoQa();
@@ -156,7 +156,10 @@ public class AutorizacionTests(EntornoApi entorno)
         var esperados = new HashSet<string>(catalogo.PermisosDe(rol), StringComparer.Ordinal);
         if (definicion.Tipo == TipoRol.Externo)
         {
-            var externo = await entorno.ExternoAsync(api, rol, DateTimeOffset.UtcNow.AddHours(1));
+            // Vigencia larga (dentro del tope de 90 días): las pruebas que adelantan el reloj (RolesTests +2 h, TokensTests
+            // +31 días) corren el vigilante de vencimientos sobre esta misma base y, con una vigencia corta, vencían esta
+            // asignación e invalidaban la sesión a mitad de la prueba (401 al azar).
+            var externo = await entorno.ExternoAsync(api, rol, DateTimeOffset.UtcNow.AddDays(80));
             Assert.Equal(HttpStatusCode.NoContent, (await navegador.EntrarComoAsync(externo.UsuarioId)).StatusCode);
         }
         else

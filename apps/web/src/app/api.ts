@@ -27,7 +27,8 @@ export class ErrorApi extends Error {
   }
 }
 
-async function pedir(ruta: string, opciones: RequestInit = {}): Promise<Response> {
+/** Petición a atlas-api con la cookie del BFF y la cabecera antifalsificación; los módulos la usan para sus endpoints. */
+export async function pedir(ruta: string, opciones: RequestInit = {}): Promise<Response> {
   const metodo = (opciones.method ?? 'GET').toUpperCase();
   const cabeceras = new Headers(opciones.headers);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(metodo)) {
@@ -40,7 +41,7 @@ async function pedir(ruta: string, opciones: RequestInit = {}): Promise<Response
   return respuesta;
 }
 
-async function enviarJson(ruta: string, metodo: 'POST' | 'PUT', cuerpo?: unknown): Promise<Response> {
+export async function enviarJson(ruta: string, metodo: 'POST' | 'PUT', cuerpo?: unknown): Promise<Response> {
   return pedir(ruta, {
     method: metodo,
     headers: cuerpo === undefined ? undefined : { 'Content-Type': 'application/json' },

@@ -17,7 +17,10 @@ Proyectos ya creados:
 | `src/Flit.Atlas.ServiceDefaults/` | Telemetría, sondas `/health/live` y `/health/ready`, y `ConfiguracionRequerida` |
 | `src/Flit.Atlas.Plataforma/` | `PlataformaDbContext` (tablas `plataforma_*` del §9), auditoría de solo inserción, outbox e inbox (ATLAS-ADR-0018) |
 | `src/Flit.Atlas.Identidad/` | `IdentidadDbContext` (ASP.NET Core Identity v3, tablas `identidad_*`), ingreso con Entra ID, aprovisionamiento de empleados y sesiones en el servidor |
-| `src/Flit.Atlas.Migrador/` | Aplica las migraciones y termina; corre antes de `atlas-api` |
+| `src/Flit.Atlas.Migrador/` | Aplica las migraciones (núcleo y módulos), crea las banderas de los módulos nuevos, aplica la matriz y termina; corre antes de `atlas-api` |
+| `src/Flit.Atlas.Composicion/` | La lista única de módulos (`ModulosAtlas.Registrados`) que usan atlas-api y el migrador (ATLAS-ADR-0026) |
+| `src/Flit.Atlas.Modulos.Hola/` | Módulo de ejemplo «hola», apagado por bandera: la plantilla de [`docs/como-crear-un-modulo.md`](../../docs/como-crear-un-modulo.md) |
+| `tests/Flit.Atlas.Modulos.Hola.Tests/` | Contrato, migración, RLS y aislamiento del módulo de ejemplo (Testcontainers, usuario `flit_atlas`) |
 | `tests/Flit.Atlas.Plataforma.Tests/` | Integración con Postgres y RabbitMQ reales (Testcontainers; requiere Docker) |
 | `tests/Flit.Atlas.Api.Tests/` | Arranque y flujo de identidad contra Postgres y Redis reales (Testcontainers) |
 
@@ -77,7 +80,7 @@ dotnet test --solution Flit.Atlas.slnx      # las pruebas de Plataforma necesita
 - **Administración** (`atlas.roles.ver` para leer; `atlas.roles.gestionar` y reautenticación para cambiar; todo auditado): `GET /api/v1/plataforma/roles`, `GET|POST /api/v1/plataforma/personas/{personaId}/asignaciones`, `DELETE /api/v1/plataforma/asignaciones/{id}` (invalida las sesiones de la persona; las de grupo responden 409), `GET|POST /api/v1/plataforma/mapeos-grupos-entra`, `DELETE /api/v1/plataforma/mapeos-grupos-entra/{id}`.
 - **Aislamiento**: predicado obligatorio (filtro global de EF Core en toda entidad con `OrganizacionId`) y RLS forzada en `plataforma_organizacion`, `plataforma_persona`, `plataforma_asignacion_rol`, `plataforma_invitacion` y `plataforma_auditoria`, con las variables `atlas.alcance_total` y `atlas.organizaciones` que fija `InterceptorAlcanceDatos` en cada conexión. Un externo ve solo su organización. Sin las variables (p. ej. `psql` como `flit_atlas`) no se ve ninguna fila: fija antes `SELECT set_config('atlas.alcance_total', 'on', false);`.
 
-Un módulo nuevo declara sus permisos así (y lo registra en atlas-api y en el migrador):
+Un módulo nuevo declara sus permisos así (el manifiesto lo registran atlas-api y el migrador desde la lista única de `Flit.Atlas.Composicion`, ATLAS-ADR-0026):
 
 ```csharp
 public static class PermisosHola
@@ -90,8 +93,8 @@ public static class PermisosHola
     ], tiposAlcance: ["saludo"]);
 }
 
-servicios.AgregarManifiestoPermisos(PermisosHola.Manifiesto);          // en el registro del módulo
-rutas.MapGet("/api/v1/hola", ...).RequierePermiso(PermisosHola.Ver);  // en cada endpoint
+public ManifiestoPermisos Permisos => PermisosHola.Manifiesto;            // en su IModuloAtlas
+saludos.MapGet("", ...).RequierePermiso(PermisosHola.Ver);              // en cada endpoint, bajo /api/v1/hola
 ```
 
 Sus tablas con `organizacion_id` llaman a `AplicarPredicadoDeOrganizacion` en `OnModelCreating` y, en su migración, activan RLS con `FORCE` y la política `atlas.plataforma_organizacion_visible(organizacion_id)`. `AutorizacionTests` falla si un endpoint nuevo no declara permiso (salvo que se agregue a la lista de públicos o de solo sesión).
@@ -155,3 +158,11 @@ dotnet ef migrations add <Nombre> -p services/api/src/Flit.Atlas.Identidad -o Da
 ```
 
 Una prueba falla si el modelo cambia sin su migración.
+
+## Módulos (HU 1.9, ATLAS-ADR-0026)
+
+Cada `Flit.Atlas.Modulos.<X>` implementa `IModuloAtlas` (`Flit.Atlas.Plataforma.Modulos`) y se registra con una línea en `Flit.Atlas.Composicion/ModulosAtlas.cs`. atlas-api lo monta en `/api/v1/<id>` con sesión y su bandera `modulo.<id>` (404 si está apagada para la organización de la persona); el migrador migra su contexto (historial `__ef_migraciones_<id>`), crea su bandera con `ActivoPorDefecto` sin tocar las existentes y aplica sus permisos. `ArquitecturaModulosTests` verifica que un módulo solo dependa de `Flit.Atlas.Plataforma` y que nadie más lo referencie. Paso a paso: [`docs/como-crear-un-modulo.md`](../../docs/como-crear-un-modulo.md).
+
+```bash
+dotnet ef migrations add <Nombre> -p services/api/src/Flit.Atlas.Modulos.<X> -o Datos/Migraciones
+```

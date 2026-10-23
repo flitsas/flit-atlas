@@ -3,6 +3,7 @@ using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Identidad.Tokens;
+using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
@@ -51,7 +52,8 @@ internal static class ContratoOpenApi
             o.OpenApiVersion = OpenApiSpecVersion.OpenApi3_1;
             o.AddDocumentTransformer((documento, contexto, _) =>
             {
-                DescribirDocumento(documento, contexto.ApplicationServices.GetRequiredService<RegistroScopes>());
+                DescribirDocumento(documento, contexto.ApplicationServices.GetRequiredService<RegistroScopes>(),
+                    contexto.ApplicationServices.GetServices<IModuloAtlas>());
                 return Task.CompletedTask;
             });
             o.AddOperationTransformer(async (operacion, contexto, _) =>
@@ -67,7 +69,8 @@ internal static class ContratoOpenApi
         return app;
     }
 
-    private static void DescribirDocumento(OpenApiDocument documento, RegistroScopes scopes)
+    /// <param name="modulos">Módulos registrados (ATLAS-ADR-0026): cada uno agrega su etiqueta con su descripción.</param>
+    private static void DescribirDocumento(OpenApiDocument documento, RegistroScopes scopes, IEnumerable<IModuloAtlas> modulos)
     {
         documento.Info = new OpenApiInfo
         {
@@ -84,7 +87,8 @@ internal static class ContratoOpenApi
         };
         documento.Servers = [.. Servidores.Select(s => new OpenApiServer { Url = s.Url, Description = s.Descripcion })];
         documento.Tags = new HashSet<OpenApiTag>(
-            Etiquetas.Select(t => new OpenApiTag { Name = t.Nombre, Description = t.Descripcion }));
+            Etiquetas.Concat(modulos.Select(m => (m.Nombre, m.Descripcion)))
+                .Select(t => new OpenApiTag { Name = t.Item1, Description = t.Item2 }));
 
         documento.Components ??= new OpenApiComponents();
         documento.Components.SecuritySchemes = new Dictionary<string, IOpenApiSecurityScheme>
@@ -228,6 +232,19 @@ internal static class ContratoOpenApi
             }
             var texto = string.Join(", o ", motivos);
             operacion.Responses.TryAdd("403", new OpenApiResponse { Description = char.ToUpperInvariant(texto[0]) + texto[1..] + "." });
+        }
+        if (metadata.OfType<MetadatoModulo>().FirstOrDefault() is { } modulo)
+        {
+            // El host monta cada módulo detrás de su bandera (ATLAS-ADR-0016 y ATLAS-ADR-0026).
+            var apagado = $"el módulo está apagado para la organización de la sesión (bandera {modulo.Bandera})";
+            if (operacion.Responses.TryGetValue("404", out var propio) && propio is OpenApiResponse respuesta)
+            {
+                respuesta.Description = $"No existe o no lo puedes ver, o {apagado}.";
+            }
+            else
+            {
+                operacion.Responses.TryAdd("404", new OpenApiResponse { Description = char.ToUpperInvariant(apagado[0]) + apagado[1..] + "." });
+            }
         }
         if (metadata.OfType<MetadatoLimiteTasa>().Any())
         {

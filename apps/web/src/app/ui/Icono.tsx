@@ -5,10 +5,12 @@ import {
   CalendarDays,
   Ellipsis,
   FileCode2,
+  Hand,
   House,
   type LucideProps,
   Search,
   Settings,
+  ShieldCheck,
   Sparkles,
   Users,
 } from 'lucide-react';
@@ -29,6 +31,8 @@ const ICONOS: Record<NombreIcono, ComponentType<LucideProps>> = {
   asistente: Sparkles,
   notificaciones: Bell,
   ajustes: Settings,
+  permisos: ShieldCheck,
+  ejemplo: Hand,
 };
 
 export function Icono({ nombre, ...props }: { nombre: NombreIcono } & LucideProps) {
