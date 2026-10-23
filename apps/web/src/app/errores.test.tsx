@@ -4,7 +4,16 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 
 import { CABECERA_CSRF } from './api';
-import { armarReporte, debeRecargarPorCarga, esErrorDeCarga, MARCA_RECARGA, pagina, referenciaCorta, RUTA_ERRORES_CLIENTE } from './errores';
+import {
+  armarReporte,
+  debeRecargarPorCarga,
+  esErrorDeCarga,
+  MARCA_RECARGA,
+  marcarSesion,
+  pagina,
+  referenciaCorta,
+  RUTA_ERRORES_CLIENTE,
+} from './errores';
 import { ErrorDeRuta } from './paginas/Estados';
 
 function pintarConError(error: unknown) {
@@ -31,6 +40,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  marcarSesion(false);
 });
 
 describe('errores de carga de chunks', () => {
@@ -79,6 +89,8 @@ describe('errores de carga de chunks', () => {
 });
 
 describe('reporte de los demás errores', () => {
+  beforeEach(() => marcarSesion(true));
+
   it('envía el error a atlas-api y muestra la referencia', async () => {
     window.history.pushState({}, '', '/administracion/roles?persona=x#token-secreto');
     pintarConError(new TypeError("Cannot read properties of undefined (reading 'nombre')"));
@@ -95,6 +107,16 @@ describe('reporte de los demás errores', () => {
     expect(cuerpo).toMatchObject({ referencia: codigo.textContent, nombre: 'TypeError', mensaje: "Cannot read properties of undefined (reading 'nombre')" });
     // Solo la ruta: ni la consulta ni el fragmento (puede traer el token de una invitación).
     expect(cuerpo.ruta).toBe('/administracion/roles');
+  });
+
+  it('sin sesión (p. ej. en /invitacion) no envía nada, pero muestra la referencia y el botón de recargar', async () => {
+    marcarSesion(false);
+    window.history.pushState({}, '', '/invitacion');
+    pintarConError(new TypeError('Fallo antes de entrar'));
+
+    expect(await screen.findByText(/^[2-9A-Z]{8}$/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Recargar la página' })).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('si la API no responde, la persona igual ve su referencia', async () => {

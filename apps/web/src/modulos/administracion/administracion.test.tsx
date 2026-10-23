@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../app/App';
 import { resolverNavegacion } from '../../app/modulos/resolver';
-import { type Asignacion, motivoNoRetirable, rolesMapeables, type RolAtlas } from './api';
+import { type Asignacion, motivoNoRetirable, type PersonaEncontrada, rolesMapeables, type RolAtlas } from './api';
 import { moduloAdministracion } from './modulo';
 
 function json(cuerpo: unknown, status = 200) {
@@ -21,6 +21,33 @@ const ROLES: RolAtlas[] = [
 const GRUPO = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 const PERSONA = '0b9a1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d';
 const PROPIA = '11111111-2222-4333-8444-555555555555';
+const EXTERNA = '22222222-3333-4444-8555-666666666666';
+
+const PERSONAS: PersonaEncontrada[] = [
+  {
+    id: PERSONA,
+    nombre: 'José Demo Álvarez',
+    correo: 'jose.demo@ejemplo.com',
+    tipo: 'empleado',
+    organizacion: { id: 'o', nombre: 'FLIT S.A.S.' },
+    estado: 'activa',
+    emergencia: false,
+    roles: ['atlas.desarrollador'],
+  },
+  {
+    id: EXTERNA,
+    nombre: 'María Externa',
+    correo: 'maria@ejemplo.com',
+    tipo: 'externo',
+    organizacion: { id: 'c', nombre: 'Organismo Demo' },
+    estado: 'suspendida',
+    emergencia: false,
+    roles: [],
+  },
+];
+
+/** Como el servidor: sin mayúsculas ni tildes, por nombre o correo, o por id. */
+const sinTildes = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const asignacion = (id: string, origen: Asignacion['origen'], rol: string, rolNombre: string): Asignacion => ({
   id,
@@ -80,6 +107,12 @@ function apiFalsa({ permisos, proveedor = 'microsoft', cambio, organizaciones = 
         mapeos.splice(0, 1);
         return new Response(null, { status: 204 });
       }
+      if (ruta.startsWith('/api/v1/plataforma/personas?')) {
+        const q = new URLSearchParams(ruta.split('?')[1]).get('q') ?? '';
+        return json({ personas: PERSONAS.filter((p) => p.id === q || sinTildes(`${p.nombre} ${p.correo}`).includes(sinTildes(q))), hayMas: false });
+      }
+      if (ruta === `/api/v1/plataforma/personas/${PERSONA}/asignaciones` && metodo === 'POST')
+        return json(asignacion('a9', 'manual', 'atlas.superadmin', 'Superadministrador'), 201);
       if (ruta.startsWith(`/api/v1/plataforma/personas/${PERSONA}/asignaciones`))
         return json([
           asignacion('a1', 'manual', 'atlas.desarrollador', 'Desarrollador'),
@@ -263,6 +296,100 @@ describe('pantalla de asignación de roles', () => {
     expect(await screen.findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent('No hay ninguna persona con ese id.');
     expect(llamadas.some((l) => l.ruta === `/api/v1/plataforma/personas/${PROPIA}/asignaciones`)).toBe(true);
     expect(window.location.search).toBe(`?persona=${PROPIA}`);
+  });
+});
+
+describe('buscador de personas', () => {
+  const busquedas = (llamadas: { ruta: string }[]) => llamadas.filter((l) => l.ruta.startsWith('/api/v1/plataforma/personas?'));
+
+  it('busca con retraso (no con una sola letra), sin tildes, y al elegir una persona abre sus asignaciones', async () => {
+    const llamadas = apiFalsa({ permisos: VER });
+    window.history.pushState({}, '', '/administracion/roles');
+
+    render(<App />);
+    const campo = await screen.findByRole('searchbox', { name: /Nombre, correo o id/ });
+    fireEvent.change(campo, { target: { value: 'j' } });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(busquedas(llamadas)).toHaveLength(0);
+
+    for (const valor of ['jo', 'jos', 'jose']) fireEvent.change(campo, { target: { value: valor } });
+    const lista = await screen.findByRole('list', { name: 'Personas encontradas' });
+    expect(busquedas(llamadas).map((l) => l.ruta)).toEqual(['/api/v1/plataforma/personas?q=jose&limite=20']);
+    const resultado = within(lista).getByRole('button', { name: /José Demo Álvarez/ });
+    expect(resultado).toHaveTextContent('jose.demo@ejemplo.com');
+    expect(resultado).toHaveTextContent('Empleado');
+    expect(await within(lista).findByText('Desarrollador')).toBeInTheDocument();
+
+    fireEvent.click(resultado);
+
+    expect(window.location.search).toBe(`?persona=${PERSONA}`);
+    expect(await screen.findByRole('list', { name: 'Asignaciones' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'José Demo Álvarez' })).toBeInTheDocument();
+    expect(campo).toHaveValue('');
+    expect(screen.queryByRole('list', { name: 'Personas encontradas' })).toBeNull();
+    // Con solo atlas.roles.ver no se asigna.
+    expect(screen.queryByRole('button', { name: 'Asignar rol' })).toBeNull();
+  });
+
+  it('dice cuando nadie coincide y abre directo un id pegado', async () => {
+    apiFalsa({ permisos: VER });
+    window.history.pushState({}, '', '/administracion/roles');
+
+    render(<App />);
+    const campo = await screen.findByRole('searchbox', { name: /Nombre, correo o id/ });
+    fireEvent.change(campo, { target: { value: 'nadie' } });
+    expect(await screen.findByText('Nadie coincide con «nadie».')).toBeInTheDocument();
+
+    fireEvent.change(campo, { target: { value: ` ${EXTERNA.toUpperCase()} ` } });
+    fireEvent.submit(screen.getByRole('search', { name: 'Buscar personas' }));
+
+    expect(window.location.search).toBe(`?persona=${EXTERNA}`);
+    expect(await screen.findByRole('heading', { name: 'María Externa' })).toBeInTheDocument();
+    expect(screen.getByText('Externo · Organismo Demo')).toBeInTheDocument();
+    expect(screen.getByText('Suspendida')).toBeInTheDocument();
+  });
+
+  it('asigna un rol interno a un empleado con vencimiento opcional; a un externo no se le ofrece', async () => {
+    const llamadas = apiFalsa({ permisos: GESTIONAR });
+    window.history.pushState({}, '', `/administracion/roles?persona=${PERSONA}`);
+
+    const { unmount } = render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Asignar rol' }));
+    const hoja = screen.getByRole('dialog', { name: 'Asignar rol' });
+    const roles = await within(hoja).findByRole('group', { name: 'Rol' });
+    expect(within(roles).getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['atlas.superadmin', 'atlas.desarrollador']);
+    fireEvent.submit(within(hoja).getByRole('form', { name: 'Datos de la asignación' }));
+    expect(within(hoja).getByRole('alert')).toHaveTextContent('Elige el rol');
+    expect(llamadas.some((l) => l.init?.method === 'POST')).toBe(false);
+
+    fireEvent.click(within(roles).getByRole('radio', { name: /Superadministrador/ }));
+    fireEvent.change(within(hoja).getByLabelText(/Vence/), { target: { value: '2026-12-31' } });
+    fireEvent.submit(within(hoja).getByRole('form', { name: 'Datos de la asignación' }));
+
+    expect(await screen.findByText('José Demo Álvarez tiene ahora Superadministrador.')).toBeInTheDocument();
+    const post = llamadas.find((l) => l.init?.method === 'POST')!;
+    expect(post.ruta).toBe(`/api/v1/plataforma/personas/${PERSONA}/asignaciones`);
+    expect(JSON.parse(String(post.init!.body))).toEqual({ rol: 'atlas.superadmin', vigenteHasta: '2026-12-31T23:59:00-05:00' });
+    unmount();
+
+    apiFalsa({ permisos: GESTIONAR });
+    window.history.pushState({}, '', `/administracion/roles?persona=${EXTERNA}`);
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'María Externa' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Asignar rol' })).toBeNull();
+  });
+
+  it('si el servidor pide reautenticación al asignar, lo dice dentro de la hoja', async () => {
+    apiFalsa({ permisos: GESTIONAR, cambio: REAUTENTICAR });
+    window.history.pushState({}, '', `/administracion/roles?persona=${PERSONA}`);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Asignar rol' }));
+    const hoja = screen.getByRole('dialog', { name: 'Asignar rol' });
+    fireEvent.click(await within(hoja).findByRole('radio', { name: /Desarrollador/ }));
+    fireEvent.submit(within(hoja).getByRole('form', { name: 'Datos de la asignación' }));
+
+    expect(await within(hoja).findByRole('link', { name: 'Confirmar con Microsoft' })).toBeInTheDocument();
   });
 });
 
