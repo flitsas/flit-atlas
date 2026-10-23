@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Aprovisionamiento;
+using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Externos;
@@ -40,13 +41,16 @@ public static class EndpointsIdentidad
 
     /// <param name="Roles">Roles vigentes en este momento (incluye atlas.lector de todo empleado y los implícitos).</param>
     /// <param name="Permisos">Permisos efectivos en este momento, calculados en el servidor (ATLAS-ADR-0023).</param>
+    /// <param name="Emergencia">Sesión de la cuenta de administrador de emergencia (ATLAS-ADR-0027).</param>
     [Description("Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.")]
     public sealed record Yo(
         Guid Sub, Guid PersonaId, string Nombre, string TipoPrincipal, Guid OrganizacionId, string Proveedor,
         [property: Description("Códigos de los roles vigentes en este momento, ordenados; incluye atlas.lector de todo empleado.")]
         IReadOnlyList<string> Roles,
         [property: Description("Permisos efectivos (atlas.<modulo>.<accion>) en este momento, ordenados: la PWA filtra la navegación con ellos. Se recalculan en cada petición.")]
-        IReadOnlyList<string> Permisos);
+        IReadOnlyList<string> Permisos,
+        [property: Description("true si la sesión es de la cuenta de administrador de emergencia (ATLAS-ADR-0027): la PWA muestra el aviso.")]
+        bool Emergencia);
 
     public static IEndpointRouteBuilder MapIdentidad(this IEndpointRouteBuilder rutas)
     {
@@ -150,6 +154,7 @@ public static class EndpointsIdentidad
         // Servidor de tokens (HU 1.3c): /connect/* fuera del contrato y GET /api/v1/identidad/token/yo con Bearer.
         rutas.MapServidorTokens(identidad);
         identidad.MapCuentasExternas();
+        identidad.MapEmergencia();
 
         rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, CancellationToken ct) =>
             {
@@ -162,7 +167,8 @@ public static class EndpointsIdentidad
                     Guid.Parse(usuario.FindFirstValue(ClaimsAtlas.OrganizacionId)!),
                     usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
                     permisos.Roles,
-                    permisos.Permisos);
+                    permisos.Permisos,
+                    usuario.FindFirstValue(ClaimsAtlas.Proveedor) == CuentaEmergencia.Proveedor);
             })
             .RequireAuthorization()
             .WithMetadata(new MetadatoLimiteTasa())

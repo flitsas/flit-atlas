@@ -19,12 +19,12 @@ function json(cuerpo: unknown, status = 200) {
 }
 
 /** API de mentira: sesión según `conSesion`, banderas y bandeja vacía. */
-function apiFalsa(opciones: { conSesion: boolean; banderas?: Record<string, boolean> }) {
+function apiFalsa(opciones: { conSesion: boolean; banderas?: Record<string, boolean>; yo?: Partial<typeof yo> & { emergencia?: boolean } }) {
   const estado = { conSesion: opciones.conSesion };
   const llamadas: { ruta: string; init?: RequestInit }[] = [];
   const fetch = vi.fn(async (ruta: string, init?: RequestInit) => {
     llamadas.push({ ruta, init });
-    if (ruta === '/api/v1/plataforma/yo') return estado.conSesion ? json(yo) : new Response('', { status: 401 });
+    if (ruta === '/api/v1/plataforma/yo') return estado.conSesion ? json({ ...yo, ...opciones.yo }) : new Response('', { status: 401 });
     if (ruta === '/api/v1/identidad/proveedores') return json({ microsoft: true, simulado: false });
     if (ruta === '/api/v1/identidad/salir') {
       estado.conSesion = false;
@@ -88,6 +88,20 @@ describe('App', () => {
     expect(within(inferior).getAllByRole('link').map((a) => a.textContent)).toEqual(['Inicio', 'Buscar', 'Soporte', 'Asistente']);
     expect(within(inferior).getByRole('button', { name: 'Más' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: /Soporte de este sábado/ })).toBeInTheDocument();
+  });
+
+  it('la cuenta de emergencia muestra su aviso en el shell; una sesión normal no', async () => {
+    apiFalsa({ conSesion: true, yo: { proveedor: 'emergencia', roles: ['atlas.superadmin'], emergencia: true } });
+
+    const { unmount } = render(<App />);
+
+    expect(await screen.findByText('Cuenta de emergencia.')).toBeInTheDocument();
+    unmount();
+    vi.unstubAllGlobals();
+    apiFalsa({ conSesion: true });
+    render(<App />);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Hola, Empleada' })).toBeInTheDocument();
+    expect(screen.queryByText('Cuenta de emergencia.')).toBeNull();
   });
 
   it('un módulo apagado por bandera desaparece y su ruta no existe', async () => {

@@ -106,3 +106,17 @@ export const claveTotpRecuperacion = async (enlace: string) =>
 
 export const completarRecuperacion = async (enlace: string, factor: Factor) =>
   json<CuentaLista>(await post('/api/v1/identidad/recuperacion/completar', { enlace, factor }));
+
+// Cuenta de administrador de emergencia (ATLAS-ADR-0027): el enlace lo imprime el comando de consola.
+
+export const consultarEmergencia = async (enlace: string) =>
+  json<{ correo: string; nombre: string }>(await post('/api/v1/identidad/emergencia/consultar', { enlace }));
+
+export const opcionesPasskeyEmergencia = async (enlace: string) =>
+  json<OpcionesPasskey>(await post('/api/v1/identidad/emergencia/passkey/opciones', { enlace }));
+
+export const claveTotpEmergencia = async (enlace: string) =>
+  json<ClaveTotp>(await post('/api/v1/identidad/emergencia/totp/clave', { enlace }));
+
+export const activarEmergencia = async (enlace: string, factor: Factor) =>
+  json<CuentaLista>(await post('/api/v1/identidad/emergencia/activar', { enlace, factor }));

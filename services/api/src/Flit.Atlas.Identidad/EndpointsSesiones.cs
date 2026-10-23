@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Security.Claims;
+using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
@@ -121,6 +122,11 @@ public static class EndpointsSesiones
             {
                 return Results.NotFound();
             }
+            if (await CuentaEmergencia.EsDeEmergenciaAsync(plataforma, personaId, ct))
+            {
+                // La cuenta de emergencia no se desarma desde Atlas: se rota con el comando de consola (ATLAS-ADR-0027).
+                return Results.Conflict(new { error = CuentaEmergencia.CodigoProtegida });
+            }
 
             // Primero el estado y después el sello: un ingreso simultáneo o ve la persona suspendida o queda con el
             // sello viejo (ATLAS-ADR-0022).
@@ -142,7 +148,8 @@ public static class EndpointsSesiones
             .WithSummary("Suspender a una persona")
             .WithDescription(
                 "Administración: requiere atlas.identidad.administrar. Marca la persona como suspendida, " +
-                "invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige " +
+                "invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte o si es la cuenta de " +
+                "administrador de emergencia (se rota con el comando de consola). Exige " +
                 "reautenticación.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)

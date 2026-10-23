@@ -1,6 +1,7 @@
 using Flit.Atlas.Api;
 using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad;
+using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Plataforma;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Modulos;
@@ -45,7 +46,22 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     }
 });
 
+// Comando de la cuenta de administrador de emergencia (ATLAS-ADR-0027): `dotnet Flit.Atlas.Api.dll emergencia activar`
+// dentro del contenedor. Usa la misma configuración y servicios, pero no levanta el servidor ni los trabajos en segundo
+// plano. Sin proveedores de log: lo único que sale es lo que el comando escribe (el enlace va solo a su stdout).
+var comandoEmergencia = ComandoEmergencia.EsComando(args);
+if (comandoEmergencia)
+{
+    builder.Logging.ClearProviders();
+}
+
 var app = builder.Build();
+
+if (comandoEmergencia)
+{
+    Environment.ExitCode = await ComandoEmergencia.EjecutarAsync(app.Services, args, Console.Out, Console.Error);
+    return;
+}
 
 app.UseForwardedHeaders();
 

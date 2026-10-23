@@ -54,6 +54,11 @@ public class AutorizacionTests(EntornoApi entorno)
         "POST /api/v1/identidad/recuperacion/passkey/opciones",
         "POST /api/v1/identidad/recuperacion/totp/clave",
         "POST /api/v1/identidad/recuperacion/completar",
+        // ATLAS-ADR-0027: activación de la cuenta de emergencia con el enlace de un solo uso que imprime el comando.
+        "POST /api/v1/identidad/emergencia/consultar",
+        "POST /api/v1/identidad/emergencia/passkey/opciones",
+        "POST /api/v1/identidad/emergencia/totp/clave",
+        "POST /api/v1/identidad/emergencia/activar",
         // Protocolo OAuth/OIDC (HU 1.3c, ATLAS-ADR-0024): OpenIddict autentica al cliente (secreto, PKCE, código o
         // refresh) antes de dejar pasar la petición; authorize toma al usuario de la sesión del BFF si la hay.
         "GET /connect/authorize",

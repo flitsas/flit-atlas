@@ -6,7 +6,7 @@ import { sincronizarPush } from '../../pwa/push';
 import { Paleta } from '../busqueda/Paleta';
 import { CLAVE_NOTIFICACIONES } from '../notificaciones';
 import { useSesion } from '../sesion';
-import { AvisoNuevaVersion, AvisoSinConexion } from './Avisos';
+import { AvisoEmergencia, AvisoNuevaVersion, AvisoSinConexion } from './Avisos';
 import { BarraInferior } from './BarraInferior';
 import { BarraLateral } from './BarraLateral';
 import { Encabezado } from './Encabezado';
@@ -79,6 +79,7 @@ export function Shell() {
       <BarraLateral className="hidden md:flex" />
       <div className="flex min-w-0 flex-1 flex-col">
         <Encabezado alBuscar={() => setPaleta(true)} alAbrirMas={() => setMas(true)} />
+        <AvisoEmergencia />
         <AvisoSinConexion />
         <main
           id="contenido"

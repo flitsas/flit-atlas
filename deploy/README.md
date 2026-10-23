@@ -31,6 +31,34 @@ El nginx del host envía `Host` y `X-Forwarded-Proto`; atlas-web los pasa a la A
 
 `staging` (y `production` para pdn) necesitan el secreto `GITOPS_TOKEN`, con permiso de escritura solo en `flitsas/flit-gitops`.
 
+## Cuenta de administrador de emergencia
+
+Para el arranque de un ambiente (nadie tiene aún `atlas.superadmin` para crear los mapeos de grupos de Entra) o si Entra ID no responde (ATLAS-ADR-0027). La cuenta no tiene contraseña por defecto: se activa así.
+
+1. Con acceso al clúster, corre el comando dentro de atlas-api (la imagen no tiene shell; si el pod tiene más de un contenedor, agrega `-c <contenedor>`):
+
+   ```bash
+   kubectl -n atlas-qa exec -it deploy/atlas-api -- dotnet Flit.Atlas.Api.dll emergencia activar
+   ```
+
+   En pdn, el mismo comando con `-n atlas-pdn`. El comando crea la cuenta si no existe (`admin.emergencia@atlas.local`, o la de `Identidad__Emergencia__Correo`), le quita los factores, cierra sus sesiones e imprime un enlace `https://qa.atlas.flitsas.com/emergencia#…`.
+2. **Abre el enlace de inmediato**, en el navegador donde vas a usar la cuenta: sirve una sola vez y vence en 1 h. No lo pegues en chats, tickets ni documentos; el enlace solo existe en la salida del comando (no queda en el log).
+3. Registra una passkey (preferida) o una contraseña de 12+ caracteres con una aplicación de autenticación, y guarda los códigos de recuperación fuera de línea.
+4. Entra por la pantalla de ingreso de Atlas (`https://qa.atlas.flitsas.com/`), en la sección de cuentas locales («passkey» o correo, contraseña y código). El shell muestra «Cuenta de emergencia».
+5. Haz solo lo que falta y cierra la sesión. Para el arranque, el paso es mapear el grupo de Entra de administración a `atlas.superadmin`. La PWA aún no tiene pantalla de mapeos: en los 10 minutos siguientes al ingreso (la reautenticación lo exige), desde la consola del navegador en la pestaña de Atlas:
+
+   ```js
+   await fetch('/api/v1/plataforma/mapeos-grupos-entra', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json', 'X-Atlas-Csrf': '1' },
+     body: JSON.stringify({ grupoId: '<object id del grupo en Entra>', grupoNombre: '<nombre del grupo>', rol: 'atlas.superadmin' }),
+   }).then((r) => r.status); // 201
+   ```
+
+   Las personas del grupo reciben el rol en su siguiente ingreso con Microsoft. Después revisa la auditoría (`identidad.emergencia.*`).
+
+Volver a correr el comando invalida el enlace anterior y la cuenta queda sin factores: así se recupera o se corta si alguien más la usó.
+
 ## Probar las imágenes en local
 
 ```bash

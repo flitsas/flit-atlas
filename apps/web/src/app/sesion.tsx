@@ -113,6 +113,11 @@ export function ProveedorSesion({
   return <ContextoSesion.Provider value={valor}>{children}</ContextoSesion.Provider>;
 }
 
+/** La sesión si hay `ProveedorSesion` arriba; `null` en las páginas públicas y en pruebas de componentes sueltos. */
+export function useSesionOpcional(): ValorSesion | null {
+  return useContext(ContextoSesion);
+}
+
 export function useSesion(): ValorSesion {
   const valor = useContext(ContextoSesion);
   if (!valor) throw new Error('useSesion se usa dentro de ProveedorSesion.');

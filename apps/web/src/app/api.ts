@@ -14,6 +14,8 @@ export interface Yo {
   roles: string[];
   /** Llega con la HU 1.4. Mientras no venga, la navegación solo se filtra por bandera. */
   permisos?: string[];
+  /** Sesión de la cuenta de administrador de emergencia (ATLAS-ADR-0027): el shell muestra el aviso. */
+  emergencia?: boolean;
 }
 
 export interface Proveedores {
