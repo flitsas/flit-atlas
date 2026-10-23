@@ -145,6 +145,8 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
             e.Property(n => n.Cuerpo).HasMaxLength(2000);
             e.Property(n => n.Enlace).HasMaxLength(500);
             e.HasIndex(n => new { n.PersonaId, n.LeidaEn });
+            // La bandeja se lista por persona, de la más reciente a la más vieja (HU 1.6).
+            e.HasIndex(n => new { n.PersonaId, n.CreadoEn });
             e.HasOne<Persona>().WithMany().HasForeignKey(n => n.PersonaId).OnDelete(DeleteBehavior.Cascade);
         });
 

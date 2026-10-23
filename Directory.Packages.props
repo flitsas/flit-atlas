@@ -38,6 +38,8 @@
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup Label="Plataforma">
+    <!-- Web Push con VAPID (HU 1.6, ATLAS-ADR-0020). MIT; en net6+ usa la criptografía de .NET, sin BouncyCastle. -->
+    <PackageVersion Include="Lib.Net.Http.WebPush" Version="3.3.1" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />

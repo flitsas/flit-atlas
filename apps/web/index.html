@@ -4,10 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Flit Atlas: el conocimiento de FLIT en un solo lugar." />
+    <meta name="theme-color" content="#eef5ff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#020618" media="(prefers-color-scheme: dark)" />
     <title>Flit Atlas</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- iOS: ícono de inicio, modo app y pantallas de arranque (generadas con pnpm iconos). -->
+    <link rel="apple-touch-icon" href="/iconos/apple-touch-icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Atlas" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-startup-image" href="/iconos/pantalla-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" />
+    <link rel="apple-touch-startup-image" href="/iconos/pantalla-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/iconos/pantalla-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/iconos/pantalla-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/iconos/pantalla-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/iconos/pantalla-1640x2360.png" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2)" />
+    <!-- Tema antes del primer pintado: archivo aparte, la CSP no permite scripts en línea. -->
+    <script src="/tema.js"></script>
   </head>
   <body>
-    <div id="raiz"></div>
+    <div id="raiz">
+      <div class="splash" role="status" aria-label="Cargando Flit Atlas">
+        <img src="/favicon.svg" alt="" />
+        <span>Flit Atlas</span>
+      </div>
+    </div>
+    <noscript>Flit Atlas necesita JavaScript.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

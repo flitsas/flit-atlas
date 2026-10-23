@@ -51,6 +51,7 @@ app.UseSeguridadIdentidad();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapIdentidad();
+app.MapPlataforma();
 app.MapContratoOpenApi(ambiente);
 
 app.MapGet("/api/v1/version", () => new VersionApi("atlas-api", typeof(Program).Assembly.GetName().Version?.ToString()))

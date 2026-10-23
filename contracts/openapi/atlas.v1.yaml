@@ -515,8 +515,398 @@ paths:
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+  /api/v1/plataforma/banderas:
+    get:
+      tags:
+        - Plataforma
+      summary: Banderas de módulo
+      description: 'Módulos activos para la organización de la persona, como «modulo.<id>» → activo (ATLAS-ADR-0016). Un módulo que no aparece usa el valor por defecto de su manifiesto en la PWA.'
+      operationId: ObtenerBanderasDeModulo
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: boolean
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+  /api/v1/plataforma/notificaciones:
+    get:
+      tags:
+        - Plataforma
+      summary: Bandeja de notificaciones
+      description: 'Notificaciones de la persona, de la más reciente a la más vieja (máximo 100), y cuántas no ha leído.'
+      operationId: ListarNotificaciones
+      parameters:
+        - name: limite
+          in: query
+          description: 'Cuántas notificaciones devolver (1 a 100, por defecto 30).'
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandejaDto'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+  '/api/v1/plataforma/notificaciones/{id}/leida':
+    post:
+      tags:
+        - Plataforma
+      summary: Marcar una notificación como leída
+      description: Marca como leída una notificación de la persona. 404 si no existe o es de otra persona.
+      operationId: MarcarNotificacionLeida
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/notificaciones/leidas:
+    post:
+      tags:
+        - Plataforma
+      summary: Marcar todas como leídas
+      description: Marca como leídas todas las notificaciones pendientes de la persona.
+      operationId: MarcarNotificacionesLeidas
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/notificaciones/preferencias:
+    get:
+      tags:
+        - Plataforma
+      summary: Preferencias de notificación
+      description: 'Cada tipo de notificación con el estado de sus canales (app, push, correo y Teams).'
+      operationId: ListarPreferenciasDeNotificacion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PreferenciaTipoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+    put:
+      tags:
+        - Plataforma
+      summary: Guardar preferencias de notificación
+      description: Activa o apaga canales por tipo. El canal app no se puede apagar; correo y Teams aún no están disponibles.
+      operationId: GuardarPreferenciasDeNotificacion
+      requestBody:
+        description: Cambios de preferencia a aplicar.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/CambioPreferencia'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/push/clave:
+    get:
+      tags:
+        - Plataforma
+      summary: Llave pública VAPID
+      description: Llave con la que el navegador suscribe el dispositivo a Web Push.
+      operationId: ObtenerClavePush
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClavePushDto'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+  /api/v1/plataforma/push/suscripciones:
+    post:
+      tags:
+        - Plataforma
+      summary: Registrar el dispositivo para push
+      description: 'Crea o actualiza la suscripción del dispositivo y la deja a nombre de la persona en sesión. Solo se aceptan servicios de push conocidos (FCM, Mozilla, Apple y Windows).'
+      operationId: RegistrarSuscripcionPush
+      requestBody:
+        description: Suscripción que entrega el navegador (PushSubscription.toJSON) y el resumen del dispositivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuscripcionDto'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/push/suscripciones/baja:
+    post:
+      tags:
+        - Plataforma
+      summary: Quitar el dispositivo de push
+      description: Borra la suscripción del dispositivo; la PWA la llama al desactivar push y al cerrar sesión.
+      operationId: DarDeBajaSuscripcionPush
+      requestBody:
+        description: Endpoint de la suscripción del dispositivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BajaSuscripcionDto'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/push/prueba:
+    post:
+      tags:
+        - Plataforma
+      summary: Enviar una notificación de prueba
+      description: Crea una notificación de prueba en la bandeja y la envía por push a los dispositivos de la persona.
+      operationId: EnviarPushDePrueba
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PruebaPushDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
 components:
   schemas:
+    BajaSuscripcionDto:
+      required:
+        - endpoint
+      type: object
+      properties:
+        endpoint:
+          type: string
+      description: Suscripción que se da de baja.
+    BandejaDto:
+      required:
+        - noLeidas
+        - elementos
+      type: object
+      properties:
+        noLeidas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificacionDto'
+      description: 'Bandeja de la persona: total sin leer y las más recientes primero.'
+    CambioPreferencia:
+      required:
+        - tipo
+        - canal
+        - activa
+      type: object
+      properties:
+        tipo:
+          type: string
+        canal:
+          type: string
+          description: push (app no se puede apagar).
+        activa:
+          type: boolean
+      description: 'Cambio de una preferencia: activar o apagar un canal para un tipo.'
+    ClavePushDto:
+      required:
+        - habilitado
+        - clavePublica
+      type: object
+      properties:
+        habilitado:
+          type: boolean
+        clavePublica:
+          type:
+            - 'null'
+            - string
+      description: Llave pública VAPID para suscribir el dispositivo; habilitado es falso si el ambiente no tiene llaves.
+    HttpValidationProblemDetails:
+      type: object
+      properties:
+        type:
+          type:
+            - 'null'
+            - string
+        title:
+          type:
+            - 'null'
+            - string
+        status:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+        detail:
+          type:
+            - 'null'
+            - string
+        instance:
+          type:
+            - 'null'
+            - string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    NotificacionDto:
+      required:
+        - id
+        - tipo
+        - titulo
+        - cuerpo
+        - enlace
+        - creadaEn
+        - leidaEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+        titulo:
+          type: string
+        cuerpo:
+          type: string
+        enlace:
+          type:
+            - 'null'
+            - string
+        creadaEn:
+          type: string
+          format: date-time
+        leidaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: Notificación del centro de notificaciones.
+    PreferenciaCanalDto:
+      required:
+        - canal
+        - activa
+        - disponible
+        - editable
+      type: object
+      properties:
+        canal:
+          type: string
+          description: 'app, push, correo o teams.'
+        activa:
+          type: boolean
+        disponible:
+          type: boolean
+        editable:
+          type: boolean
+      description: Estado de un canal para un tipo de notificación.
+    PreferenciaTipoDto:
+      required:
+        - tipo
+        - nombre
+        - descripcion
+        - canales
+      type: object
+      properties:
+        tipo:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        canales:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreferenciaCanalDto'
+      description: Tipo de notificación con sus canales.
     ProveedoresHabilitados:
       required:
         - microsoft
@@ -528,6 +918,19 @@ components:
         simulado:
           type: boolean
       description: Proveedores de ingreso que ofrece este ambiente. El simulado solo existe en local y dev.
+    PruebaPushDto:
+      required:
+        - dispositivos
+      type: object
+      properties:
+        dispositivos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Dispositivos a los que llegó el push.
+          format: int32
+      description: Resultado de la notificación de prueba.
     ResultadoCierre:
       required:
         - cerradas
@@ -572,6 +975,29 @@ components:
         actual:
           type: boolean
       description: Sesión activa del usuario en un dispositivo («dispositivos conectados»). La IP es un dato personal.
+    SuscripcionDto:
+      required:
+        - endpoint
+        - p256dh
+        - auth
+        - dispositivo
+      type: object
+      properties:
+        endpoint:
+          type: string
+          description: URL https del servicio de push del navegador.
+        p256dh:
+          type: string
+          description: 'Llave pública del navegador, base64url (65 bytes).'
+        auth:
+          type: string
+          description: 'Secreto de autenticación, base64url (16 bytes).'
+        dispositivo:
+          type:
+            - 'null'
+            - string
+          description: 'Resumen del dispositivo, p. ej. «Chrome en Android».'
+      description: Suscripción Web Push de un dispositivo (PushSubscription del navegador).
     VersionApi:
       required:
         - servicio

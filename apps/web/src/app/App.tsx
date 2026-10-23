@@ -1,103 +1,101 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState } from 'react';
+import { createBrowserRouter, type RouteObject } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 
-import { entrarSimulado, obtenerProveedores, obtenerYo, type Proveedores, salir, urlEntrarMicrosoft, type Yo } from './api';
+import { CargandoPagina, Shell } from './layout/Shell';
+import type { ModuloAtlas } from './modulos/contrato';
+import { diferido } from './modulos/diferidos';
+import { MODULOS_REGISTRADOS } from './modulos/registro';
+import { RutaDeModulo } from './modulos/RutaDeModulo';
+import { ErrorDeRuta, NoEncontrada } from './paginas/Estados';
+import Inicio from './paginas/Inicio';
+import { Ingreso } from './paginas/Ingreso';
+import { ProveedorSesion, useEstadoSesion } from './sesion';
+import { Boton } from './ui/Tarjeta';
 
-type Estado =
-  | { tipo: 'cargando' }
-  | { tipo: 'sin_sesion'; proveedores: Proveedores }
-  | { tipo: 'con_sesion'; yo: Yo }
-  | { tipo: 'error' };
-
-const MENSAJES_ERROR: Record<string, string> = {
-  cuenta_no_permitida: 'Esa cuenta no puede entrar a Atlas. Usa tu cuenta de FLIT.',
-  inicio_fallido: 'No se pudo completar el inicio de sesión. Intenta de nuevo.',
-};
+const Buscar = diferido(() => import('./paginas/Buscar'));
+const Notificaciones = diferido(() => import('./paginas/Notificaciones'));
+const Ajustes = diferido(() => import('./paginas/Ajustes'));
 
 /**
- * Ingreso de la HU 1.3: «Iniciar sesión con Microsoft» y, solo en local y dev, el proveedor simulado.
- * El shell móvil primero (barra inferior, módulos, tema) llega en la HU 1.6.
+ * Raíz: sin sesión, el ingreso (en cualquier ruta, para volver a ella al entrar); con sesión, el shell. Mientras se
+ * consulta `/yo` se mantiene la pantalla de arranque.
  */
-export function App() {
-  const [estado, setEstado] = useState<Estado>({ tipo: 'cargando' });
-  const error = new URLSearchParams(window.location.search).get('error');
-
-  const cargar = useCallback(async () => {
-    try {
-      const yo = await obtenerYo();
-      setEstado(yo ? { tipo: 'con_sesion', yo } : { tipo: 'sin_sesion', proveedores: await obtenerProveedores() });
-    } catch {
-      setEstado({ tipo: 'error' });
-    }
-  }, []);
-
-  useEffect(() => {
-    void cargar();
-  }, [cargar]);
-
+function Raiz({ modulos }: { modulos: readonly ModuloAtlas[] }) {
+  const sesion = useEstadoSesion();
+  if (sesion.isPending) return <Arranque />;
+  if (sesion.isError) return <SinServicio alReintentar={() => void sesion.refetch()} />;
+  if (!sesion.data.yo) return <Ingreso />;
   return (
-    <main>
-      <h1>Flit Atlas</h1>
-      {error && MENSAJES_ERROR[error] && <p role="alert">{MENSAJES_ERROR[error]}</p>}
-      {estado.tipo === 'cargando' && <p role="status">Cargando…</p>}
-      {estado.tipo === 'error' && <p role="alert">No se pudo conectar con Atlas.</p>}
-      {estado.tipo === 'sin_sesion' && <Ingreso proveedores={estado.proveedores} alEntrar={cargar} />}
-      {estado.tipo === 'con_sesion' && <Sesion yo={estado.yo} alSalir={cargar} />}
+    <ProveedorSesion estado={{ ...sesion.data, yo: sesion.data.yo }} modulos={modulos} cargando={<Arranque />}>
+      <Shell />
+    </ProveedorSesion>
+  );
+}
+
+export function rutasAtlas(modulos: readonly ModuloAtlas[] = MODULOS_REGISTRADOS): RouteObject[] {
+  return [
+    {
+      element: <Raiz modulos={modulos} />,
+      errorElement: <ErrorDeRuta />,
+      children: [
+        { index: true, element: <Inicio /> },
+        { path: 'buscar', element: <Buscar /> },
+        { path: 'notificaciones', element: <Notificaciones /> },
+        { path: 'ajustes', element: <Ajustes /> },
+        ...modulos.flatMap((modulo) =>
+          modulo.rutas.map((ruta) => ({
+            path: `${ruta.path.replace(/^\//, '')}/*`,
+            element: <RutaDeModulo modulo={modulo} ruta={ruta} />,
+          })),
+        ),
+        { path: '*', element: <NoEncontrada /> },
+      ],
+    },
+  ];
+}
+
+export function crearClienteConsultas(): QueryClient {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
+  });
+}
+
+export function App({ modulos = MODULOS_REGISTRADOS }: { modulos?: readonly ModuloAtlas[] }) {
+  const [cliente] = useState(crearClienteConsultas);
+  const [enrutador] = useState(() => createBrowserRouter(rutasAtlas(modulos)));
+  return (
+    <QueryClientProvider client={cliente}>
+      <RouterProvider router={enrutador} />
+    </QueryClientProvider>
+  );
+}
+
+/** Misma pantalla que el splash de index.html, para que no haya salto entre ambos. */
+function Arranque() {
+  return (
+    <div className="splash" role="status" aria-label="Cargando Flit Atlas">
+      <img src="/favicon.svg" alt="" />
+      <span>Flit Atlas</span>
+    </div>
+  );
+}
+
+function SinServicio({ alReintentar }: { alReintentar: () => void }) {
+  return (
+    <main className="grid min-h-dvh place-items-center px-6">
+      <div className="max-w-sm text-center">
+        <h1 className="text-xl font-semibold">No se pudo conectar con Atlas</h1>
+        <p role="alert" className="mt-2 text-sm text-atlas-texto-suave">
+          Revisa tu conexión. Si el problema sigue, el servicio puede estar en mantenimiento.
+        </p>
+        <Boton className="mt-5" onClick={alReintentar}>
+          Reintentar
+        </Boton>
+      </div>
     </main>
   );
 }
 
-function Ingreso({ proveedores, alEntrar }: { proveedores: Proveedores; alEntrar: () => Promise<void> }) {
-  const [correo, setCorreo] = useState('');
-  const [nombre, setNombre] = useState('');
-  const [fallo, setFallo] = useState(false);
-
-  async function enviar(evento: FormEvent) {
-    evento.preventDefault();
-    setFallo(false);
-    try {
-      await entrarSimulado(correo, nombre);
-      await alEntrar();
-    } catch {
-      setFallo(true);
-    }
-  }
-
-  return (
-    <section aria-label="Iniciar sesión">
-      {proveedores.microsoft && <a href={urlEntrarMicrosoft()}>Iniciar sesión con Microsoft</a>}
-      {proveedores.simulado && (
-        <form onSubmit={enviar} aria-label="Ingreso simulado (solo desarrollo)">
-          <p>Ingreso simulado: solo existe en local y dev.</p>
-          <label>
-            Correo
-            <input type="email" required value={correo} onChange={(e) => setCorreo(e.target.value)} />
-          </label>
-          <label>
-            Nombre
-            <input required value={nombre} onChange={(e) => setNombre(e.target.value)} />
-          </label>
-          <button type="submit">Entrar (simulado)</button>
-          {fallo && <p role="alert">No se pudo entrar.</p>}
-        </form>
-      )}
-      {!proveedores.microsoft && !proveedores.simulado && <p>No hay métodos de ingreso configurados.</p>}
-    </section>
-  );
-}
-
-function Sesion({ yo, alSalir }: { yo: Yo; alSalir: () => Promise<void> }) {
-  async function cerrar() {
-    await salir();
-    await alSalir();
-  }
-
-  return (
-    <section aria-label="Sesión">
-      <p>Hola, {yo.nombre}.</p>
-      <p>Roles: {yo.roles.length > 0 ? yo.roles.join(', ') : 'ninguno todavía'}</p>
-      <button type="button" onClick={() => void cerrar()}>
-        Cerrar sesión
-      </button>
-    </section>
-  );
-}
+export { CargandoPagina };
