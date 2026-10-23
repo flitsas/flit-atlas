@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
@@ -17,10 +18,12 @@ namespace Flit.Atlas.Identidad;
 /// </summary>
 public static class EndpointsSesiones
 {
+    [Description("Sesión activa del usuario en un dispositivo («dispositivos conectados»). La IP es un dato personal.")]
     public sealed record SesionDispositivo(
         Guid Id, string Dispositivo, string? Ip, DateTimeOffset CreadaEn, DateTimeOffset UltimoUsoEn, DateTimeOffset ExpiraEn,
         bool Actual);
 
+    [Description("Cuántas sesiones activas se cerraron.")]
     public sealed record ResultadoCierre(int Cerradas);
 
     internal static void MapSesiones(this RouteGroupBuilder identidad)
@@ -33,10 +36,13 @@ public static class EndpointsSesiones
             var lista = await almacen.ListarAsync(UsuarioId(usuario), ct);
             return lista.Select(s => new SesionDispositivo(
                 s.Id, s.Dispositivo, s.Ip?.ToString(), s.CreadaEn, s.UltimoUsoEn, s.ExpiraEn, s.Id == actual)).ToList();
-        });
+        })
+            .WithName("ListarMisSesiones")
+            .WithSummary("Dispositivos conectados")
+            .WithDescription("Sesiones activas del usuario, de la más reciente a la más antigua; «actual» marca la de esta petición.");
 
         // Cerrar la sesión actual es salir; cerrar la de otro dispositivo es sensible.
-        sesiones.MapDelete("/{id:guid}", async (Guid id, HttpContext http, AlmacenSesiones almacen, RegistroSeguridad registro,
+        sesiones.MapDelete("/{id:guid}", async ([Description("Id de la sesión, tal como lo lista «dispositivos conectados».")] Guid id, HttpContext http, AlmacenSesiones almacen, RegistroSeguridad registro,
             CancellationToken ct) =>
         {
             if (id == SesionActual(http.User))
@@ -55,7 +61,15 @@ public static class EndpointsSesiones
             await registro.RegistrarAsync(TiposEventoSeguridad.CierreRemoto,
                 DatosEventoSeguridad.DeSesion(http.User) with { Detalle = new { sesiones_cerradas = new[] { id } } }, ct);
             return Results.NoContent();
-        });
+        })
+            .WithMetadata(new MetadatoReautenticacion())
+            .WithName("CerrarMiSesion")
+            .WithSummary("Cerrar una sesión")
+            .WithDescription(
+                "Cierra una sesión del propio usuario. Si es la actual equivale a salir (Clear-Site-Data); si es la de otro " +
+                "dispositivo exige un ingreso de menos de 10 minutos (401 con codigo reautenticacion_requerida).")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
 
         sesiones.MapPost("/cerrar-otras", async (ClaimsPrincipal usuario, AlmacenSesiones almacen, RegistroSeguridad registro,
             CancellationToken ct) =>
@@ -64,14 +78,18 @@ public static class EndpointsSesiones
             await registro.RegistrarAsync(TiposEventoSeguridad.CierreRemoto,
                 DatosEventoSeguridad.DeSesion(usuario) with { Detalle = new { otras = true, cerradas } }, ct);
             return new ResultadoCierre(cerradas);
-        }).RequiereReautenticacion();
+        })
+            .RequiereReautenticacion()
+            .WithName("CerrarMisOtrasSesiones")
+            .WithSummary("Cerrar las demás sesiones")
+            .WithDescription("Cierra todas las sesiones del usuario salvo la actual. Exige reautenticación.");
 
         // Administración (provisional hasta la HU 1.4: ver PoliticasIdentidad).
         var personas = identidad.MapGroup("/admin/personas/{personaId:guid}")
             .RequireAuthorization(PoliticasIdentidad.Administrar)
             .RequiereReautenticacion();
 
-        personas.MapPost("/sesiones/cerrar", async (Guid personaId, ClaimsPrincipal usuario, PlataformaDbContext plataforma,
+        personas.MapPost("/sesiones/cerrar", async ([Description("Persona de Atlas (plataforma_persona).")] Guid personaId, ClaimsPrincipal usuario, PlataformaDbContext plataforma,
             IInvalidadorSesiones invalidador, CancellationToken ct) =>
         {
             if (!await plataforma.Personas.AnyAsync(p => p.Id == personaId, ct))
@@ -81,9 +99,16 @@ public static class EndpointsSesiones
             var cerradas = await invalidador.InvalidarSesionesAsync(
                 personaId, MotivosInvalidacion.CierreAdministrativo, PersonaId(usuario), ct);
             return Results.Ok(new ResultadoCierre(cerradas));
-        });
+        })
+            .WithName("CerrarSesionesDePersona")
+            .WithSummary("Cerrar todas las sesiones de una persona")
+            .WithDescription(
+                "Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Cambia el sello de seguridad de la " +
+                "persona y revoca todas sus sesiones, sin suspenderla. Exige reautenticación.")
+            .Produces<ResultadoCierre>()
+            .Produces(StatusCodes.Status404NotFound);
 
-        personas.MapPost("/suspender", async (Guid personaId, ClaimsPrincipal usuario, PlataformaDbContext plataforma,
+        personas.MapPost("/suspender", async ([Description("Persona de Atlas (plataforma_persona).")] Guid personaId, ClaimsPrincipal usuario, PlataformaDbContext plataforma,
             IInvalidadorSesiones invalidador, RegistroSeguridad registro, CancellationToken ct) =>
         {
             var actor = PersonaId(usuario);
@@ -112,9 +137,18 @@ public static class EndpointsSesiones
             }
             await invalidador.InvalidarSesionesAsync(personaId, MotivosInvalidacion.Suspension, actor, ct);
             return Results.NoContent();
-        });
+        })
+            .WithName("SuspenderPersona")
+            .WithSummary("Suspender a una persona")
+            .WithDescription(
+                "Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Marca la persona como suspendida, " +
+                "invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige " +
+                "reautenticación.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
-        personas.MapPost("/reactivar", async (Guid personaId, ClaimsPrincipal usuario, PlataformaDbContext plataforma,
+        personas.MapPost("/reactivar", async ([Description("Persona de Atlas (plataforma_persona).")] Guid personaId, ClaimsPrincipal usuario, PlataformaDbContext plataforma,
             RegistroSeguridad registro, CancellationToken ct) =>
         {
             var persona = await plataforma.Personas.FirstOrDefaultAsync(p => p.Id == personaId, ct);
@@ -134,7 +168,14 @@ public static class EndpointsSesiones
                 }, ct);
             }
             return Results.NoContent();
-        });
+        })
+            .WithName("ReactivarPersona")
+            .WithSummary("Reactivar a una persona")
+            .WithDescription(
+                "Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Devuelve a activa una persona " +
+                "suspendida; vuelve a entrar con un ingreso nuevo. Exige reautenticación.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
     }
 
     /// <summary>Cierre de la sesión actual: la revoca en el servidor, borra la cookie y los datos del navegador.</summary>

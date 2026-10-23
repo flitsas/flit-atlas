@@ -37,6 +37,9 @@ public sealed class OpcionesLimiteTasa
 /// <c>identidad.limite_tasa</c>, una vez por cliente y ventana, para que un ataque no inunde la auditoría.
 /// Los contadores viven en memoria de cada réplica.
 /// </summary>
+/// <summary>Metadato de los endpoints con límite de tasa (lo lee el contrato OpenAPI para declarar el 429).</summary>
+public sealed class MetadatoLimiteTasa;
+
 public static partial class LimitacionTasa
 {
     public const string Codigo = "limite_de_tasa";
@@ -142,7 +145,7 @@ public static partial class LimitacionTasa
         await Results.Problem(
             statusCode: StatusCodes.Status429TooManyRequests,
             title: "Demasiadas peticiones. Intenta de nuevo en un momento.",
-            extensions: new Dictionary<string, object?> { ["codigo"] = Codigo, ["reintentar_en_segundos"] = segundos })
+            extensions: new Dictionary<string, object?> { ["codigo"] = Codigo, ["reintentarEnSegundos"] = segundos })
             .ExecuteAsync(http);
     }
 }

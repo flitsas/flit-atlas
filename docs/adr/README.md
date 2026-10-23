@@ -24,5 +24,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0018](0018-outbox-propio-y-broker-por-ambiente.md) | Outbox e inbox propios de Atlas y RabbitMQ propio por ambiente | aceptado | N-04, N-08 |
 | [ATLAS-ADR-0019](0019-ambientes-qa-y-pdn.md) | Solo dos ambientes desplegados (qa y pdn) con hosts bajo flitsas.com | aceptado | N-01, N-02 |
 | [ATLAS-ADR-0021](0021-contratos-propios-openapi-y-asyncapi.md) | Contratos propios: OpenAPI generado desde el código y AsyncAPI atado al catálogo de eventos | propuesto | A-09, HU 1.7 |
+| [ATLAS-ADR-0022](0022-sesiones-y-seguridad-de-identidad.md) | Sesiones y seguridad de la identidad: sello de seguridad, reautenticación, bloqueo progresivo, límite de tasa y eventos de seguridad | propuesto | A-03, §6.3, HU 1.3b |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).

@@ -2,8 +2,9 @@
 # Compatible con Spectral. El CI falla con cualquier error; las advertencias se ven en el log y no bloquean.
 #
 # Base: el «recommended» de vacuum para OpenAPI y todas las reglas OWASP, con la severidad ajustada a lo que
-# ya aplica a una API BFF con cookie. Las de límites de tasa (429 y cabeceras X-RateLimit) quedan como advertencia hasta
-# que llegue la limitación de tasa (HU 1.3b); las de errores con cuerpo (500 y 400/422) hasta que haya problem+json.
+# ya aplica a una API BFF con cookie. La limitación de tasa (HU 1.3b, ATLAS-ADR-0022) cubre las rutas de identidad: su
+# 429 con Retry-After es obligatorio; el resto de límites (cabeceras RateLimit-*, 429 en toda operación) queda como
+# advertencia. Las de errores con cuerpo (500 y 400/422) siguen como advertencia hasta que haya problem+json.
 extends:
   - [spectral:oas, recommended]
   - [vacuum:owasp, all]
@@ -28,9 +29,11 @@ rules:
   owasp-no-http-basic: error
   # Las operaciones de lectura sin sesión (versión, proveedores de ingreso) son públicas a propósito.
   owasp-protection-global-safe: off
-  # Pendientes de la limitación de tasa (HU 1.3b) y de los errores problem+json.
+  # Todo 429 declarado (rutas de identidad, ATLAS-ADR-0022) trae Retry-After.
+  owasp-rate-limit-retry-after: error
+  # Pendientes: Atlas no emite cabeceras RateLimit-* (la librería del framework no las da) y las rutas fuera de
+  # identidad (versión, salud) no tienen límite propio todavía.
   owasp-rate-limit: warn
-  owasp-rate-limit-retry-after: warn
   owasp-define-error-responses-429: warn
   owasp-define-error-responses-500: warn
   owasp-define-error-validation: warn

@@ -14,6 +14,9 @@ namespace Flit.Atlas.Identidad.Seguridad;
 /// vencida y lleva al usuario a <c>GET /api/v1/identidad/entrar/microsoft?reautenticar=true&amp;volver=…</c>, que
 /// fuerza a Entra a pedir las credenciales otra vez (<c>prompt=login</c>).
 /// </summary>
+/// <summary>Metadato de los endpoints que exigen reautenticación (lo lee el contrato OpenAPI).</summary>
+public sealed class MetadatoReautenticacion;
+
 public static class Reautenticacion
 {
     public const string Codigo = "reautenticacion_requerida";
@@ -22,11 +25,13 @@ public static class Reautenticacion
 
     /// <summary>Exige un ingreso reciente en el endpoint o en el grupo.</summary>
     public static TBuilder RequiereReautenticacion<TBuilder>(this TBuilder builder) where TBuilder : IEndpointConventionBuilder =>
-        builder.AddEndpointFilter(async (contexto, siguiente) =>
-        {
-            var http = contexto.HttpContext;
-            return EsReciente(http) ? await siguiente(contexto) : await RechazarAsync(http);
-        });
+        builder
+            .WithMetadata(new MetadatoReautenticacion())
+            .AddEndpointFilter(async (contexto, siguiente) =>
+            {
+                var http = contexto.HttpContext;
+                return EsReciente(http) ? await siguiente(contexto) : await RechazarAsync(http);
+            });
 
     /// <summary>¿El último ingreso de la sesión está dentro de la ventana?</summary>
     public static bool EsReciente(HttpContext http)
@@ -56,7 +61,7 @@ public static class Reautenticacion
         return Results.Problem(
             statusCode: StatusCodes.Status401Unauthorized,
             title: "Vuelve a ingresar para confirmar esta acción.",
-            extensions: new Dictionary<string, object?> { ["codigo"] = Codigo, ["max_edad_segundos"] = segundos });
+            extensions: new Dictionary<string, object?> { ["codigo"] = Codigo, ["maxEdadSegundos"] = segundos });
     }
 
     internal static DateTimeOffset? MomentoIngreso(ClaimsPrincipal usuario) =>

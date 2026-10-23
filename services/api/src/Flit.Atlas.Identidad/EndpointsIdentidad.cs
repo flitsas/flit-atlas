@@ -36,7 +36,7 @@ public static class EndpointsIdentidad
         var proveedores = rutas.ServiceProvider.GetService(typeof(ProveedoresHabilitados)) as ProveedoresHabilitados
             ?? throw new InvalidOperationException("Falta AgregarIdentidad en el arranque.");
 
-        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad");
+        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad").WithMetadata(new MetadatoLimiteTasa());
 
         identidad.MapGet("/proveedores", () => proveedores)
             .WithName("ListarProveedoresDeIngreso")
@@ -132,6 +132,7 @@ public static class EndpointsIdentidad
                 usuario.FindFirstValue(ClaimsAtlas.Proveedor)!,
                 usuario.FindAll(ClaimsAtlas.Rol).Select(c => c.Value).ToList()))
             .RequireAuthorization()
+            .WithMetadata(new MetadatoLimiteTasa())
             .WithName("ObtenerUsuarioActual")
             .WithTags("Plataforma")
             .WithSummary("Usuario en sesión")

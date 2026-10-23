@@ -25,6 +25,33 @@ paths:
                 $ref: '#/components/schemas/Yo'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
       security:
         - sesionAtlas: [ ]
   /api/v1/version:
@@ -55,12 +82,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProveedoresHabilitados'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
   /api/v1/identidad/entrar/microsoft:
     get:
       tags:
         - Identidad
       summary: Iniciar sesión con Microsoft
-      description: 'Navegación completa del navegador (no fetch). Redirige a Entra ID (OIDC con PKCE); al volver por /api/auth/callback/azure-ad crea la sesión y lleva a «volver», que solo puede ser una ruta local de la PWA.'
+      description: 'Navegación completa del navegador (no fetch). Redirige a Entra ID (OIDC con PKCE); al volver por /api/auth/callback/azure-ad crea una sesión nueva y lleva a «volver», que solo puede ser una ruta local de la PWA. Con reautenticar=true, Entra vuelve a pedir las credenciales (prompt=login).'
       operationId: EntrarConMicrosoft
       parameters:
         - name: volver
@@ -68,9 +122,41 @@ paths:
           description: Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).
           schema:
             type: string
+        - name: reautenticar
+          in: query
+          description: true cuando una acción sensible pidió reautenticación (responde 401 con codigo reautenticacion_requerida).
+          schema:
+            type: boolean
       responses:
         '302':
           description: Found
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
   /api/v1/identidad/salir:
     post:
       tags:
@@ -83,8 +169,352 @@ paths:
           description: No Content
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
       security:
         - csrfAtlas: [ ]
+  /api/v1/identidad/sesiones:
+    get:
+      tags:
+        - Identidad
+      summary: Dispositivos conectados
+      description: 'Sesiones activas del usuario, de la más reciente a la más antigua; «actual» marca la de esta petición.'
+      operationId: ListarMisSesiones
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SesionDispositivo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+  '/api/v1/identidad/sesiones/{id}':
+    delete:
+      tags:
+        - Identidad
+      summary: Cerrar una sesión
+      description: Cierra una sesión del propio usuario. Si es la actual equivale a salir (Clear-Site-Data); si es la de otro dispositivo exige un ingreso de menos de 10 minutos (401 con codigo reautenticacion_requerida).
+      operationId: CerrarMiSesion
+      parameters:
+        - name: id
+          in: path
+          description: 'Id de la sesión, tal como lo lista «dispositivos conectados».'
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/identidad/sesiones/cerrar-otras:
+    post:
+      tags:
+        - Identidad
+      summary: Cerrar las demás sesiones
+      description: Cierra todas las sesiones del usuario salvo la actual. Exige reautenticación.
+      operationId: CerrarMisOtrasSesiones
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoCierre'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  '/api/v1/identidad/admin/personas/{personaId}/sesiones/cerrar':
+    post:
+      tags:
+        - Identidad
+      summary: Cerrar todas las sesiones de una persona
+      description: 'Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Cambia el sello de seguridad de la persona y revoca todas sus sesiones, sin suspenderla. Exige reautenticación.'
+      operationId: CerrarSesionesDePersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoCierre'
+        '404':
+          description: Not Found
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso que exige la operación.'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  '/api/v1/identidad/admin/personas/{personaId}/suspender':
+    post:
+      tags:
+        - Identidad
+      summary: Suspender a una persona
+      description: 'Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Marca la persona como suspendida, invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige reautenticación.'
+      operationId: SuspenderPersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '409':
+          description: Conflict
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso que exige la operación.'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  '/api/v1/identidad/admin/personas/{personaId}/reactivar':
+    post:
+      tags:
+        - Identidad
+      summary: Reactivar a una persona
+      description: 'Administración (provisional: rol atlas.superadmin hasta la HU 1.4). Devuelve a activa una persona suspendida; vuelve a entrar con un ingreso nuevo. Exige reautenticación.'
+      operationId: ReactivarPersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso que exige la operación.'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
 components:
   schemas:
     ProveedoresHabilitados:
@@ -98,6 +528,50 @@ components:
         simulado:
           type: boolean
       description: Proveedores de ingreso que ofrece este ambiente. El simulado solo existe en local y dev.
+    ResultadoCierre:
+      required:
+        - cerradas
+      type: object
+      properties:
+        cerradas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+      description: Cuántas sesiones activas se cerraron.
+    SesionDispositivo:
+      required:
+        - id
+        - dispositivo
+        - ip
+        - creadaEn
+        - ultimoUsoEn
+        - expiraEn
+        - actual
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dispositivo:
+          type: string
+        ip:
+          type:
+            - 'null'
+            - string
+        creadaEn:
+          type: string
+          format: date-time
+        ultimoUsoEn:
+          type: string
+          format: date-time
+        expiraEn:
+          type: string
+          format: date-time
+        actual:
+          type: boolean
+      description: Sesión activa del usuario en un dispositivo («dispositivos conectados»). La IP es un dato personal.
     VersionApi:
       required:
         - servicio
@@ -155,6 +629,6 @@ components:
       in: header
 tags:
   - name: Identidad
-    description: 'Ingreso de empleados con Microsoft, proveedores habilitados y cierre de sesión (ATLAS-ADR-0004).'
+    description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022).'
   - name: Plataforma
     description: Datos del usuario en sesión y de la propia API.

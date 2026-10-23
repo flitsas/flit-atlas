@@ -126,7 +126,7 @@ public class SesionesTests(EntornoApi entorno)
         using (var cuerpo = JsonDocument.Parse(await rechazo.Content.ReadAsStringAsync(Ct)))
         {
             Assert.Equal(Reautenticacion.Codigo, cuerpo.RootElement.GetProperty("codigo").GetString());
-            Assert.Equal(600, cuerpo.RootElement.GetProperty("max_edad_segundos").GetInt32());
+            Assert.Equal(600, cuerpo.RootElement.GetProperty("maxEdadSegundos").GetInt32());
         }
         Assert.Contains("reautenticacion_requerida", rechazo.Headers.WwwAuthenticate.ToString(), StringComparison.Ordinal);
         // El 401 de reautenticación no cierra la sesión: la PWA sigue funcionando hasta que el usuario vuelva a entrar.

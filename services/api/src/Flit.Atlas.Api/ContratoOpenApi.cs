@@ -1,4 +1,5 @@
 using Flit.Atlas.Identidad;
+using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
@@ -35,7 +36,7 @@ internal static class ContratoOpenApi
 
     private static readonly (string Nombre, string Descripcion)[] Etiquetas =
     [
-        ("Identidad", "Ingreso de empleados con Microsoft, proveedores habilitados y cierre de sesión (ATLAS-ADR-0004)."),
+        ("Identidad", "Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022)."),
         ("Plataforma", "Datos del usuario en sesión y de la propia API."),
     ];
 
@@ -125,16 +126,65 @@ internal static class ContratoOpenApi
             operacion.Security = [requisito];
         }
 
+        var reautenticacion = metadata.OfType<MetadatoReautenticacion>().Any();
+        var conPolitica = metadata.OfType<IAuthorizeData>().Any(a => !string.IsNullOrEmpty(a.Policy) || !string.IsNullOrEmpty(a.Roles));
+
         operacion.Responses ??= [];
         if (requiereSesion)
         {
-            operacion.Responses.TryAdd("401", new OpenApiResponse { Description = "No hay una sesión activa o venció." });
-        }
-        if (cambiaEstado)
-        {
-            operacion.Responses.TryAdd("403", new OpenApiResponse
+            operacion.Responses.TryAdd("401", new OpenApiResponse
             {
-                Description = $"Falta la cabecera {EndpointsIdentidad.CabeceraCsrf} o el Origin no es el mismo host.",
+                Description = reautenticacion
+                    ? $"No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «{Reautenticacion.Codigo}»: la PWA lleva a reingresar)."
+                    : "No hay una sesión activa o venció.",
+            });
+        }
+        if (cambiaEstado || conPolitica)
+        {
+            var motivos = new List<string>();
+            if (cambiaEstado)
+            {
+                motivos.Add($"falta la cabecera {EndpointsIdentidad.CabeceraCsrf} o el Origin no es el mismo host");
+            }
+            if (conPolitica)
+            {
+                motivos.Add("la sesión no tiene el permiso que exige la operación");
+            }
+            var texto = string.Join(", o ", motivos);
+            operacion.Responses.TryAdd("403", new OpenApiResponse { Description = char.ToUpperInvariant(texto[0]) + texto[1..] + "." });
+        }
+        if (metadata.OfType<MetadatoLimiteTasa>().Any())
+        {
+            // Límite de tasa de las rutas de identidad (ATLAS-ADR-0022).
+            operacion.Responses.TryAdd("429", new OpenApiResponse
+            {
+                Description = $"Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «{LimitacionTasa.Codigo}»).",
+                Headers = new Dictionary<string, IOpenApiHeader>
+                {
+                    ["Retry-After"] = new OpenApiHeader
+                    {
+                        Description = "Segundos que hay que esperar antes de reintentar.",
+                        Schema = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32", Minimum = "1" },
+                    },
+                },
+                Content = new Dictionary<string, OpenApiMediaType>
+                {
+                    ["application/problem+json"] = new OpenApiMediaType
+                    {
+                        Schema = new OpenApiSchema
+                        {
+                            Type = JsonSchemaType.Object,
+                            Description = "Problem Details (RFC 9457) con el código que interpreta la PWA.",
+                            Properties = new Dictionary<string, IOpenApiSchema>
+                            {
+                                ["status"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+                                ["title"] = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = 200 },
+                                ["codigo"] = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = 50 },
+                                ["reintentarEnSegundos"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+                            },
+                        },
+                    },
+                },
             });
         }
     }
