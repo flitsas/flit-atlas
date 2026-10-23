@@ -47,6 +47,11 @@ public static class ManifiestosNucleo
         new("atlas.equipo.ver_contacto", "Ver el teléfono y los datos de contacto de las personas.", LiderTecnico, Desarrollador, Soporte),
     ]);
 
+    /// <summary>
+    /// Lista base del §7.4 para Soporte. Desde la HU 2.6 la publica el módulo <c>Flit.Atlas.Modulos.Soporte</c> (que suma
+    /// sus permisos nuevos a estos): por eso ya no va en <see cref="Todos"/>, o el módulo «soporte» quedaría registrado
+    /// dos veces. Los códigos siguen siendo contrato.
+    /// </summary>
     public static ManifiestoPermisos SoporteSabados { get; } = new("soporte", "Soporte de los sábados",
     [
         new("atlas.soporte.ver", "Ver el calendario de soporte de los sábados.", [.. Empleados]),
@@ -94,7 +99,10 @@ public static class ManifiestosNucleo
         new("atlas.gia.auditar", "Revisar la evidencia de gobierno de IA.", GobiernoIa, Auditor),
     ]);
 
-    /// <summary>Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz.</summary>
+    /// <summary>
+    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="SoporteSabados"/>:
+    /// lo registra su módulo.
+    /// </summary>
     public static IReadOnlyList<ManifiestoPermisos> Todos { get; } =
-        [PermisosPlataforma.Manifiesto, Catalogo, Equipo, SoporteSabados, Contratos, Documentacion, Diagramas, Asistente, GobiernoDeIa];
+        [PermisosPlataforma.Manifiesto, Catalogo, Equipo, Contratos, Documentacion, Diagramas, Asistente, GobiernoDeIa];
 }

@@ -49,15 +49,6 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.equipo.gestionar` | Cambiar el reparto de responsables, traspasos y revisiones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.equipo.ver_contacto` | Ver el teléfono y los datos de contacto de las personas. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
 
-## Soporte de los sábados (`soporte`)
-
-| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.soporte.ver` | Ver el calendario de soporte de los sábados. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
-| `atlas.soporte.solicitar_cambio` | Solicitar un cambio de turno y proponer reemplazo. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
-| `atlas.soporte.aprobar` | Aprobar cambios de turno y compensaciones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
-| `atlas.soporte.gestionar` | Configurar la rotación, generar e importar turnos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
-
 ## Contratos de integración (`contratos`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
@@ -114,3 +105,13 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.hola.ver` | Ver los saludos de tu organización (módulo de ejemplo). | ✔ |   |   |   |   |   |   | ✔ | ✔ |   |   |   |   |   |
 | `atlas.hola.gestionar` | Escribir saludos en tu organización (módulo de ejemplo). | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
+
+## Soporte de los sábados (`soporte`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.soporte.ver` | Ver el calendario de soporte de los sábados. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
+| `atlas.soporte.solicitar_cambio` | Solicitar un cambio de turno y proponer reemplazo. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.soporte.aprobar` | Aprobar cambios de turno y compensaciones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.soporte.gestionar` | Configurar la rotación, generar e importar turnos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.soporte.ver_canal` | Ver el canal de soporte del sábado configurado, sin nombres de personas. | ✔ |   |   |   |   |   |   |   | ✔ | ✔ | ✔ | ✔ | ✔ |   |

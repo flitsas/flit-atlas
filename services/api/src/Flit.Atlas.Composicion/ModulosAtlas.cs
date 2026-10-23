@@ -1,5 +1,6 @@
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Modulos.Hola;
+using Flit.Atlas.Modulos.Soporte;
 using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 
@@ -15,6 +16,7 @@ public static class ModulosAtlas
     public static IReadOnlyList<IModuloAtlas> Registrados { get; } =
     [
         new ModuloHola(),
+        new ModuloSoporte(),
     ];
 
     /// <summary>

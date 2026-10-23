@@ -14,6 +14,7 @@ COPY services/api/src/Flit.Atlas.Plataforma/Flit.Atlas.Plataforma.csproj service
 COPY services/api/src/Flit.Atlas.Identidad/Flit.Atlas.Identidad.csproj services/api/src/Flit.Atlas.Identidad/
 # Módulos funcionales y la composición que los registra (ATLAS-ADR-0026): un COPY por módulo nuevo.
 COPY services/api/src/Flit.Atlas.Modulos.Hola/Flit.Atlas.Modulos.Hola.csproj services/api/src/Flit.Atlas.Modulos.Hola/
+COPY services/api/src/Flit.Atlas.Modulos.Soporte/Flit.Atlas.Modulos.Soporte.csproj services/api/src/Flit.Atlas.Modulos.Soporte/
 COPY services/api/src/Flit.Atlas.Composicion/Flit.Atlas.Composicion.csproj services/api/src/Flit.Atlas.Composicion/
 COPY services/api/src/Flit.Atlas.Api/Flit.Atlas.Api.csproj services/api/src/Flit.Atlas.Api/
 COPY services/api/src/Flit.Atlas.Migrador/Flit.Atlas.Migrador.csproj services/api/src/Flit.Atlas.Migrador/

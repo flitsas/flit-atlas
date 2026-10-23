@@ -116,12 +116,12 @@ describe('App', () => {
 
   it('un módulo próximamente tiene su página digna', async () => {
     apiFalsa({ conSesion: true });
-    window.history.pushState({}, '', '/soporte');
+    window.history.pushState({}, '', '/contratos');
 
     render(<App />);
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Soporte de los sábados' })).toBeInTheDocument();
-    expect(screen.getByText(/Próximamente · fase F2/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Contratos de integración' })).toBeInTheDocument();
+    expect(screen.getByText(/Próximamente · fase F3/)).toBeInTheDocument();
   });
 
   it('cerrar sesión manda la cabecera antifalsificación y vuelve al ingreso sin guardar nada en el navegador', async () => {

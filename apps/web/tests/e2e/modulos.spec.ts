@@ -152,3 +152,34 @@ test.describe('módulo de ejemplo «hola»', () => {
     expect(violaciones).toEqual([]);
   });
 });
+
+test.describe('soporte de los sábados', () => {
+  test('calendario y gestión: lista en el móvil, filtro por equipo, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, {
+      permisos: ['atlas.lector', 'atlas.soporte.ver', 'atlas.soporte.gestionar', 'atlas.soporte.aprobar'],
+      roles: ['atlas.lider_tecnico'],
+    });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Soporte de los sábados' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: esMovil(info) ? 'Lista' : 'Mes' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Todos' })).toBeChecked();
+    // En la lista del móvil, la tarjeta con nombre y correo largos no debe desbordar.
+    if (esMovil(info)) await expect(page.getByText('Persona Demo Con Un Nombre Bastante Largo').first()).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte');
+    await sinErroresCriticosDeAxe(page, '/soporte');
+
+    await page.getByText('Mes', { exact: true }).click();
+    await expect(page.getByRole('grid')).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte (mes)');
+
+    await page.goto('/soporte/gestion');
+    await expect(page.getByRole('heading', { level: 1, name: 'Gestionar el soporte' })).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Configuración del soporte' })).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte/gestion');
+    await sinErroresCriticosDeAxe(page, '/soporte/gestion');
+    expect(violaciones).toEqual([]);
+  });
+});
