@@ -5,8 +5,9 @@ import { useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
 import { useSesion } from '../../../app/sesion';
-import { formatearFecha } from '../../../app/ui/formato';
+import { formatearFecha, iniciales } from '../../../app/ui/formato';
 import { Hoja } from '../../../app/ui/Hoja';
+import { Avatar } from '../../../app/ui/Marca';
 import { Boton, cn, Insignia, Tarjeta } from '../../../app/ui/Tarjeta';
 import {
   type Asignacion,
@@ -434,14 +435,17 @@ function SeccionAsignaciones({
                   <button
                     type="button"
                     onClick={() => ver(p.id)}
-                    className="flex min-h-toque w-full min-w-0 flex-col items-start gap-1 px-4 py-3 text-left hover:bg-atlas-activo focus-visible:bg-atlas-activo focus-visible:outline-none"
+                    className="flex min-h-toque w-full min-w-0 items-start gap-3 px-4 py-3 text-left hover:bg-atlas-activo focus-visible:bg-atlas-activo focus-visible:outline-none"
                   >
-                    <span className="font-semibold break-words">{p.nombre}</span>
-                    <span className="text-xs break-all text-atlas-texto-suave">{p.correo}</span>
-                    <InsigniasPersona persona={p} />
-                    {p.roles.length > 0 && (
-                      <span className="text-xs text-atlas-texto-suave">{p.roles.map(nombreDe).join(' · ')}</span>
-                    )}
+                    <Avatar iniciales={iniciales(p.nombre)} foto={p.foto} />
+                    <span className="flex min-w-0 flex-col items-start gap-1">
+                      <span className="font-semibold break-words">{p.nombre}</span>
+                      <span className="text-xs break-all text-atlas-texto-suave">{p.correo}</span>
+                      <InsigniasPersona persona={p} />
+                      {p.roles.length > 0 && (
+                        <span className="text-xs text-atlas-texto-suave">{p.roles.map(nombreDe).join(' · ')}</span>
+                      )}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -462,10 +466,13 @@ function SeccionAsignaciones({
         <div className="mt-4 flex flex-col gap-3">
           {seleccionada.data && (
             <div className="flex min-w-0 flex-col gap-2 rounded-2xl bg-atlas-activo p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 flex-col gap-1">
-                <h3 className="font-semibold break-words">{seleccionada.data.nombre}</h3>
-                <p className="text-xs break-all text-atlas-texto-suave">{seleccionada.data.correo}</p>
-                <InsigniasPersona persona={seleccionada.data} />
+              <div className="flex min-w-0 items-start gap-3">
+                <Avatar iniciales={iniciales(seleccionada.data.nombre)} foto={seleccionada.data.foto} className="size-11" />
+                <div className="flex min-w-0 flex-col gap-1">
+                  <h3 className="font-semibold break-words">{seleccionada.data.nombre}</h3>
+                  <p className="text-xs break-all text-atlas-texto-suave">{seleccionada.data.correo}</p>
+                  <InsigniasPersona persona={seleccionada.data} />
+                </div>
               </div>
               {puedeGestionar && seleccionada.data.tipo === 'empleado' && (
                 <Boton

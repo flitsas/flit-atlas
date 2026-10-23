@@ -106,7 +106,7 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla; ver y pedir la sincronización de personas con Graph. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
 
 ## Hola (ejemplo) (`hola`)
 

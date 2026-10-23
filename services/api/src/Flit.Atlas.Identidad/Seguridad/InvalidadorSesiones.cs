@@ -22,6 +22,9 @@ public static class MotivosInvalidacion
 
     /// <summary>Restablecimiento de la cuenta o cambio de factor (HU 1.5).</summary>
     public const string CambioDeCredenciales = "cambio_de_credenciales";
+
+    /// <summary>La sincronización con Graph encontró la cuenta deshabilitada o borrada en Entra ID (ATLAS-ADR-0030).</summary>
+    public const string CuentaDeshabilitadaEnEntra = "cuenta_deshabilitada_en_entra";
 }
 
 /// <summary>

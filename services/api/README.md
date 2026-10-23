@@ -157,6 +157,22 @@ curl -s https://qa.atlas.flitsas.com/api/v1/identidad/token/yo -H "Authorization
 | `Identidad__Emergencia__Nombre` | Nombre visible («Administrador de emergencia») |
 | `Identidad__Emergencia__VigenciaEnlace` | Vigencia del enlace de activación (`01:00:00`) |
 
+## Sincronización de personas (HU 2.2, ATLAS-ADR-0030)
+
+- Trabajo diario en atlas-api (solo con Entra configurado) que lee de Graph, con el token de aplicación de siempre (`User.Read.All` y `GroupMember.Read.All`), nombre, cargo, área, teléfono, foto y `accountEnabled` de los empleados. Una cuenta deshabilitada o borrada en Entra deja la persona `inactiva` (`inactiva_por_entra`) y le cierra sesiones y tokens; al rehabilitarse vuelve. Nunca toca externos, la cuenta de emergencia ni a una persona suspendida.
+- Un solo nodo a la vez (candado consultivo de PostgreSQL); reintenta con esperas si Graph o la base no responden; freno si una corrida fuera a deshabilitar a más de la mitad. Un evento `identidad.personas_sincronizadas` por corrida con conteos (sin datos personales) y métricas `atlas.personas.sincronizacion.*`.
+- Foto en `plataforma_persona_foto` (tope de tamaño), servida con ETag y caché privada en `GET /api/v1/plataforma/personas/{id}/foto`. Directorio: `GET /api/v1/plataforma/directorio[/{id}]` con `atlas.equipo.ver`; el teléfono solo con `atlas.equipo.ver_contacto`. «Sincronizar ahora»: `GET|POST /api/v1/plataforma/directorio/sincronizacion` con `atlas.identidad.administrar`.
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `Identidad__Personas__Origen` | `enlazadas` | `enlazadas` (solo quien ya entró; no crea personas), `grupo` o `tenant` (miembros, nunca invitados) |
+| `Identidad__Personas__GrupoEmpleados` | — | Object id del grupo de Entra; obligatorio con `grupo` |
+| `Identidad__Personas__Hora` | `05:00` | Hora del día, en la de Bogotá |
+| `Identidad__Personas__Habilitada` | `true` | `false` apaga la corrida diaria (el botón sigue) |
+| `Identidad__Personas__Reintentos`, `Identidad__Personas__EsperaReintento` | `4`, `00:02:00` | Reintentos con espera que se duplica |
+| `Identidad__Personas__TamanoMaximoFoto` | `102400` | Bytes |
+| `Identidad__Personas__FraccionMaximaDeshabilitadas`, `Identidad__Personas__MinimoFreno` | `0.5`, `3` | Freno de seguridad |
+
 ## Contratos (HU 1.7)
 
 - `contracts/openapi/atlas.v1.yaml` se genera desde los endpoints con `Microsoft.AspNetCore.OpenApi` (OpenAPI 3.1, `ContratoOpenApi.cs`) y `ContratoOpenApiTests` falla si no coincide con el código. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.ContratoOpenApiTests` (detalles en [`contracts/openapi/README.md`](../../contracts/openapi/README.md)).

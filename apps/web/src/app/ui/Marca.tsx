@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import isotipo from '../../marca/isotipo.svg';
 import { cn } from './Tarjeta';
 
@@ -13,15 +15,33 @@ export function MarcaAtlas({ className, tamano = 'normal' }: { className?: strin
   );
 }
 
-export function Avatar({ iniciales, className }: { iniciales: string; className?: string }) {
+/**
+ * Avatar de una persona: su foto de Microsoft 365 (sincronizada a diario, ATLAS-ADR-0030) o, si no tiene o no carga, sus
+ * iniciales. Es decorativo: el nombre siempre va al lado o en un texto para lectores de pantalla.
+ */
+export function Avatar({ iniciales, foto, className }: { iniciales: string; foto?: string | null; className?: string }) {
+  // La URL de la foto cambia con su hash: si falla una, la siguiente se vuelve a intentar.
+  const [fallida, setFallida] = useState<string | null>(null);
+  const clase = cn(
+    'grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-degradado-flit text-sm font-semibold text-[#0b1220]',
+    className,
+  );
+  if (foto && fallida !== foto) {
+    return (
+      <span aria-hidden="true" className={clase}>
+        <img
+          src={foto}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="size-full object-cover"
+          onError={() => setFallida(foto)}
+        />
+      </span>
+    );
+  }
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'grid size-9 shrink-0 place-items-center rounded-full bg-degradado-flit text-sm font-semibold text-[#0b1220]',
-        className,
-      )}
-    >
+    <span aria-hidden="true" className={clase}>
       {iniciales}
     </span>
   );

@@ -2141,6 +2141,184 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.roles.gestionar
+  /api/v1/plataforma/directorio:
+    get:
+      tags:
+        - Directorio
+      summary: Directorio interno
+      description: 'Empleados de FLIT con nombre, correo, cargo, área, estado y foto, sincronizados a diario con Microsoft Graph (ATLAS-ADR-0030), ordenados por nombre (hasta 200, sin paginación). Por defecto solo los activos. La búsqueda no distingue mayúsculas ni tildes y mira nombre, correo, cargo y área. El teléfono solo viene con atlas.equipo.ver_contacto. Nunca lista externos ni la cuenta de emergencia. Requiere atlas.equipo.ver.'
+      operationId: ListarDirectorio
+      parameters:
+        - name: q
+          in: query
+          description: 'Texto a buscar en nombre, correo, cargo o área (mínimo 2 caracteres, máximo 100); vacío, todos.'
+          schema:
+            type: string
+        - name: inactivas
+          in: query
+          description: true para incluir las personas inactivas y suspendidas.
+          schema:
+            type: boolean
+        - name: limite
+          in: query
+          description: 'Máximo de resultados, de 1 a 200 (por defecto 100).'
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDirectorio'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/plataforma/directorio/{personaId}':
+    get:
+      tags:
+        - Directorio
+      summary: Persona del directorio
+      description: Un empleado del directorio (también inactivo). 404 si no existe o no es un empleado. El teléfono solo viene con atlas.equipo.ver_contacto. Requiere atlas.equipo.ver.
+      operationId: ObtenerPersonaDelDirectorio
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonaDirectorio'
+        '404':
+          description: Not Found
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  '/api/v1/plataforma/personas/{personaId}/foto':
+    get:
+      tags:
+        - Directorio
+      summary: Foto de una persona
+      description: 'Foto de perfil de un empleado, leída de Graph (JPEG, PNG, GIF o WebP, con tope de tamaño). Responde con ETag (el hash de la foto) y caché privada: con If-None-Match igual, 304. 404 si no tiene foto. Requiere atlas.equipo.ver.'
+      operationId: ObtenerFotoDePersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: v
+          in: query
+          description: Versión de la foto (los primeros caracteres de su hash); solo sirve para que la URL cambie con la foto.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: byte
+            image/png:
+              schema:
+                type: string
+                format: byte
+            image/gif:
+              schema:
+                type: string
+                format: byte
+            image/webp:
+              schema:
+                type: string
+                format: byte
+        '304':
+          description: Not Modified
+        '404':
+          description: Not Found
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.equipo.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.equipo.ver
+  /api/v1/plataforma/directorio/sincronizacion:
+    get:
+      tags:
+        - Directorio
+      summary: Estado de la sincronización de personas
+      description: 'Configuración (origen, hora, si está programada), próxima corrida y resultado de la última con sus conteos (creadas, actualizadas, deshabilitadas, reactivadas, omitidas, retenidas por el freno). Sin datos personales. Requiere atlas.identidad.administrar.'
+      operationId: ObtenerSincronizacionDePersonas
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VistaSincronizacion'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.identidad.administrar.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
+    post:
+      tags:
+        - Directorio
+      summary: Sincronizar ahora
+      description: Pide una corrida de la sincronización con Graph sin esperar a la hora programada; corre en segundo plano (202) y su resultado aparece en GET /api/v1/plataforma/directorio/sincronizacion y en la auditoría (identidad.personas_sincronizadas). 409 sincronizacion_no_disponible sin Entra ID configurado; 409 sincronizacion_en_curso si ya hay una pedida o en curso. Requiere atlas.identidad.administrar.
+      operationId: SincronizarPersonasAhora
+      responses:
+        '202':
+          description: Accepted
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSincronizacion'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
   /api/v1/plataforma/organizaciones:
     get:
       tags:
@@ -3240,6 +3418,112 @@ components:
         mensaje:
           type: string
       description: Error de una operación de administración de roles.
+    ErrorSincronizacion:
+      required:
+        - error
+        - mensaje
+      type: object
+      properties:
+        error:
+          type: string
+          description: sincronizacion_no_disponible o sincronizacion_en_curso.
+        mensaje:
+          type: string
+      description: Error de la sincronización.
+    EstadoSincronizacion:
+      required:
+        - id
+        - disparo
+        - origen
+        - resultado
+        - inicio
+        - fin
+        - creadas
+        - actualizadas
+        - deshabilitadas
+        - reactivadas
+        - sinCambios
+        - omitidas
+        - retenidas
+        - error
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la corrida (recurso_id del evento de auditoría).
+          format: uuid
+        disparo:
+          type: string
+          description: programada o manual.
+        origen:
+          type: string
+          description: 'enlazadas, grupo o tenant.'
+        resultado:
+          type: string
+          description: 'exitosa, fallida o en_curso.'
+        inicio:
+          type: string
+          format: date-time
+        fin:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        creadas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Personas nuevas en Atlas.
+          format: int32
+        actualizadas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Personas con algún dato cambiado (nombre, cargo, área, teléfono o foto).'
+          format: int32
+        deshabilitadas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Personas que quedaron inactivas porque su cuenta está deshabilitada o ya no existe en Entra; sus sesiones se cerraron.
+          format: int32
+        reactivadas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Personas que volvieron a activa porque su cuenta se rehabilitó en Entra.
+          format: int32
+        sinCambios:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Personas leídas sin cambios.
+          format: int32
+        omitidas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Usuarios de Entra que no se trajeron: invitados, sin correo, deshabilitados que Atlas no conocía o con un correo que ya es de otra persona.'
+          format: int32
+        retenidas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Deshabilitaciones que el freno de seguridad retuvo (más de la fracción configurada en una sola corrida); no se aplicó ninguna.
+          format: int32
+        error:
+          type:
+            - 'null'
+            - string
+          description: 'Tipo de la excepción si la corrida falló (sin el mensaje, que podría traer datos).'
+      description: 'Resultado de la última corrida de la sincronización de personas con Microsoft Graph. Solo conteos, sin datos personales.'
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -3668,6 +3952,59 @@ components:
           items:
             type: string
       description: Permiso atlas.<modulo>.<accion> y los roles que lo conceden.
+    PersonaDirectorio:
+      required:
+        - id
+        - nombre
+        - correo
+        - cargo
+        - area
+        - estado
+        - foto
+        - telefono
+        - sincronizadaEn
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id de la persona (plataforma_persona).
+          format: uuid
+        nombre:
+          type: string
+          description: 'Nombre, como está en Entra ID.'
+        correo:
+          type: string
+          description: 'Correo corporativo, en minúsculas.'
+        cargo:
+          type:
+            - 'null'
+            - string
+          description: Cargo (jobTitle de Entra).
+        area:
+          type:
+            - 'null'
+            - string
+          description: Área (department de Entra).
+        estado:
+          type: string
+          description: 'activa, inactiva o suspendida.'
+        foto:
+          type:
+            - 'null'
+            - string
+          description: 'URL relativa de la foto, versionada por su hash; vacía si no tiene.'
+        telefono:
+          type:
+            - 'null'
+            - string
+          description: Teléfono; vacío si no tiene o si quien consulta no tiene atlas.equipo.ver_contacto.
+        sincronizadaEn:
+          type:
+            - 'null'
+            - string
+          description: Última lectura de la persona en Graph; vacía si nunca se sincronizó.
+          format: date-time
+      description: Empleado del directorio interno. El teléfono solo viene con atlas.equipo.ver_contacto.
     PersonaEncontrada:
       required:
         - id
@@ -3677,6 +4014,7 @@ components:
         - organizacion
         - estado
         - emergencia
+        - foto
         - roles
       type: object
       properties:
@@ -3702,6 +4040,11 @@ components:
         emergencia:
           type: boolean
           description: Si es la cuenta de administrador de emergencia (ATLAS-ADR-0027).
+        foto:
+          type:
+            - 'null'
+            - string
+          description: 'URL relativa de la foto (empleados sincronizados con Graph, ATLAS-ADR-0030); vacía si no tiene.'
         roles:
           type: array
           items:
@@ -3884,6 +4227,25 @@ components:
             - string
           format: int32
       description: Cuántas sesiones activas se cerraron.
+    ResultadoDirectorio:
+      required:
+        - personas
+        - hayMas
+        - veContacto
+      type: object
+      properties:
+        personas:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaDirectorio'
+          description: 'Personas encontradas, hasta el límite pedido.'
+        hayMas:
+          type: boolean
+          description: 'Hay más personas que el límite: afina la búsqueda.'
+        veContacto:
+          type: boolean
+          description: Si quien consulta ve los teléfonos (atlas.equipo.ver_contacto).
+      description: 'Página del directorio, ordenada por nombre.'
     ResultadoRestablecimiento:
       required:
         - correoEnviado
@@ -4363,6 +4725,44 @@ components:
             - 'null'
             - string
       description: Servicio y versión del ensamblado desplegado.
+    VistaSincronizacion:
+      required:
+        - disponible
+        - programada
+        - origen
+        - hora
+        - proxima
+        - enCurso
+        - ultima
+      type: object
+      properties:
+        disponible:
+          type: boolean
+          description: Hay Entra ID configurado en este ambiente; sin él no se puede sincronizar.
+        programada:
+          type: boolean
+          description: El trabajo diario está habilitado (Identidad:Personas:Habilitada).
+        origen:
+          type: string
+          description: 'enlazadas, grupo o tenant (Identidad:Personas:Origen).'
+        hora:
+          type: string
+          description: 'Hora del día de la corrida, en la de Bogotá (HH:mm).'
+        proxima:
+          type:
+            - 'null'
+            - string
+          description: Próxima corrida programada; vacía si no hay.
+          format: date-time
+        enCurso:
+          type: boolean
+          description: Hay una corrida en curso o pedida en esta réplica.
+        ultima:
+          oneOf:
+            - type: 'null'
+            - description: Última corrida (en cualquier réplica); vacía si nunca corrió.
+              $ref: '#/components/schemas/EstadoSincronizacion'
+      description: Estado de la sincronización diaria de personas con Graph.
     Yo:
       required:
         - sub
@@ -4374,6 +4774,7 @@ components:
         - roles
         - permisos
         - emergencia
+        - foto
       type: object
       properties:
         sub:
@@ -4404,6 +4805,11 @@ components:
         emergencia:
           type: boolean
           description: 'true si la sesión es de la cuenta de administrador de emergencia (ATLAS-ADR-0027): la PWA muestra el aviso.'
+        foto:
+          type:
+            - 'null'
+            - string
+          description: 'URL relativa de la foto de la persona (sincronizada con Graph, ATLAS-ADR-0030), versionada por su hash; vacía si no tiene.'
       description: 'Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.'
   securitySchemes:
     sesionAtlas:
@@ -4443,6 +4849,8 @@ tags:
     description: 'FLIT, clientes y proveedores: crear, editar, suspender y eliminar, y habilitar el administrador de la organización (HU 1.5, ATLAS-ADR-0025).'
   - name: Invitaciones
     description: 'Invitaciones de externos con rol, alcance, vencimiento y permisos extra: crear, reenviar, suspender, renovar y revocar (HU 1.5, ATLAS-ADR-0025).'
+  - name: Directorio
+    description: 'Directorio interno de empleados sincronizado a diario con Microsoft Graph: nombre, cargo, área, foto y estado; el teléfono solo con atlas.equipo.ver_contacto (ATLAS-ADR-0030).'
   - name: Permisos
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
   - name: Hola

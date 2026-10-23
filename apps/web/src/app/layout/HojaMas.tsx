@@ -35,7 +35,7 @@ export function HojaMas({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Más">
       <div className="flex flex-col gap-5 px-4 pt-2 pb-5">
         <section aria-label="Tu cuenta" className="flex items-center gap-3 rounded-2xl bg-atlas-activo p-3">
-          <Avatar iniciales={iniciales(yo.nombre)} className="size-11" />
+          <Avatar iniciales={iniciales(yo.nombre)} foto={yo.foto} className="size-11" />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{yo.nombre}</p>
             <div className="mt-1 flex flex-wrap gap-1">

@@ -179,6 +179,8 @@ export interface PersonaEncontrada {
   estado: 'activa' | 'inactiva' | 'suspendida';
   /** Cuenta de administrador de emergencia (ATLAS-ADR-0027). */
   emergencia: boolean;
+  /** URL de la foto (empleados sincronizados con Graph, ATLAS-ADR-0030); `null` si no tiene. */
+  foto: string | null;
   /** Códigos de los roles asignados y vigentes (sin `atlas.lector` ni los implícitos). */
   roles: string[];
 }

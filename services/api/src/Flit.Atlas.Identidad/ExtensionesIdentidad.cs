@@ -6,6 +6,7 @@ using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Externos;
+using Flit.Atlas.Identidad.Personas;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Identidad.Tokens;
@@ -126,6 +127,7 @@ public static class ExtensionesIdentidad
         {
             servicios.AddSingleton<IPerfilEmpleados, SinPerfilEmpleados>();
         }
+        AgregarSincronizacionPersonas(builder, entraHabilitado);
 
         PoliticasIdentidad.Configurar(servicios.AddAuthorizationBuilder());
 
@@ -148,6 +150,30 @@ public static class ExtensionesIdentidad
         servicios.AddOptions<OpcionesVencimientos>().BindConfiguration(OpcionesVencimientos.Seccion);
         servicios.AddSingleton<VigilanteVencimientos>();
         servicios.AddHostedService(sp => sp.GetRequiredService<VigilanteVencimientos>());
+    }
+
+    /// <summary>
+    /// Sincronización diaria de personas con Graph (HU 2.2, ATLAS-ADR-0030): el directorio de Entra (solo con Entra
+    /// configurado), la corrida y el trabajo programado, que también atiende «Sincronizar ahora».
+    /// </summary>
+    private static void AgregarSincronizacionPersonas(WebApplicationBuilder builder, bool entraHabilitado)
+    {
+        var servicios = builder.Services;
+        var seccion = builder.Configuration.GetSection(OpcionesSincronizacionPersonas.Seccion);
+        if (entraHabilitado)
+        {
+            // Falla al arrancar con una configuración imposible (p. ej. origen «grupo» sin grupo).
+            (seccion.Get<OpcionesSincronizacionPersonas>() ?? new OpcionesSincronizacionPersonas()).Validar();
+            servicios.AddHttpClient<IDirectorioEntra, DirectorioGraph>(c => c.BaseAddress = new Uri("https://graph.microsoft.com/"));
+        }
+        else
+        {
+            servicios.AddSingleton<IDirectorioEntra, SinDirectorioEntra>();
+        }
+        servicios.AddOptions<OpcionesSincronizacionPersonas>().Bind(seccion);
+        servicios.AddScoped<SincronizadorPersonas>();
+        servicios.AddSingleton<TrabajoSincronizacionPersonas>();
+        servicios.AddHostedService(sp => sp.GetRequiredService<TrabajoSincronizacionPersonas>());
     }
 
     /// <summary>
