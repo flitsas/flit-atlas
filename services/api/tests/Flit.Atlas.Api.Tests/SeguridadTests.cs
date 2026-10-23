@@ -315,10 +315,12 @@ public class SeguridadTests(EntornoApi entorno)
         var acciones = await auditoria.Auditoria.Where(a => a.Accion.StartsWith(TiposEventoSeguridad.PrefijoAuditoria))
             .Select(a => new { a.Accion, a.OcurridoEn }).ToListAsync(Ct);
         var tipos = typeof(TiposEventoSeguridad).GetFields(BindingFlags.Public | BindingFlags.Static)
-            .Where(f => f.IsLiteral && f.Name != nameof(TiposEventoSeguridad.PrefijoAuditoria))
+            .Where(f => f.IsLiteral && f.Name is not (nameof(TiposEventoSeguridad.PrefijoAuditoria) or nameof(TiposEventoSeguridad.PrefijoAltaSeveridad)))
             .Select(f => (string)f.GetRawConstantValue()!)
-            // Los de las cuentas externas (HU 1.5) se prueban de punta a punta, con su auditoría, en CuentasExternasTests.
+            // Los de las cuentas externas (HU 1.5) y los de la cuenta de emergencia (ATLAS-ADR-0027) se prueban de punta a
+            // punta, con su auditoría, en CuentasExternasTests y EmergenciaTests.
             .Except(CuentasExternasTests.TiposDeEventoProbados)
+            .Except(EmergenciaTests.TiposDeEventoProbados)
             .ToHashSet();
 
         // Ocurrieron todos los tipos de evento…

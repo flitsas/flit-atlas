@@ -179,8 +179,10 @@ public sealed class AprovisionadorEmpleados(
         // por ejemplo, cargada desde el reparto de responsables. El proveedor simulado nunca enlaza personas reales.
         if (persona is null && cuenta.Proveedor == ProveedorEntra)
         {
+            // La cuenta de emergencia nunca se enlaza a Entra (ATLAS-ADR-0027), aunque alguien tuviera su correo.
             persona = await plataforma.Personas.FirstOrDefaultAsync(
-                p => p.Correo == correo && p.EntraOid == null && p.Tipo == TipoPersona.Empleado, ct);
+                p => p.Correo == correo && p.EntraOid == null && p.Tipo == TipoPersona.Empleado
+                    && !plataforma.AsignacionesRol.Any(a => a.PersonaId == p.Id && a.Origen == OrigenAsignacion.Emergencia), ct);
         }
 
         if (persona is not null)

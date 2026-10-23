@@ -94,7 +94,9 @@ public sealed class AlmacenSesiones(
             CreadaEn = ahora,
             UltimoUsoEn = ahora,
             ExpiraEn = ticket.Properties.ExpiresUtc ?? ahora + opciones.DeslizanteEmpleados,
+            // Las cuentas locales (externos y la de emergencia, ATLAS-ADR-0027) tienen el tope más corto.
             ExpiraAbsolutaEn = ahora + (ticket.Principal.FindFirstValue(ClaimsAtlas.TipoPrincipal) == ClaimsAtlas.TipoExterno
+                || ticket.Principal.FindFirstValue(ClaimsAtlas.Proveedor) == Emergencia.CuentaEmergencia.Proveedor
                 ? opciones.AbsolutaExternos
                 : opciones.AbsolutaEmpleados),
             Ticket = [],

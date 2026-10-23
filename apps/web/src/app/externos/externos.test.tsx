@@ -52,6 +52,33 @@ describe('enlaces de un solo uso', () => {
   });
 });
 
+describe('cuenta de emergencia', () => {
+  it('un enlace de emergencia usado o vencido muestra que no sirve y quita el token de la barra', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'enlace_no_valido', mensaje: 'x' }), { status: 410, headers: { 'Content-Type': 'application/json' } })),
+    );
+    window.history.pushState({}, '', '/emergencia#0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAA');
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Este enlace no sirve' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+  });
+
+  it('con un enlace válido ofrece activar la cuenta', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ correo: 'admin.emergencia@atlas.local', nombre: 'Administrador de emergencia' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })),
+    );
+    window.history.pushState({}, '', '/emergencia#0123456789abcdef0123456789abcdef.BBBBBBBBBBBBBBBBBBBB');
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Activa la cuenta de emergencia' })).toBeInTheDocument();
+    expect(screen.getByText('admin.emergencia@atlas.local')).toBeInTheDocument();
+  });
+});
+
 describe('documentos legales', () => {
   it('muestra el aviso de borrador y la lista numerada sin HTML del texto', () => {
     render(<TextoLegal texto={'# Términos\n\n> **BORRADOR [por verificar]**. Ejemplo.\n\n1. **Objeto.** Uno.\n2. Dos.'} />);

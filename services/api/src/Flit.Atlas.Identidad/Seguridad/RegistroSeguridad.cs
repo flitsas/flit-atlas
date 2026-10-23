@@ -9,6 +9,7 @@ using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -62,6 +63,18 @@ public static class TiposEventoSeguridad
     public const string RestablecimientoForzado = "restablecimiento_forzado";
     public const string TerminosAceptados = "terminos_aceptados";
 
+    // Cuenta de administrador de emergencia (ATLAS-ADR-0027): todos de severidad alta.
+    public const string EmergenciaCuentaCreada = "emergencia.cuenta_creada";
+
+    /// <summary>El comando de consola emitió un enlace de activación (quitó los factores y cerró las sesiones).</summary>
+    public const string EmergenciaEnlaceEmitido = "emergencia.enlace_emitido";
+
+    public const string EmergenciaActivada = "emergencia.activada";
+    public const string EmergenciaIngreso = "emergencia.ingreso";
+
+    /// <summary>Prefijo de los eventos de alta severidad: además de la auditoría, quedan como advertencia en el log.</summary>
+    public const string PrefijoAltaSeveridad = "emergencia.";
+
     public const string PrefijoAuditoria = "identidad.";
 }
 
@@ -104,9 +117,9 @@ public sealed record DatosEventoSeguridad
 /// <summary>
 /// Registra los eventos de seguridad (ATLAS-ADR-0022): una fila en <c>identidad_evento_seguridad</c> y otra en
 /// <c>plataforma_auditoria</c>, en la <b>misma transacción</b> (si la auditoría falla, tampoco queda el evento). Las
-/// dos tablas son de solo inserción.
+/// dos tablas son de solo inserción. Los de la cuenta de emergencia también quedan como advertencia en el log (ATLAS-ADR-0027).
 /// </summary>
-public sealed class RegistroSeguridad(PlataformaDbContext plataforma, TimeProvider reloj, IHttpContextAccessor contexto)
+public sealed partial class RegistroSeguridad(PlataformaDbContext plataforma, TimeProvider reloj, IHttpContextAccessor contexto, ILogger<RegistroSeguridad> log)
 {
     public async Task RegistrarAsync(string tipo, DatosEventoSeguridad datos, CancellationToken ct = default)
     {
@@ -167,7 +180,15 @@ public sealed class RegistroSeguridad(PlataformaDbContext plataforma, TimeProvid
                 await transaccion.CommitAsync(ct);
             }
         }
+        if (tipo.StartsWith(TiposEventoSeguridad.PrefijoAltaSeveridad, StringComparison.Ordinal))
+        {
+            // Para las alertas sobre los logs: solo el tipo y el id del evento (nada personal ni secreto).
+            AltaSeveridad(log, TiposEventoSeguridad.PrefijoAuditoria + tipo, id);
+        }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Evento de seguridad de alta severidad: {Tipo} ({EventoId})")]
+    private static partial void AltaSeveridad(ILogger log, string tipo, Guid eventoId);
 
     private static NpgsqlParameter Parametro(string nombre, NpgsqlDbType tipo, object? valor) =>
         new(nombre, tipo) { Value = valor ?? DBNull.Value };

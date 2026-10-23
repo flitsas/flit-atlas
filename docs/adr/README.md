@@ -30,5 +30,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0024](0024-servidor-de-tokens-openiddict.md) | Servidor de tokens: OpenIddict embebido, clientes por configuración, scopes por módulo, llaves en certificados montados y conformidad con pruebas propias | propuesto | A-03, §6.3, HU 1.3c |
 | [ATLAS-ADR-0025](0025-organizaciones-invitaciones-y-cuentas-externas.md) | Organizaciones, invitaciones y cuentas locales de externos: enlace de un solo uso, passkeys de Identity, TOTP, recuperación, términos versionados y correo por Graph o SMTP | propuesto | §6.2, §6.3, §7.3, HU 1.5 |
 | [ATLAS-ADR-0026](0026-registro-de-modulos-y-composicion.md) | Registro de módulos: IModuloAtlas en Plataforma, lista única en Flit.Atlas.Composicion y bandera que hace cumplir el servidor | propuesto | §10, HU 1.9 |
+| [ATLAS-ADR-0027](0027-cuenta-de-administrador-de-emergencia.md) | Cuenta de administrador de emergencia: cuenta local con superadmin, sin contraseña por defecto, activada con un comando de consola y un enlace de un solo uso | aceptado (decisión del líder, 23/10/2026) | A-03, §6, §7.2 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).

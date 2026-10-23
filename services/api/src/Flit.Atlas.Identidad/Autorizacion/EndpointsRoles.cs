@@ -40,7 +40,7 @@ public static class EndpointsRoles
         Guid Id, Guid PersonaId, string Rol, string RolNombre,
         [property: Description("interno o externo.")] string TipoRol,
         Guid? OrganizacionId, AlcanceVista Alcance, DateTimeOffset VigenteDesde, DateTimeOffset? VigenteHasta,
-        [property: Description("manual, grupo_entra o invitacion.")] string Origen,
+        [property: Description("manual, grupo_entra, invitacion o emergencia.")] string Origen,
         [property: Description("Si concede permisos en este momento (empezó y no ha vencido).")] bool Vigente,
         Guid? AsignadoPor, DateTimeOffset CreadoEn);
 
@@ -213,7 +213,8 @@ public static class EndpointsRoles
         fuente.AsNoTracking().Join(db.Roles, a => a.RolId, r => r.Id, (a, r) => new AsignacionVista(
             a.Id, a.PersonaId, r.Codigo, r.Nombre, r.Tipo == TipoRol.Externo ? "externo" : "interno", a.OrganizacionId,
             new AlcanceVista(a.AlcanceTipo, a.AlcanceId), a.VigenteDesde, a.VigenteHasta,
-            a.Origen == OrigenAsignacion.GrupoEntra ? "grupo_entra" : a.Origen == OrigenAsignacion.Invitacion ? "invitacion" : "manual",
+            a.Origen == OrigenAsignacion.GrupoEntra ? "grupo_entra" : a.Origen == OrigenAsignacion.Invitacion ? "invitacion"
+                : a.Origen == OrigenAsignacion.Emergencia ? "emergencia" : "manual",
             a.VigenteDesde <= ahora && (a.VigenteHasta == null || a.VigenteHasta > ahora), a.AsignadoPor, a.CreadoEn));
 
     private static IResult Respuesta(ErrorAdministracion error) => error.Tipo switch

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Externos;
 using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Plataforma.Datos;
@@ -164,7 +165,7 @@ public sealed partial class AdministracionRoles(
 
     /// <summary>
     /// Retira una asignación manual o de invitación. Las de grupos de Entra no se retiran aquí: se quitan en Entra (o
-    /// eliminando el mapeo) y se sincronizan en el siguiente ingreso.
+    /// eliminando el mapeo) y se sincronizan en el siguiente ingreso. La de la cuenta de emergencia tampoco.
     /// </summary>
     public async Task<Resultado<AsignacionRol>> RetirarAsync(Guid asignacionId, Guid? actor, CancellationToken ct = default)
     {
@@ -177,6 +178,12 @@ public sealed partial class AdministracionRoles(
         {
             return new ErrorAdministracion(TipoError.Conflicto, "asignacion_de_grupo_entra",
                 "La asignación viene de un grupo de Entra: quita a la persona del grupo o elimina el mapeo.");
+        }
+        if (asignacion.Origen == OrigenAsignacion.Emergencia)
+        {
+            // La cuenta de emergencia no se desarma desde la administración: se rota con el comando de consola (ATLAS-ADR-0027).
+            return new ErrorAdministracion(TipoError.Conflicto, CuentaEmergencia.CodigoProtegida,
+                "Es el rol de la cuenta de administrador de emergencia: no se retira desde Atlas. Se rota con el comando de consola.");
         }
         var rol = await plataforma.Roles.Where(r => r.Id == asignacion.RolId).Select(r => r.Codigo).SingleAsync(ct);
         plataforma.AsignacionesRol.Remove(asignacion);
@@ -292,6 +299,7 @@ public sealed partial class AdministracionRoles(
     {
         OrigenAsignacion.GrupoEntra => "grupo_entra",
         OrigenAsignacion.Invitacion => "invitacion",
+        OrigenAsignacion.Emergencia => "emergencia",
         _ => "manual",
     };
 

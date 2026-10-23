@@ -88,6 +88,7 @@ public static class EndpointsCuentasExternas
         "/api/v1/identidad/entrar/terminos",
         "/api/v1/identidad/invitaciones",
         "/api/v1/identidad/recuperacion",
+        "/api/v1/identidad/emergencia",
     ];
 
     internal static bool EsRutaDeIngreso(PathString ruta) =>
@@ -295,7 +296,9 @@ public static class EndpointsCuentasExternas
         var correo = (solicitud.Correo ?? string.Empty).Trim().ToLowerInvariant();
         var usuario = correo.Length is > 0 and <= 320 ? await usuarios.FindByEmailAsync(correo) : null;
         var persona = usuario is null ? null : await plataforma.Personas.AsNoTracking().FirstOrDefaultAsync(p => p.Id == usuario.PersonaId, ct);
-        if (usuario is null || persona is null || persona.Tipo != TipoPersona.Externo)
+        // Solo cuentas locales: externos y la cuenta de emergencia (ATLAS-ADR-0027). Un empleado entra con Microsoft.
+        if (usuario is null || persona is null
+            || (persona.Tipo != TipoPersona.Externo && !await sesion.EsEmergenciaAsync(persona.Id, ct)))
         {
             // Mismo trabajo que una verificación real: el tiempo no dice si el correo existe.
             var ficticio = new UsuarioAtlas { PersonaId = Guid.Empty };
@@ -466,7 +469,8 @@ public static class EndpointsCuentasExternas
             }, ct);
             return NoPermitido();
         }
-        var pendientes = await legales.PendientesAsync(usuario.PersonaId, ct);
+        // Los términos y el aviso de privacidad son de los externos (Ley 1581); la cuenta de emergencia es interna.
+        IReadOnlyList<DocumentoVigente> pendientes = await sesion.EsEmergenciaAsync(usuario.PersonaId, ct) ? [] : await legales.PendientesAsync(usuario.PersonaId, ct);
         if (pendientes.Count > 0)
         {
             var estado = await pasos.GuardarAsync(TipoPasoTerminos, new PasoTerminos(usuario.Id, metodo, usuario.SecurityStamp ?? string.Empty));
