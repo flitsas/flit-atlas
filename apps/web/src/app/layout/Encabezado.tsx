@@ -68,7 +68,7 @@ export function Encabezado({ alBuscar, alAbrirMas }: { alBuscar: () => void; alA
             className={cn(botonIcono, 'md:hidden')}
             aria-haspopup="dialog"
           >
-            <Avatar iniciales={iniciales(yo.nombre)} className="size-8 text-xs" />
+            <Avatar iniciales={iniciales(yo.nombre)} foto={yo.foto} className="size-8 text-xs" />
             <span className="sr-only">Cuenta de {yo.nombre}</span>
           </button>
           <div className="hidden md:block">

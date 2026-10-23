@@ -23,6 +23,7 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
 
     public DbSet<Organizacion> Organizaciones => Set<Organizacion>();
     public DbSet<Persona> Personas => Set<Persona>();
+    public DbSet<PersonaFoto> FotosPersonas => Set<PersonaFoto>();
     public DbSet<Rol> Roles => Set<Rol>();
     public DbSet<Permiso> Permisos => Set<Permiso>();
     public DbSet<RolPermiso> RolesPermisos => Set<RolPermiso>();
@@ -88,6 +89,17 @@ public sealed class PlataformaDbContext(DbContextOptions<PlataformaDbContext> op
             e.HasIndex(p => p.EntraOid).IsUnique().HasFilter("entra_oid IS NOT NULL");
             e.HasIndex(p => p.OrganizacionId);
             e.HasOne<Organizacion>().WithMany().HasForeignKey(p => p.OrganizacionId).OnDelete(DeleteBehavior.Restrict);
+            e.Property(p => p.FotoHash).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<PersonaFoto>(e =>
+        {
+            e.ToTable(Prefijo + "persona_foto", t => t.HasComment("Foto de perfil de los empleados leída de Graph (ATLAS-ADR-0030)."));
+            e.HasKey(f => f.PersonaId);
+            e.Property(f => f.Contenido).HasComment(Pii);
+            e.Property(f => f.TipoContenido).HasMaxLength(50);
+            e.Property(f => f.Hash).HasMaxLength(64);
+            e.HasOne<Persona>().WithMany().HasForeignKey(f => f.PersonaId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Rol>(e =>

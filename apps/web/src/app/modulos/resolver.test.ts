@@ -131,7 +131,8 @@ describe('registro', () => {
     // «Roles y permisos» (HU 1.4), Invitaciones, Organizaciones (HU 1.5) y «Asignación de roles» también van en «Más»; «hola» (HU 1.9) está apagado por defecto.
     expect(nav.mas.map((e) => e.etiqueta)).toEqual(['Catálogo', 'Equipo', 'Contratos', 'Documentación', 'Roles y permisos', 'Invitaciones', 'Organizaciones', 'Asignación de roles']);
     const mvp = MODULOS_REGISTRADOS.filter((m) => !['permisos', 'hola', 'administracion'].includes(m.id));
-    expect(mvp.every((m) => m.estado === 'proximamente' && m.banderaPorDefecto)).toBe(true);
+    // Encendidos por defecto; cada uno pasa a «disponible» cuando llega su HU (equipo, con el directorio de la HU 2.2).
+    expect(mvp.every((m) => m.banderaPorDefecto)).toBe(true);
     // Sin el permiso, la administración no aparece.
     const lector = resolverNavegacion(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.catalogo.ver'] });
     expect(lector.mas.map((e) => e.etiqueta)).not.toContain('Invitaciones');

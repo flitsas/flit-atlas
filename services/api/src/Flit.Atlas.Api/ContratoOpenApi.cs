@@ -48,6 +48,7 @@ internal static class ContratoOpenApi
         ("Plataforma", "Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API."),
         ("Organizaciones", "FLIT, clientes y proveedores: crear, editar, suspender y eliminar, y habilitar el administrador de la organización (HU 1.5, ATLAS-ADR-0025)."),
         ("Invitaciones", "Invitaciones de externos con rol, alcance, vencimiento y permisos extra: crear, reenviar, suspender, renovar y revocar (HU 1.5, ATLAS-ADR-0025)."),
+        ("Directorio", "Directorio interno de empleados sincronizado a diario con Microsoft Graph: nombre, cargo, área, foto y estado; el teléfono solo con atlas.equipo.ver_contacto (ATLAS-ADR-0030)."),
         ("Permisos","Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023)."),
     ];
 

@@ -9,12 +9,12 @@ namespace Flit.Atlas.Identidad.Autorizacion;
 /// <summary>Manifiesto de permisos de la identidad (ATLAS-ADR-0022 §3 y ATLAS-ADR-0023).</summary>
 public static class PermisosIdentidad
 {
-    /// <summary>Cerrar todas las sesiones de una persona, suspenderla y reactivarla.</summary>
+    /// <summary>Cerrar todas las sesiones de una persona, suspenderla y reactivarla, y la sincronización de personas con Graph (ATLAS-ADR-0030).</summary>
     public const string Administrar = "atlas.identidad.administrar";
 
     public static ManifiestoPermisos Manifiesto { get; } = new("identidad", "Identidad",
     [
-        new(Administrar, "Cerrar todas las sesiones de una persona, suspenderla y reactivarla."),
+        new(Administrar, "Cerrar todas las sesiones de una persona, suspenderla y reactivarla; ver y pedir la sincronización de personas con Graph."),
     ]);
 
     /// <summary>Manifiestos del núcleo (plataforma, lista base del §7.4 e identidad): lo que aplica el migrador.</summary>

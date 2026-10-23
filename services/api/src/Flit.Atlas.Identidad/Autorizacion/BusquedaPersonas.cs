@@ -50,6 +50,7 @@ public static class BusquedaPersonas
         [property: Description("Organización de la persona.")] OrganizacionResumen Organizacion,
         [property: Description("activa, inactiva o suspendida.")] string Estado,
         [property: Description("Si es la cuenta de administrador de emergencia (ATLAS-ADR-0027).")] bool Emergencia,
+        [property: Description("URL relativa de la foto (empleados sincronizados con Graph, ATLAS-ADR-0030); vacía si no tiene.")] string? Foto,
         [property: Description("Códigos de los roles asignados y vigentes, ordenados. No incluye atlas.lector (lo tiene todo empleado) ni los implícitos.")] IReadOnlyList<string> Roles);
 
     [Description("Resultado de la búsqueda de personas, ordenado por nombre.")]
@@ -157,6 +158,7 @@ public static class BusquedaPersonas
                 p.Correo,
                 p.Tipo,
                 p.Estado,
+                p.FotoHash,
                 OrganizacionId = org.Id,
                 OrganizacionNombre = org.Nombre,
                 Emergencia = db.AsignacionesRol.Any(a => a.PersonaId == p.Id && a.Origen == OrigenAsignacion.Emergencia),
@@ -191,6 +193,7 @@ public static class BusquedaPersonas
                         _ => "activa",
                     },
                     f.Emergencia,
+                    Personas.EndpointsDirectorio.UrlFoto(f.Id, f.FotoHash),
                     [.. roles[f.Id].Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)])),
             ],
             hayMas);
