@@ -9,7 +9,7 @@ namespace Flit.Atlas.Plataforma.Datos;
 /// (prompt maestro A-06) y cada uno tiene su propio historial de migraciones (ATLAS-ADR-0016).
 /// </summary>
 /// <param name="alcance">Alcance de datos de la petición; sin él (migrador, pruebas, diseño) es <see cref="AlcanceDatos.Sistema"/>.</param>
-public abstract class ContextoAtlas(DbContextOptions opciones, IAlcanceDatos? alcance = null) : DbContext(opciones)
+public abstract class ContextoAtlas(DbContextOptions opciones, IAlcanceDatos? alcance = null) : DbContext(opciones), IContextoConAlcance
 {
     public const string Esquema = "atlas";
 
@@ -19,8 +19,11 @@ public abstract class ContextoAtlas(DbContextOptions opciones, IAlcanceDatos? al
     /// <summary>Hora actual en UTC; las pruebas la pueden fijar.</summary>
     protected internal TimeProvider Reloj { get; set; } = TimeProvider.System;
 
-    /// <summary>Organizaciones que puede ver quien usa este contexto; se lee en cada consulta y al abrir la conexión.</summary>
-    public AlcanceDatos Alcance => alcance?.Actual ?? AlcanceDatos.Sistema;
+    /// <summary>
+    /// Organizaciones que puede ver quien usa este contexto; se lee en cada consulta y al abrir la conexión. Un tramo que
+    /// abrió <see cref="AlcanceDelSistema"/> ve todo (ATLAS-ADR-0050).
+    /// </summary>
+    public AlcanceDatos Alcance => AlcanceDelSistema.Activo ? AlcanceDatos.Sistema : alcance?.Actual ?? AlcanceDatos.Sistema;
 
     /// <summary>
     /// Opciones comunes de los contextos de los módulos (ATLAS-ADR-0026): Npgsql con su historial de migraciones propio en

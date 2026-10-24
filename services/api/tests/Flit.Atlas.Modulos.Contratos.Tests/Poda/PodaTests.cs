@@ -92,7 +92,7 @@ public class PodaTests
               type: object
               required: [id, costoInterno]
               x-enum-descriptions: { A: Activo }
-              x-flit-obligatoriedad: { traspaso: [id] }
+              x-flit-obligatoriedad: { propiedad: tipo, tipos: [{ clave: traspaso }], campos: [{ campo: id, traspaso: obligatorio }] }
               properties:
                 id: { type: string }
                 estado: { $ref: '#/components/schemas/Estado' }
@@ -159,6 +159,91 @@ public class PodaTests
         Assert.DoesNotContain("x-flit-ambientes", podado.Contenido, StringComparison.Ordinal);
         Assert.Contains("x-flit-obligatoriedad", podado.Contenido, StringComparison.Ordinal);
         Assert.Contains("x-enum-descriptions", podado.Contenido, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Solo_salen_las_extensiones_de_la_lista_blanca_en_cualquier_nivel_y_saneadas()
+    {
+        var spec = """
+            openapi: 3.1.0
+            info:
+              title: API Demo
+              version: 1.0.0
+              x-flit-changelog: [{ version: 1.0.0, hoja: 1 - Auth, colaborador: Equipo Demo }]
+              x-flit-visibilidad: compartible
+            x-tercero: { motor: interno }
+            paths:
+              x-notas: { nota: interna }
+              /a:
+                x-flit-origen: código de demo (DemoEndpoints.cs)
+                get:
+                  x-public: true
+                  x-flit-hoja-excel: 1 - Auth
+                  X-Flit-Origen: mayúsculas también
+                  x-internal: false
+                  responses:
+                    x-flit-tabla-respuesta: interna
+                    default:
+                      description: ok
+                      x-flit-origen: DemoErrores.cs
+                      headers:
+                        x-request-id: { schema: { type: string }, x-flit-origen: Cabeceras.cs }
+                      content:
+                        application/json:
+                          schema: { $ref: '#/components/schemas/Tipo' }
+                          example: { x-dato-del-ejemplo: 1 }
+            components:
+              x-flit-fuente: interno
+              schemas:
+                x-flit-notas: interno
+                Tipo:
+                  type: string
+                  enum: [A, B]
+                  x-enum-descriptions: [Activo, Bloqueado]
+                  x-flit-decimales: 2
+                  x-flit-tabla: { hoja: 2 - Demo, titulo: Tabla Tipo, columnas: [ID], filas: [{ ID: A, oculto: x }] }
+                  x-flit-obligatoriedad:
+                    propiedad: tipo
+                    discriminador: nota interna de diseño
+                    tipos: [{ clave: uno, nombre: Uno, columna_excel: COL UNO }]
+                    campos: [{ campo: tipo, uno: obligatorio, condicion: Siempre, columna_excel: X }]
+                  properties:
+                    x-campo-del-autor: { type: string, x-pii: alta }
+            """;
+
+        var podado = Podar(spec, "GET /a");
+        var r = Leer(podado.Contenido);
+        var tipo = r["components"]!["schemas"]!["Tipo"]!;
+
+        Assert.DoesNotMatch("(?i)x-(flit-(origen|hoja-excel|changelog|visibilidad|fuente|notas|tabla-respuesta)|tercero|notas|internal|pii)", podado.Contenido);
+        Assert.DoesNotContain("Demo", podado.Contenido.Replace("API Demo", "", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.DoesNotContain("discriminador", podado.Contenido, StringComparison.Ordinal);
+        Assert.DoesNotContain("columna_excel", podado.Contenido, StringComparison.Ordinal);
+        Assert.DoesNotContain("hoja", podado.Contenido, StringComparison.Ordinal);
+        Assert.DoesNotContain("oculto", podado.Contenido, StringComparison.Ordinal);
+        Assert.True((bool)r["paths"]!["/a"]!["get"]!["x-public"]!);
+        Assert.NotNull(r["paths"]!["/a"]!["get"]!["responses"]!["default"]!["headers"]!["x-request-id"]);
+        Assert.Equal(1, (int)r["paths"]!["/a"]!["get"]!["responses"]!["default"]!["content"]!["application/json"]!["example"]!["x-dato-del-ejemplo"]!);
+        Assert.NotNull(tipo["properties"]!["x-campo-del-autor"]);
+        Assert.Equal(["Activo", "Bloqueado"], ((JsonArray)tipo["x-enum-descriptions"]!).Select(x => (string)x!));
+        Assert.Equal(2, (int)tipo["x-flit-decimales"]!);
+        Assert.Equal("Tabla Tipo", (string)tipo["x-flit-tabla"]!["titulo"]!);
+        Assert.Equal("Uno", (string)tipo["x-flit-obligatoriedad"]!["tipos"]![0]!["nombre"]!);
+        Assert.Equal("obligatorio", (string)tipo["x-flit-obligatoriedad"]!["campos"]![0]!["uno"]!);
+        Assert.Empty(Internos(r));
+        Assert.Equal(podado.Contenido, Podar(podado.Contenido, "GET /a").Contenido);
+    }
+
+    [Fact]
+    public void La_verificacion_falla_cerrado_si_queda_una_extension_no_permitida_o_sin_sanear()
+    {
+        var conOrigen = (JsonObject)JsonNode.Parse("""{"openapi":"3.1.0","paths":{"/a":{"get":{"x-flit-origen":"A.cs"}}}}""")!;
+        var sinSanear = (JsonObject)JsonNode.Parse("""{"components":{"schemas":{"T":{"x-flit-tabla":{"hoja":"1","titulo":"T"}}}}}""")!;
+        var enNombres = (JsonObject)JsonNode.Parse("""{"components":{"schemas":{"T":{"properties":{"x-campo":{"type":"string"}}}}}}""")!;
+
+        Assert.Equal(MotivoPoda.VerificacionFallida, Assert.Throws<PodaException>(() => NucleoPoda.Verificar(conOrigen, cabecerasSonMapa: true)).Motivo);
+        Assert.Equal(MotivoPoda.VerificacionFallida, Assert.Throws<PodaException>(() => NucleoPoda.Verificar(sinSanear, cabecerasSonMapa: true)).Motivo);
+        NucleoPoda.Verificar(enNombres, cabecerasSonMapa: true);
     }
 
     [Fact]
@@ -329,6 +414,9 @@ public class PodaTests
         Assert.DoesNotContain("x-flit-fuente", podado.Contenido, StringComparison.Ordinal);
         Assert.DoesNotContain("x-flit-ambientes", podado.Contenido, StringComparison.Ordinal);
         Assert.DoesNotContain("appsettings", podado.Contenido, StringComparison.Ordinal);
+        Assert.DoesNotMatch("x-flit-(origen|hoja-excel|changelog|visibilidad|sin-autenticacion|ambiente)", podado.Contenido);
+        Assert.DoesNotMatch(@"\w+Endpoints\.cs|columna_excel|discriminador", podado.Contenido);
+        Assert.Contains("x-flit-tabla", podado.Contenido, StringComparison.Ordinal);
         Assert.Empty(Internos(Leer(podado.Contenido)));
         Assert.Equal(["https://api.ejemplo.com"], ((JsonArray)Leer(podado.Contenido)["servers"]!).Select(s => (string)s!["url"]!));
     }
@@ -521,6 +609,8 @@ public class PodaTests
         Assert.Equal(["#/components/responses/NoExiste"], ReferenciasRotas(malo));
         Assert.Equal(["/paths//a/get"], Internos(malo));
         Assert.Equal(["/info/x-flit-fuente"], Internos(Leer("""{"info":{"x-flit-fuente":{"repo":"x"},"x-flit-obligatoriedad":{}}}""")));
+        Assert.Equal(["/paths/x-notas", "/paths//a/x-flit-origen", "/components/schemas/T/x-flit-tabla/hoja"],
+            Internos(Leer("""{"paths":{"x-notas":1,"/a":{"x-flit-origen":"A.cs","get":{"x-public":true,"example":{"x-dato":1}}}},"components":{"schemas":{"T":{"x-flit-tabla":{"hoja":"1","titulo":"T"}}}}}""")));
         Assert.False(Subconjunto(JsonNode.Parse("""{"a":[1,3]}"""), JsonNode.Parse("""{"a":[3,1]}""")));
         Assert.True(Subconjunto(JsonNode.Parse("""{"a":[1,3]}"""), JsonNode.Parse("""{"a":[1,2,3],"b":0}""")));
     }

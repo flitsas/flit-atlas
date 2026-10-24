@@ -61,7 +61,11 @@ public static class EndpointsIdentidad
         var proveedores = rutas.ServiceProvider.GetService(typeof(ProveedoresHabilitados)) as ProveedoresHabilitados
             ?? throw new InvalidOperationException("Falta AgregarIdentidad en el arranque.");
 
-        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad").WithMetadata(new MetadatoLimiteTasa());
+        // Sin sesión, el ingreso, las invitaciones, la recuperación y la emergencia buscan a la persona por su correo,
+        // enlace o credencial en todas las organizaciones: piden el alcance del sistema (ATLAS-ADR-0050). Con sesión manda
+        // la de la persona.
+        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad").WithMetadata(new MetadatoLimiteTasa())
+            .ConAlcanceDelSistemaSinSesion();
 
         identidad.MapGet("/proveedores", () => proveedores)
             .WithName("ListarProveedoresDeIngreso")

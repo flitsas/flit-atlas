@@ -67,6 +67,7 @@ internal sealed partial class PodadorAsyncApi : IPodadorSpec
         }
         Servidores(trabajo, urls, solicitud.Destino.Ambiente, mayor, seguridad);
         var internos = QuitarInternos(trabajo);
+        ExtensionesPoda.Quitar(trabajo, cabecerasSonMapa: false);
 
         string[] contenedores = mayor == 3 ? [Canales] : [];
         var (_, eliminados) = Cerrar(trabajo, contenedores, esquemas);
@@ -80,7 +81,7 @@ internal sealed partial class PodadorAsyncApi : IPodadorSpec
         var (conservados, eliminadosDespues) = Cerrar(trabajo, contenedores, esquemas);
         eliminados.AddRange(eliminadosDespues);
 
-        Verificar(trabajo);
+        Verificar(trabajo, cabecerasSonMapa: false);
         var resultado = Indice(trabajo, mayor);
         if (resultado.Any(e => !ubicaciones.Contains(e.Ubicacion)) || resultado.Count != ubicaciones.Count)
         {

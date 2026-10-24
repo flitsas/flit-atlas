@@ -15,6 +15,7 @@ from datetime import datetime, time
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import Cell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -47,8 +48,20 @@ def _limpio(valor: object) -> str:
     return texto if len(texto) <= MAX_CELDA else texto[: MAX_CELDA - 1] + "…"
 
 
+def _como_texto(celda: Cell) -> Cell:
+    """Fija la celda como texto (F4-SEC-11).
+
+    openpyxl guarda como fórmula todo valor que empieza por «=», y el contenido sale de specs y guías que escribe otra
+    gente: con el tipo «s» Excel lo muestra tal cual y nunca lo evalúa («+», «-», «@», tabulador o retorno de carro
+    al inicio tampoco se interpretan en una celda de texto).
+    """
+    if isinstance(celda.value, str):
+        celda.data_type = "s"
+    return celda
+
+
 def _celda(hoja: Worksheet, fila: int, col: int, valor: object, fuente: Font = VALOR, borde: bool = True) -> None:
-    celda = hoja.cell(fila, col, _limpio(valor))
+    celda = _como_texto(hoja.cell(fila, col, _limpio(valor)))
     celda.font = fuente
     celda.alignment = AJUSTE
     if borde:
@@ -60,7 +73,7 @@ def _encabezado(hoja: Worksheet, fila: int, col: int, texto: str, hasta: int | N
         celda = hoja.cell(fila, c)
         celda.fill = RELLENO
         celda.border = BORDE
-    celda = hoja.cell(fila, col, _limpio(texto))
+    celda = _como_texto(hoja.cell(fila, col, _limpio(texto)))
     celda.font = ENCABEZADO
     celda.alignment = CENTRO
     if hasta and hasta > col:

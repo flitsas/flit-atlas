@@ -17,8 +17,11 @@ from atlas_docs.autenticacion import ScopeInsuficienteError, TokenInvalidoError,
 from atlas_docs.cola import PATRON_UUID, ConsumidorExportaciones, ManejadorExportaciones, Publicador
 from atlas_docs.config import Configuracion, cargar
 from atlas_docs.exportes import Formato, PaqueteExportar, ResultadoExportacion, exportar
+from atlas_docs.exportes.modelo import MAX_BYTES_ENTRADA
 from atlas_docs.exportes.pdf import WeasyPrintNoDisponibleError
 from atlas_docs.exportes.specs import SpecInvalidoError
+from atlas_docs.guardia import CuerpoExcedidoError, GuardiaCuerpo
+from atlas_docs.guardia import problema as _problema
 
 Chequeo = Callable[[], Awaitable[None]]
 
@@ -45,15 +48,6 @@ def chequeo_cola(consumidor: ConsumidorExportaciones) -> Chequeo:
             raise ConnectionError("Sin conexión con RabbitMQ")
 
     return chequear
-
-
-def _problema(status: int, titulo: str, codigo: str, cabeceras: dict[str, str] | None = None) -> JSONResponse:
-    return JSONResponse(
-        {"status": status, "title": titulo, "codigo": codigo},
-        status_code=status,
-        media_type="application/problem+json",
-        headers=cabeceras,
-    )
 
 
 class _Rechazo(Exception):
@@ -113,6 +107,14 @@ def crear_app(
     @app.exception_handler(_Rechazo)
     async def _rechazar(_: object, error: _Rechazo) -> JSONResponse:
         return error.respuesta
+
+    @app.exception_handler(CuerpoExcedidoError)
+    async def _cuerpo_excedido(_: object, error: CuerpoExcedidoError) -> JSONResponse:
+        return _problema(413, str(error.detail), "cuerpo_demasiado_grande")
+
+    # Token y tope del cuerpo antes de que FastAPI lea el cuerpo (F4-SEC-12); la dependencia de abajo queda como segunda
+    # revisión del token.
+    app.add_middleware(GuardiaCuerpo, validador=validador, tope=MAX_BYTES_ENTRADA, rutas={("POST", "/exportes")})
 
     async def token_de_servicio(authorization: Annotated[str | None, Header()] = None) -> None:
         """Token client_credentials de OpenIddict con audiencia atlas-docs (ATLAS-ADR-0044)."""

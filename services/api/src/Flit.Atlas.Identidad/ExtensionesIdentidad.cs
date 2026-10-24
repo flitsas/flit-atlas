@@ -337,6 +337,9 @@ public static class ExtensionesIdentidad
             o.Events.OnTokenValidated = async ctx =>
             {
                 await previo(ctx).ConfigureAwait(false);
+                // La devolución de Entra corre antes de la sesión y aprovisiona a la persona por su oid: alcance del
+                // sistema pedido explícitamente (ATLAS-ADR-0050).
+                using var sistema = AlcanceDelSistema.Abrir();
                 await IngresoEntra.AlValidarTokenAsync(ctx, tenantFlit).ConfigureAwait(false);
             };
             o.Events.OnRemoteFailure = IngresoEntra.AlFallarAsync;

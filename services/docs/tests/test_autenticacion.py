@@ -4,10 +4,16 @@ import time
 
 import jwt
 import pytest
-from apoyo_tokens import AUDIENCIA, OTRA_LLAVE, SCOPE, cabecera, token, validador
+from apoyo_tokens import AUDIENCIA, EMISOR, JWKS, OTRA_LLAVE, SCOPE, cabecera, token, validador
 from fastapi.testclient import TestClient
+from jwt import PyJWKClient, jwk_set_cache
 
-from atlas_docs.autenticacion import ValidadorTokens
+from atlas_docs.autenticacion import (
+    ESPERA_REFRESCO_SEGUNDOS,
+    VIDA_JWKS_SEGUNDOS,
+    TokenInvalidoError,
+    ValidadorTokens,
+)
 from atlas_docs.config import Configuracion
 from atlas_docs.main import crear_app
 
@@ -87,6 +93,60 @@ def test_sin_configuracion_rechaza_todo() -> None:
     respuesta = _cliente(sin_config).post("/exportes", json=CUERPO, headers=cabecera())
 
     assert respuesta.status_code == 401
+
+
+class JwksFalso:
+    """El JWKS de atlas-api en memoria para el PyJWKClient real de `desde_jwks` (sin red) y un reloj que se adelanta."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.jwks: dict = JWKS
+        self.pedidos = 0
+        self.ahora = 1000.0
+        falso = self
+
+        def fetch_data(cliente: PyJWKClient) -> dict:
+            falso.pedidos += 1
+            if cliente.jwk_set_cache is not None:
+                cliente.jwk_set_cache.put(falso.jwks)
+            cliente._last_successful_fetch = falso.ahora  # noqa: SLF001 — lo mismo que hace PyJWT
+            return falso.jwks
+
+        monkeypatch.setattr(PyJWKClient, "fetch_data", fetch_data)
+        monkeypatch.setattr(jwk_set_cache.time, "monotonic", lambda: falso.ahora)
+
+    def validador(self) -> ValidadorTokens:
+        return ValidadorTokens.desde_jwks("https://atlas.ejemplo.com/.well-known/jwks", EMISOR, AUDIENCIA, SCOPE)
+
+
+def test_un_kid_inventado_no_vuelve_a_pedir_el_jwks_en_cada_peticion(monkeypatch: pytest.MonkeyPatch) -> None:
+    jwks = JwksFalso(monkeypatch)
+    v = jwks.validador()
+
+    assert v.validar(token())["scope"] == SCOPE
+    for _ in range(20):
+        with pytest.raises(TokenInvalidoError):
+            v.validar(token(kid="inventado"))
+    assert jwks.pedidos == 1
+
+    jwks.ahora += ESPERA_REFRESCO_SEGUNDOS + 1
+    with pytest.raises(TokenInvalidoError):
+        v.validar(token(kid="inventado"))
+    assert jwks.pedidos == 2
+
+
+def test_una_llave_retirada_del_jwks_deja_de_valer_al_vencer_la_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    jwks = JwksFalso(monkeypatch)
+    v = jwks.validador()
+    assert v.validar(token())["scope"] == SCOPE
+
+    # atlas-api rota la llave: el JWKS ya no trae la de antes.
+    nueva = {**jwt.algorithms.RSAAlgorithm.to_jwk(OTRA_LLAVE.public_key(), as_dict=True), "kid": "nueva", "use": "sig"}
+    jwks.jwks = {"keys": [nueva]}
+    jwks.ahora += VIDA_JWKS_SEGUNDOS + 1
+
+    with pytest.raises(TokenInvalidoError):
+        v.validar(token())
+    assert v.validar(token(llave=OTRA_LLAVE, kid="nueva"))["scope"] == SCOPE
 
 
 def test_por_defecto_sin_variables_el_endpoint_queda_cerrado() -> None:

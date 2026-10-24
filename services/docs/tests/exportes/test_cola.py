@@ -277,3 +277,55 @@ def test_exportar_el_paquete_ict_por_la_cola_genera_los_7_formatos() -> None:
     assert lista["type"] == "atlas.contratos.exportacion_lista"
     assert {a["formato"] for a in lista["data"]["archivos"]} == set(TODOS)
     assert all(a["clave"] in s3.objetos for a in lista["data"]["archivos"])
+
+
+# --- Topes (revisión de seguridad F4: F4-SEC-12 y F4-SEC-30) ---
+
+
+def test_un_mensaje_mas_grande_que_el_tope_es_ilegible_sin_parsearlo() -> None:
+    enorme = _solicitud(relleno="x" * cola.MAX_BYTES_MENSAJE)
+
+    with pytest.raises(MensajeIlegibleError, match="tope"):
+        _procesar(S3Falso(), enorme)
+
+
+def test_una_entrada_mas_grande_que_el_tope_publica_fallida_sin_leerla_entera(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cola, "MAX_BYTES_ENTRADA", 1024)
+    s3 = S3Falso()
+    _con_entrada(s3)
+
+    fallida = _procesar(s3, _solicitud()).eventos[-1]
+
+    assert fallida["type"] == "atlas.contratos.exportacion_fallida"
+    assert fallida["data"]["codigo"] == "entrada_invalida"
+    assert "tope" in fallida["data"]["mensaje"]
+
+
+def _bomba_de_alias() -> str:
+    """Alias que se multiplican (billion laughs): 10^9 nodos al expandir."""
+    lineas = ["openapi: 3.1.0", "a: &a [x, x, x, x, x, x, x, x, x, x]"]
+    for i in range(1, 9):
+        anterior, actual = chr(97 + i - 1), chr(97 + i)
+        lineas.append(f"{actual}: &{actual} [{', '.join(['*' + anterior] * 10)}]")
+    return "\n".join(lineas) + "\n"
+
+
+@pytest.mark.parametrize(
+    "contenido",
+    [
+        _bomba_de_alias(),
+        "openapi: 3.1.0\nx: " + "[" * 500 + "]" * 500 + "\n",  # más hondo que el tope
+        "openapi: 3.1.0\nx: &x [*x]\n",  # alias recursivo
+    ],
+    ids=["alias", "profundidad", "recursivo"],
+)
+def test_un_spec_patologico_es_spec_invalido_y_no_un_fallo_de_infraestructura(contenido: str) -> None:
+    s3 = S3Falso()
+    entrada = paquete(("core-ict", "1.1.0", ICT)).model_dump(mode="json")
+    entrada["specs"][0]["contenido"] = contenido
+    _con_entrada(s3, json.dumps(entrada).encode())
+
+    fallida = _procesar(s3, _solicitud()).eventos[-1]
+
+    assert fallida["type"] == "atlas.contratos.exportacion_fallida"
+    assert fallida["data"]["codigo"] == "spec_invalido"

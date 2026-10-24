@@ -327,7 +327,7 @@ internal static class EndpointsExportaciones
         var decision = await acceso.PuedeExportarAsync(http.User, solicitud.PaqueteId, ct);
         if (!decision.Permitida || decision.Paquete is null)
         {
-            return Negada(decision);
+            return await NegadaAuditadaAsync(http, plataforma, acceso, reloj, decision, solicitud.PaqueteId, "solicitar", ct);
         }
         if (!almacen.Disponible)
         {
@@ -359,6 +359,17 @@ internal static class EndpointsExportaciones
         var borrador = Borrador(Guid.CreateVersion7(), http.User, organizacionId, true, OrigenExportacion.Paquete, decision.Paquete.Paquete.Id,
             decision.Paquete.Revision, null, armada, formatos);
         return await CrearYResponderAsync(http, contexto, plataforma, almacen, borrador, armada, ahora, ExtensionesRutaPortal, tope, opciones.Value, ct);
+    }
+
+    /// <summary>La negación de un externo queda en la auditoría como las del portal (§8.9, F4-SEC-25).</summary>
+    private static async Task<IResult> NegadaAuditadaAsync(
+        HttpContext http, PlataformaDbContext plataforma, AccesoPortal acceso, TimeProvider reloj, DecisionPortal decision, Guid paqueteId,
+        string operacion, CancellationToken ct)
+    {
+        var vista = await acceso.VistaAsync(http.User, ct);
+        await EndpointsPortal.AuditarAsync(http, plataforma, reloj, EndpointsPortal.AccionNegado, vista, paqueteId.ToString(), null,
+            new { detalle = $"exportacion_{operacion}:{decision.Codigo ?? "no_encontrado"}" }, ct);
+        return Negada(decision);
     }
 
     /// <summary>no_encontrado → 404 sin revelar el paquete; lo demás (solo_resumen, no_permitido_por_comparticion, sin_permiso) → 403.</summary>
@@ -394,7 +405,7 @@ internal static class EndpointsExportaciones
         var decision = await acceso.PuedeExportarAsync(http.User, exportacion.PaqueteId!.Value, ct);
         if (!decision.Permitida)
         {
-            return Negada(decision);
+            return await NegadaAuditadaAsync(http, plataforma, acceso, reloj, decision, exportacion.PaqueteId.Value, "descargar", ct);
         }
         return await UrlAsync(http, plataforma, almacen, opciones.Value, reloj, exportacion, archivo, ct);
     }

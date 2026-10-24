@@ -29,8 +29,9 @@ from aio_pika.abc import AbstractIncomingMessage, AbstractRobustConnection
 from botocore.client import BaseClient
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
-from atlas_docs.almacenamiento import leer, subir_resultado
+from atlas_docs.almacenamiento import ObjetoDemasiadoGrandeError, leer, subir_resultado
 from atlas_docs.exportes import Formato, PaqueteExportar, exportar
+from atlas_docs.exportes.modelo import MAX_BYTES_ENTRADA
 from atlas_docs.exportes.pdf import WeasyPrintNoDisponibleError
 from atlas_docs.exportes.specs import SpecInvalidoError
 
@@ -52,6 +53,8 @@ INICIADA = "atlas.contratos.exportacion_iniciada"
 LISTA = "atlas.contratos.exportacion_lista"
 FALLIDA = "atlas.contratos.exportacion_fallida"
 SIN_ORGANIZACION = "00000000-0000-0000-0000-000000000000"
+# El sobre solo trae ids, formatos y la clave de la entrada (el paquete va en el S3): 64 KiB sobran (F4-SEC-12).
+MAX_BYTES_MENSAJE = 64 * 1024
 
 
 def uuid7() -> str:
@@ -138,6 +141,8 @@ class ManejadorExportaciones:
         self._limitador = limitador
 
     async def procesar(self, cuerpo: bytes) -> None:
+        if len(cuerpo) > MAX_BYTES_MENSAJE:
+            raise MensajeIlegibleError(f"El mensaje supera el tope de {MAX_BYTES_MENSAJE} bytes.")
         try:
             recibido = SobreSolicitado.model_validate_json(cuerpo)
         except ValidationError as error:
@@ -167,7 +172,15 @@ class ManejadorExportaciones:
 
         await publicar(INICIADA, {"exportacionId": exportacion_id})
         cliente = self._s3()
-        contenido = await anyio.to_thread.run_sync(lambda: leer(cliente, self._bucket, datos.entrada_clave))
+        try:
+            contenido = await anyio.to_thread.run_sync(
+                lambda: leer(cliente, self._bucket, datos.entrada_clave, MAX_BYTES_ENTRADA)
+            )
+        except ObjetoDemasiadoGrandeError:
+            await fallar(
+                "entrada_invalida", f"La entrada de la exportación supera el tope de {MAX_BYTES_ENTRADA} bytes."
+            )
+            return
         if contenido is None:
             await fallar("entrada_invalida", "La entrada de la exportación no está en el almacenamiento.")
             return

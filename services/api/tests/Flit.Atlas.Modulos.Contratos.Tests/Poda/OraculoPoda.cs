@@ -118,10 +118,25 @@ internal static class OraculoPoda
         return [.. faltantes.Distinct(StringComparer.Ordinal)];
     }
 
-    /// <summary>Extensiones de procedencia interna que nunca salen en un spec podado (escritas aquí aparte del podador).</summary>
-    private static readonly string[] Procedencia = ["x-flit-fuente", "x-flit-ambientes"];
+    /// <summary>
+    /// Lista blanca de extensiones que pueden salir en un spec podado (escrita aquí aparte del podador, F4-SEC-09); toda
+    /// otra <c>x-*</c> fuera de los datos del autor es una fuga.
+    /// </summary>
+    private static readonly string[] Permitidas = ["x-enum-descriptions", "x-flit-obligatoriedad", "x-flit-tabla", "x-flit-decimales", "x-public"];
 
-    /// <summary>Rutas de los nodos marcados como internos y de las extensiones de procedencia interna.</summary>
+    /// <summary>Claves de procedencia que no pueden venir dentro de una extensión permitida.</summary>
+    private static readonly string[] ProcedenciaDentro = ["discriminador", "columna_excel", "hoja"];
+
+    /// <summary>Datos del autor (ejemplos, valores): ahí una clave <c>x-…</c> no es una extensión.</summary>
+    private static readonly string[] Datos = ["example", "examples", "default", "enum", "const", "value"];
+
+    /// <summary>Mapas de nombres del autor (propiedades, cabeceras…): ahí una clave <c>x-…</c> es un nombre.</summary>
+    private static readonly string[] Nombres = ["properties", "patternProperties", "$defs", "definitions", "headers", "content", "variables", "scopes", "mapping", "links", "callbacks", "encoding"];
+
+    /// <summary>
+    /// Rutas de los nodos marcados como internos, de las extensiones fuera de la lista blanca y de las claves de
+    /// procedencia dentro de una permitida.
+    /// </summary>
     public static List<string> Internos(JsonObject raiz)
     {
         var lista = new List<string>();
@@ -131,15 +146,50 @@ internal static class OraculoPoda
             {
                 lista.Add(ruta);
             }
-            foreach (var extension in Procedencia)
-            {
-                if (o.ContainsKey(extension))
-                {
-                    lista.Add($"{ruta}/{extension}");
-                }
-            }
         });
+        Extensiones(raiz, "", lista, sonNombres: false);
         return lista;
+    }
+
+    private static void Extensiones(JsonNode? nodo, string ruta, List<string> lista, bool sonNombres)
+    {
+        switch (nodo)
+        {
+            case JsonObject o:
+                foreach (var (k, h) in o)
+                {
+                    if (sonNombres)
+                    {
+                        Extensiones(h, ruta + "/" + k, lista, sonNombres: false);
+                    }
+                    else if (k.StartsWith("x-", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if ((k is "x-internal" or "x-interno") && Marcado(h))
+                        {
+                            continue; // ya cuenta como nodo interno
+                        }
+                        if (!Permitidas.Contains(k))
+                        {
+                            lista.Add($"{ruta}/{k}");
+                        }
+                        else
+                        {
+                            Recorrer(h, (dentro, r) => lista.AddRange(ProcedenciaDentro.Where(dentro.ContainsKey).Select(c => $"{ruta}/{k}{r}/{c}")));
+                        }
+                    }
+                    else if (!Datos.Contains(k))
+                    {
+                        Extensiones(h, ruta + "/" + k, lista, Nombres.Contains(k) && h is JsonObject m && !(k == "headers" && (m.ContainsKey("type") || m.ContainsKey("properties"))));
+                    }
+                }
+                break;
+            case JsonArray a:
+                for (var i = 0; i < a.Count; i++)
+                {
+                    Extensiones(a[i], ruta + "/" + i.ToString(CultureInfo.InvariantCulture), lista, sonNombres: false);
+                }
+                break;
+        }
     }
 
     private static bool Marcado(JsonNode? n) => n is JsonValue v && v.GetValueKind() == JsonValueKind.True;

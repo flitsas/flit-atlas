@@ -1,15 +1,18 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Flit.Atlas.Modulos.Contratos.Datos;
 using Flit.Atlas.Modulos.Contratos.Portal;
 using Flit.Atlas.Plataforma;
 using Flit.Atlas.Plataforma.Datos;
+using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
@@ -42,13 +45,35 @@ internal static class EndpointsSandbox
         "Referer", "Content-Length", "Content-Type", "Accept-Encoding", "Expect",
     };
 
-    /// <summary>Cabeceras de la respuesta de Microcks que no llegan al cliente.</summary>
-    private static readonly HashSet<string> RespuestaQueNoPasa = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// Cabeceras de la respuesta de Microcks que llegan al cliente (lista blanca, F4-SEC-26): las de contenido y las propias
+    /// del contrato (<c>X-…</c>, salvo las de <see cref="PrefijosQueNoPasan"/>). Nada de <c>Location</c>, cookies, CORS, CSP
+    /// ni <c>Server</c>: el mock no decide la seguridad de la respuesta de Atlas.
+    /// </summary>
+    private static readonly HashSet<string> RespuestaQuePasa = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Connection", "Keep-Alive", "Transfer-Encoding", "Upgrade", "Trailer", "Set-Cookie", "Content-Length", "Server",
-        "Access-Control-Allow-Origin", "Access-Control-Allow-Methods", "Access-Control-Allow-Headers", "Access-Control-Max-Age",
-        "Access-Control-Allow-Credentials", "Access-Control-Expose-Headers",
+        "Content-Type", "Content-Language", "Content-Encoding", "ETag", "Last-Modified", "Retry-After", "Vary",
     };
+
+    /// <summary>Cabeceras <c>X-…</c> del mock que no pasan: las de Atlas, las de seguridad (las pone Atlas) y las del servidor.</summary>
+    private static readonly string[] PrefijosQueNoPasan =
+    [
+        "X-Atlas-", "X-Microcks-", "X-Forwarded-", "X-Powered-By", "X-AspNet", "X-Frame-Options", "X-Content-Type-Options",
+        "X-XSS-Protection", "X-Robots-Tag", "X-Permitted-Cross-Domain-Policies",
+    ];
+
+    /// <summary>Acción de la auditoría cuando el proxy niega una llamada a un sandbox que existe (F4-SEC-25).</summary>
+    public const string AccionNegado = "contratos.sandbox_acceso_negado";
+
+    /// <summary>
+    /// Cuánto se guarda la revisión de que quien activó el sandbox sigue teniendo acceso (F4-SEC-22): la llave es de esa
+    /// persona y deja de servir, a lo sumo en este tiempo, cuando pierde el rol, el permiso o el alcance.
+    /// </summary>
+    internal static readonly TimeSpan VidaRevisionActivador = TimeSpan.FromSeconds(30);
+
+    internal static bool PasaAlCliente(string nombre) =>
+        RespuestaQuePasa.Contains(nombre)
+        || (nombre.StartsWith("X-", StringComparison.OrdinalIgnoreCase) && !PrefijosQueNoPasan.Any(p => nombre.StartsWith(p, StringComparison.OrdinalIgnoreCase)));
 
     // --- DTO ---
 
@@ -140,8 +165,10 @@ internal static class EndpointsSandbox
 
         // El proxy: sin sesión (lo llaman los sistemas del cliente con curl o su código). Se autentica con la llave; no está
         // en el contrato OpenAPI de Atlas porque reenvía cualquier ruta del contrato del cliente.
+        // Busca la llave en los sandboxes de todas las organizaciones: alcance del sistema, pedido aquí (ATLAS-ADR-0050).
         grupo.MapMethods(RutaProxy + "{ruta}/{contrato}/{**resto}", Metodos, ProxyAsync)
             .AllowAnonymous()
+            .ConAlcanceDelSistemaSinSesion()
             .ExcludeFromDescription()
             .WithName("ProxySandbox");
     }
@@ -223,7 +250,8 @@ internal static class EndpointsSandbox
     // --- Proxy ---
 
     private static async Task<IResult> ProxyAsync(
-        string ruta, string contrato, string? resto, HttpContext http, ContratosDbContext contexto, IClienteMicrocks microcks,
+        string ruta, string contrato, string? resto, HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma,
+        IClienteMicrocks microcks, AccesoPortal acceso, CalculadoraPermisos calculadora, IMemoryCache cache,
         IOptions<OpcionesSandbox> opciones, TimeProvider reloj, CancellationToken ct)
     {
         http.Response.Headers.CacheControl = "no-store";
@@ -245,9 +273,13 @@ internal static class EndpointsSandbox
         }
         var sandbox = await contexto.Sandboxes.AsNoTracking().FirstOrDefaultAsync(s => s.Ruta == ruta, ct);
         // La misma respuesta si no existe o si la llave no es la suya: no se revela si la ruta existe.
-        if (sandbox is null || !CryptographicOperations.FixedTimeEquals(sandbox.LlaveHash, ServicioSandbox.Hash(llave)))
+        if (sandbox is null)
         {
             return NoEsta();
+        }
+        if (!CryptographicOperations.FixedTimeEquals(sandbox.LlaveHash, ServicioSandbox.Hash(llave)))
+        {
+            return await NegadoAsync(http, plataforma, reloj, sandbox, "llave_invalida", ct);
         }
         var ahora = reloj.GetUtcNow();
         // En cada llamada, aunque el trabajo periódico aún no lo haya apagado: compartición vigente, con sandbox y paquete publicado.
@@ -255,7 +287,13 @@ internal static class EndpointsSandbox
         var paquete = await contexto.Paquetes.AsNoTracking().FirstOrDefaultAsync(x => x.Id == sandbox.PaqueteId, ct);
         if (sandbox.Estado != EstadoSandbox.Activo || sandbox.ExpiraEn <= ahora || ServicioSandbox.MotivoParaApagar(comparticion, paquete, ahora) is not null)
         {
-            return NoEsta();
+            return await NegadoAsync(http, plataforma, reloj, sandbox, "sandbox_inactivo", ct);
+        }
+        // La llave es de quien activó el sandbox: si perdió el acceso al paquete (rol, permiso, alcance, suspensión), deja
+        // de servir aunque la compartición siga (F4-SEC-22).
+        if (!await ActivadorConservaAccesoAsync(sandbox, acceso, calculadora, cache, ct))
+        {
+            return await NegadoAsync(http, plataforma, reloj, sandbox, "activador_sin_acceso", ct);
         }
         if (ServicioSandbox.Leer(sandbox.Contratos).FirstOrDefault(c => c.Segmento == contrato) is not { } importado)
         {
@@ -310,15 +348,18 @@ internal static class EndpointsSandbox
             await contexto.Sandboxes.Where(s => s.Id == sandbox.Id && (s.UltimoUsoEn == null || s.UltimoUsoEn < hace))
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.UltimoUsoEn, ahora), ct);
 
+            // Una redirección del mock no se sigue (AllowAutoRedirect=false) ni se reenvía su Location (F4-SEC-26).
             http.Response.StatusCode = (int)respuesta.StatusCode;
             foreach (var (nombre, valores) in respuesta.Headers.Concat(respuesta.Content.Headers))
             {
-                if (!RespuestaQueNoPasa.Contains(nombre) && !string.Equals(nombre, "Cache-Control", StringComparison.OrdinalIgnoreCase))
+                if (PasaAlCliente(nombre))
                 {
                     http.Response.Headers[nombre] = valores.ToArray();
                 }
             }
             http.Response.Headers["X-Atlas-Sandbox"] = "nivel-1";
+            http.Response.Headers.XContentTypeOptions = "nosniff";
+            http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'; sandbox";
             if (!HttpMethods.IsHead(http.Request.Method))
             {
                 await respuesta.Content.CopyToAsync(http.Response.Body, ct);
@@ -391,6 +432,47 @@ internal static class EndpointsSandbox
     private static string Texto(EstadoSandbox estado) => estado == EstadoSandbox.Activo ? "activo" : "apagado";
 
     private static IResult Error(int estado, string codigo, string mensaje) => Results.Json(new ErrorSandbox(codigo, mensaje), statusCode: estado);
+
+    /// <summary>
+    /// ¿Quien activó el sandbox sigue pudiendo usarlo? Las mismas reglas del portal (<see cref="AccesoPortal.VistaDeAsync"/>)
+    /// con sus permisos de ahora, guardado <see cref="VidaRevisionActivador"/> para no recalcular en cada llamada.
+    /// </summary>
+    private static async Task<bool> ActivadorConservaAccesoAsync(
+        SandboxPaquete sandbox, AccesoPortal acceso, CalculadoraPermisos calculadora, IMemoryCache cache, CancellationToken ct)
+    {
+        var clave = $"atlas.contratos.sandbox.activador:{sandbox.Id}:{sandbox.ActivadoPor}:{sandbox.Revision}";
+        if (cache.TryGetValue(clave, out bool vale))
+        {
+            return vale;
+        }
+        var permisos = await calculadora.CalcularAsync(sandbox.ActivadoPor, ct);
+        var vista = await acceso.VistaDeAsync(sandbox.ActivadoPor, sandbox.OrganizacionId, permisos, ct);
+        var paquete = vista.Paquetes.FirstOrDefault(p => p.Paquete.Id == sandbox.PaqueteId);
+        vale = paquete is { Nivel: NivelPortal.Tecnico, PuedeSandbox: true } && paquete.Comparticion.PuedeSandbox;
+        cache.Set(clave, vale, VidaRevisionActivador);
+        return vale;
+    }
+
+    /// <summary>404 como si no existiera, auditado con la organización del sandbox (F4-SEC-25); nunca la llave.</summary>
+    private static async Task<IResult> NegadoAsync(
+        HttpContext http, PlataformaDbContext plataforma, TimeProvider reloj, SandboxPaquete sandbox, string motivo, CancellationToken ct)
+    {
+        plataforma.Auditoria.Add(new EventoAuditoria
+        {
+            OcurridoEn = reloj.GetUtcNow(),
+            ActorTipo = TipoActor.Sistema,
+            ActorId = "sandbox",
+            OrganizacionId = sandbox.OrganizacionId,
+            Accion = AccionNegado,
+            RecursoTipo = "contratos_sandbox",
+            RecursoId = sandbox.Id.ToString(),
+            Ip = http.Connection.RemoteIpAddress,
+            Datos = JsonSerializer.Serialize(new { motivo, paqueteId = sandbox.PaqueteId }, JsonSerializerOptions.Web),
+            CorrelacionId = http.TraceIdentifier,
+        });
+        await plataforma.SaveChangesAsync(ct);
+        return NoEsta();
+    }
 
     private static IResult NoEsta() => Error(StatusCodes.Status404NotFound, "no_encontrado", "El sandbox no existe, la llave no es la suya o ya no está activo.");
 

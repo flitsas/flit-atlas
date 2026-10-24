@@ -28,6 +28,9 @@ public static class ExtensionesPlataforma
         ArgumentException.ThrowIfNullOrWhiteSpace(cadenaConexion);
 
         servicios.AddDbContext<PlataformaDbContext>(o => PlataformaDbContext.Configurar(o, cadenaConexion));
+        // Fuera de local, con un rol de base con privilegios atlas-api no queda lista (ATLAS-ADR-0050).
+        servicios.AddSingleton<ChequeoRolBaseDeDatos>();
+        servicios.AddHealthChecks().AddCheck<ChequeoRolBaseDeDatos>(ChequeoRolBaseDeDatos.Nombre);
 
         var opciones = new OpcionesMensajeria();
         configurar?.Invoke(opciones);
