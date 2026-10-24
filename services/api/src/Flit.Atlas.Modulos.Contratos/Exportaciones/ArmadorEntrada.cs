@@ -179,7 +179,9 @@ internal static class ArmadorEntrada
             .Select(g => new GuiaEntrada(Recortar(g.Titulo, MaximoTexto), cuerpos[(g.GuiaId, g.Revision)].Contenido))
             .ToList();
         var revision = paquete.RevisionPaquete;
-        var changelog = await ChangelogPaqueteAsync(contexto, paquete.Paquete.Id, revision.Numero, ct).ConfigureAwait(false);
+        // Solo los contratos que se exportan a esta persona: el changelog no nombra los que quedan fuera de su alcance (F4-SEC-23).
+        var visibles = contratos.Select(c => c.Contrato.Id).ToHashSet();
+        var changelog = await ChangelogPaqueteAsync(contexto, paquete.Paquete.Id, revision.Numero, ct, visibles).ConfigureAwait(false);
         var metadatos = new MetadatosEntrada(Recortar(revision.Nombre, MaximoTexto), revision.Numero, Recortar(organizacion, MaximoTexto), FechaBogota(ahora), changelog);
         return new EntradaArmada(new EntradaExportacion(metadatos, specs, guias), $"{revision.Nombre} · revisión {revision.Numero}", null);
     }
@@ -217,14 +219,21 @@ internal static class ArmadorEntrada
     /// salieron, qué versiones cambiaron y cuántas operaciones y guías se agregaron o quitaron. Se genera de las
     /// definiciones; la nota de cada revisión no sale (es texto libre interno y puede traer datos personales).
     /// </summary>
-    internal static async Task<IReadOnlyList<EntradaChangelog>> ChangelogPaqueteAsync(ContratosDbContext contexto, Guid paqueteId, int hasta, CancellationToken ct)
+    /// <param name="visibles">
+    /// En el portal, los contratos que se exportan a la persona: los demás no se nombran ni se cuentan (F4-SEC-23). Null en
+    /// las exportaciones internas (todo el paquete).
+    /// </param>
+    internal static async Task<IReadOnlyList<EntradaChangelog>> ChangelogPaqueteAsync(
+        ContratosDbContext contexto, Guid paqueteId, int hasta, CancellationToken ct, IReadOnlySet<Guid>? visibles = null)
     {
         var revisiones = await contexto.RevisionesPaquete.AsNoTracking()
             .Where(r => r.PaqueteId == paqueteId && r.Numero <= hasta)
             .OrderBy(r => r.Numero)
             .Select(r => new { r.Numero, r.Definicion, r.GuardadaEn })
             .ToListAsync(ct);
-        var definiciones = revisiones.Select(r => FotoPaquete.LeerDefinicion(r.Definicion)).ToList();
+        var definiciones = revisiones
+            .Select(r => (IReadOnlyList<EntradaPaquete>)[.. FotoPaquete.LeerDefinicion(r.Definicion).Where(e => visibles is null || visibles.Contains(e.ContratoId))])
+            .ToList();
         var idsContratos = definiciones.SelectMany(d => d.Select(e => e.ContratoId)).Distinct().ToList();
         var idsVersiones = definiciones.SelectMany(d => d.Select(e => e.VersionId)).Distinct().ToList();
         var codigos = await contexto.Contratos.AsNoTracking().Where(c => idsContratos.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Codigo, ct);
@@ -235,7 +244,7 @@ internal static class ArmadorEntrada
         {
             var cambio = i == 0
                 ? Primera(definiciones[0])
-                : Diferencias(definiciones[i - 1], definiciones[i], codigos, numeros);
+                : Diferencias(definiciones[i - 1], definiciones[i], codigos, numeros, filtrado: visibles is not null);
             entradas.Add(new EntradaChangelog(revisiones[i].Numero.ToString(CultureInfo.InvariantCulture), FechaBogota(revisiones[i].GuardadaEn),
                 Recortar(cambio, MaximoCambio)));
         }
@@ -249,7 +258,7 @@ internal static class ArmadorEntrada
 
     private static string Diferencias(
         IReadOnlyList<EntradaPaquete> antes, IReadOnlyList<EntradaPaquete> despues, IReadOnlyDictionary<Guid, string> codigos,
-        IReadOnlyDictionary<Guid, string> numeros)
+        IReadOnlyDictionary<Guid, string> numeros, bool filtrado)
     {
         string Codigo(Guid id) => codigos.GetValueOrDefault(id) ?? "contrato retirado";
         string Numero(Guid id) => numeros.GetValueOrDefault(id) ?? "?";
@@ -293,7 +302,8 @@ internal static class ArmadorEntrada
                 frases.Add($"{Codigo(e.ContratoId)}: {string.Join(", ", partes)}.");
             }
         }
-        return frases.Count > 0 ? string.Join(" ", frases) : "Cambios en el nombre o la descripción del paquete.";
+        return frases.Count > 0 ? string.Join(" ", frases)
+            : filtrado ? "Sin cambios en los contratos que se te comparten." : "Cambios en el nombre o la descripción del paquete.";
     }
 
     /// <summary>El changelog que calculó la CI con oasdiff (su campo <c>text</c>), o la publicación si no trae.</summary>

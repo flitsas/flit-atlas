@@ -27,6 +27,28 @@ class ScopeInsuficienteError(Exception):
 
 ResolverClave = Callable[[str], Any]
 
+# El JWKS vale 5 minutos en caché; un `kid` desconocido lo vuelve a pedir como mucho cada 30 s (F4-SEC-29).
+VIDA_JWKS_SEGUNDOS = 300
+ESPERA_REFRESCO_SEGUNDOS = 30
+
+
+def resolvedor_jwks(jwks_url: str, cliente: PyJWKClient | None = None) -> ResolverClave:
+    """Llave pública del `kid` del token, desde el JWKS de atlas-api.
+
+    Sin caché de llaves por `kid` (`cache_keys=False`): la de PyJWT no vence, así que una llave retirada del JWKS
+    seguiría valiendo. Se guarda en caché el JWKS completo (`lifespan`) y, ante un `kid` que no está, PyJWKClient lo
+    vuelve a pedir solo si pasó la espera (`cooldown_duration`): un `kid` inventado en cada petición no lo martilla.
+    """
+    cliente = cliente or PyJWKClient(
+        jwks_url,
+        cache_keys=False,
+        cache_jwk_set=True,
+        lifespan=VIDA_JWKS_SEGUNDOS,
+        cooldown_duration=ESPERA_REFRESCO_SEGUNDOS,
+        timeout=5,
+    )
+    return lambda token: cliente.get_signing_key_from_jwt(token).key
+
 
 @dataclass
 class ValidadorTokens:
@@ -41,9 +63,7 @@ class ValidadorTokens:
     def desde_jwks(cls, jwks_url: str | None, emisor: str | None, audiencia: str, scope: str) -> "ValidadorTokens":
         resolver: ResolverClave | None = None
         if jwks_url:
-            # PyJWKClient guarda en caché el JWKS y lo vuelve a pedir si llega un `kid` desconocido (rotación).
-            cliente = PyJWKClient(jwks_url, cache_keys=True, lifespan=300, timeout=5)
-            resolver = lambda token: cliente.get_signing_key_from_jwt(token).key  # noqa: E731
+            resolver = resolvedor_jwks(jwks_url)
         return cls(emisor, audiencia, scope, resolver)
 
     def validar(self, token: str) -> dict[str, Any]:

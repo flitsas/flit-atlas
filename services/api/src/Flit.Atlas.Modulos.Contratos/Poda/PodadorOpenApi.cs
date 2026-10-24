@@ -13,7 +13,8 @@ namespace Flit.Atlas.Modulos.Contratos.Poda;
 /// <item>Conserva solo los métodos seleccionados de <c>paths</c> (y de <c>webhooks</c> en 3.1); una ruta que es
 /// <c>$ref</c> a <c>components/pathItems</c> se copia en línea antes de podarla.</item>
 /// <item>Reescribe los <c>servers</c> de la raíz con las URL públicas del destino y quita los de rutas, operaciones y links.</item>
-/// <item>Quita todo nodo <c>x-internal: true</c> o <c>x-interno: true</c>, y los links a operaciones que no se comparten.</item>
+/// <item>Quita todo nodo <c>x-internal: true</c> o <c>x-interno: true</c>, toda extensión <c>x-*</c> fuera de la lista blanca
+/// (<see cref="ExtensionesPoda"/>) y los links a operaciones que no se comparten.</item>
 /// <item>Cierre transitivo de <c>$ref</c> (más <c>discriminator.mapping</c> y los <c>securitySchemes</c> usados en
 /// <c>security</c>): se quita todo componente no alcanzado y las etiquetas sin uso.</item>
 /// <item>Verifica el resultado (referencias, nada interno, índice ⊆ selección) antes de devolverlo.</item>
@@ -60,6 +61,7 @@ internal sealed partial class PodadorOpenApi : IPodadorSpec
         }
         Servidores(trabajo, urls, solicitud.Destino.Ambiente);
         var internos = QuitarInternos(trabajo);
+        ExtensionesPoda.Quitar(trabajo, cabecerasSonMapa: true);
         QuitarLinksNoCompartidos(trabajo, advertencias);
         QuitarServidoresAnidados(trabajo);
         var (conservados, eliminados) = Cerrar(trabajo, [], esquemas);
@@ -69,7 +71,7 @@ internal sealed partial class PodadorOpenApi : IPodadorSpec
             trabajo.Remove("tags");
         }
 
-        Verificar(trabajo);
+        Verificar(trabajo, cabecerasSonMapa: true);
         var resultado = Indice(trabajo, es31);
         if (resultado.Any(e => !ubicaciones.Contains(e.Ubicacion)) || resultado.Count != ubicaciones.Count)
         {

@@ -38,7 +38,7 @@ flowchart LR
 | Pieza | Imagen (`ghcr.io/flitsas/flit-atlas/…`) | Puerto qa / pdn | Qué hace | Estado en qa |
 |---|---|---|---|---|
 | `atlas-api` | `atlas-api` | 5031 / 6031 | BFF de la PWA, identidad (Entra, cuentas externas, OpenIddict), módulos, outbox, consumidor de resultados | desplegado |
-| migrador | `atlas-migrador` | — | initContainer de atlas-api: aplica las migraciones de todos los módulos y siembra permisos y banderas; si falla, atlas-api no arranca | desplegado |
+| migrador | `atlas-migrador` | — | initContainer de atlas-api: aplica las migraciones de todos los módulos, siembra permisos y banderas y concede los permisos del rol de la aplicación (ATLAS-ADR-0050), con el rol `flit_atlas_migrador`; si falla, atlas-api no arranca | desplegado (**[por verificar]** con su propio rol) |
 | `atlas-web` | `atlas-web` | 5032 / 6032 | nginx sin privilegios: la PWA, el visor de contratos y el reenvío del BFF; pone la CSP y las cabeceras | desplegado |
 | `atlas-docs` | `atlas-docs` | 5035 / 6035 | Genera las exportaciones (cola `atlas.docs.exportaciones`, concurrencia 1 por pod) | **[por verificar]** Deployment y variables |
 | `atlas-render` | `atlas-render` | 5033 / 6033 | Diff de contratos con oasdiff (ATLAS-ADR-0036) | **[por verificar]** |
@@ -49,13 +49,53 @@ flowchart LR
 
 | Dependencia | Detalle |
 |---|---|
-| Postgres 16 del host | Base del ambiente, esquema `atlas`, usuario `flit_atlas` (solo ese esquema en su `search_path`); `vector` y `unaccent` creados por el administrador en `atlas`. RLS en las tablas con organización (el usuario no se la salta) |
+| Postgres 16 del host | Base del ambiente, esquema `atlas` y **dos roles** (ATLAS-ADR-0050, ver «Roles de la base» abajo): `flit_atlas_migrador`, dueño del esquema y de las tablas, que solo usa el migrador, y `flit_atlas`, el de atlas-api, sin propiedad, sin superusuario y sin `BYPASSRLS` (solo `atlas` en su `search_path`); `vector` y `unaccent` creados por el administrador en `atlas`. RLS en las tablas con organización: ninguno de los dos se la salta y la aplicación no puede apagarla |
 | Redis | Caché y llaves de Data Protection compartidas entre réplicas; con contraseña |
 | RabbitMQ | vhost `atlas`; exchanges `flit.atlas` (publica atlas-api) y `flit.atlas.docs` (publica atlas-docs). **Un usuario por servicio** con permisos solo sobre sus exchanges y colas (ATLAS-ADR-0044) **[por verificar en flit-gitops]** |
 | S3 | Bucket `atlas` por ambiente (MinIO o RustFS en qa, Contabo en pdn). Dos hosts: el **interno** (`Plataforma__Almacenamiento__Endpoint`, para subir y borrar) y el **público** (`…__EndpointPublico`), con el que se **firman** las URL de descarga: la firma incluye el host, así que debe ser el que alcanza el navegador. El bucket necesita **CORS `GET` desde el origen de Atlas** (compartir el archivo desde el móvil lo baja con `fetch`, HU 4.6) y una regla de ciclo de vida para entradas huérfanas bajo `exportaciones/` **[por verificar]** |
 | Entra ID | App «Flit Atlas» por ambiente: plataforma Web, redirect `https://<host>/api/auth/callback/azure-ad`, claim opcional `auth_time`, permisos de aplicación de Graph con consentimiento (`User.Read.All`, `GroupMember.Read.All`, calendario del soporte) |
 | Correo | SMTP de Office 365 con STARTTLS (o Graph `sendMail`), remitente configurado; sin él, atlas-api arranca pero no salen invitaciones ni recuperaciones |
 | GitHub Actions | Emisor OIDC de la publicación de contratos (`token.actions.githubusercontent.com`), audiencia = URL pública del ambiente |
+
+### Roles de la base (ATLAS-ADR-0050)
+
+Hasta F4, `flit_atlas` era dueño del esquema y de las tablas: con `FORCE ROW LEVEL SECURITY` RLS le aplicaba, pero una
+inyección SQL podía hacer `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` (hallazgo F4-SEC-10). Ahora el dueño es otro rol y
+la aplicación solo tiene los permisos de datos. Lo hace el **administrador de la base** (DBA), una vez por ambiente;
+nombres de los roles, nunca sus contraseñas (van en los SealedSecrets de §4):
+
+1. Crear el rol del migrador, dueño del esquema (el script de flit `servicio-con-esquema-propio.sql` crea `flit_atlas`;
+   este paso es adicional): `CREATE ROLE flit_atlas_migrador LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
+   NOREPLICATION PASSWORD '…';` y `GRANT CONNECT ON DATABASE <base> TO flit_atlas_migrador;`.
+2. Pasarle la propiedad de lo que ya existe (en una base que ya tenía Atlas): `ALTER SCHEMA atlas OWNER TO
+   flit_atlas_migrador;` y `REASSIGN OWNED BY flit_atlas TO flit_atlas_migrador;` (dentro de la base del ambiente; mueve
+   tablas, secuencias y funciones de `atlas`). Las extensiones `vector` y `unaccent` siguen siendo del administrador.
+3. Dejar a `flit_atlas` sin privilegios: `ALTER ROLE flit_atlas NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;`,
+   `REVOKE CREATE ON SCHEMA atlas FROM flit_atlas;` y `REVOKE CREATE ON SCHEMA public FROM flit_atlas;`.
+4. Configurar el initContainer del migrador con su propia cadena (`ConnectionStrings__atlas` con `flit_atlas_migrador`,
+   en `atlas-migrador-secrets`) y, si el rol de la aplicación no se llama `flit_atlas`,
+   `Atlas__BaseDeDatos__RolAplicacion`. atlas-api sigue con la de `flit_atlas` (`atlas-api-secrets`).
+
+Los permisos de `flit_atlas` los concede **el migrador** al final de cada corrida (`RolesBaseDeDatos.Sql`, idempotente;
+el log dice «Permisos concedidos al rol de la aplicación flit_atlas»):
+
+| Sobre | `flit_atlas` recibe |
+|---|---|
+| Esquema `atlas` | `USAGE` (sin `CREATE`) |
+| Tablas de `atlas` | `SELECT, INSERT, UPDATE, DELETE` (sin `TRUNCATE`, `REFERENCES` ni `TRIGGER`) |
+| `plataforma_auditoria`, `identidad_evento_seguridad` | solo `SELECT, INSERT` (de solo inserción) |
+| `__ef_migraciones_*` | nada (solo el migrador) |
+| Secuencias y funciones de `atlas` (las de RLS) | `USAGE, SELECT` y `EXECUTE` |
+| Lo que creen migraciones siguientes | lo mismo, con `ALTER DEFAULT PRIVILEGES IN SCHEMA atlas` del migrador |
+
+Verificación: `/health/ready` de atlas-api incluye el chequeo `rol-base-de-datos`, que en dev, qa y pdn falla (la
+réplica no recibe tráfico) si su rol es superusuario, tiene `BYPASSRLS` o es dueño de alguna tabla de `atlas`; en local
+solo avisa en el log. A mano: `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'flit_atlas';` (los dos en
+falso) y `SELECT count(*) FROM pg_tables WHERE schemaname = 'atlas' AND tableowner = 'flit_atlas';` (cero).
+
+**Orden del despliegue que separa los roles:** pasos 1 a 3 del DBA → nueva cadena del migrador en flit-gitops → desplegar
+la versión con ATLAS-ADR-0050. Si se despliega antes, el migrador avisa que corre con el rol de la aplicación y atlas-api
+queda no lista fuera de local (no hay corte del servicio que ya corría: la versión anterior sigue sirviendo).
 
 ## 4. Configuración
 
@@ -77,7 +117,8 @@ Ajustes de operación con buenos valores por defecto (solo si hace falta): `Iden
 
 | Secret | Claves |
 |---|---|
-| `atlas-api-secrets` | `ConnectionStrings__atlas`, `ConnectionStrings__redis`, `ConnectionStrings__rabbitmq`, `Identidad__Entra__ClientCredentials__0__ClientSecret`, `Identidad__ProteccionDatos__ClaveCertificado` (más `RABBITMQ_DEFAULT_USER`/`_PASS` y `REDIS_PASSWORD` para sus servicios) |
+| `atlas-migrador-secrets` **[por verificar: crearlo en flit-gitops]** | `ConnectionStrings__atlas` con el rol `flit_atlas_migrador` (solo el initContainer del migrador) |
+| `atlas-api-secrets` | `ConnectionStrings__atlas` (rol `flit_atlas`), `ConnectionStrings__redis`, `ConnectionStrings__rabbitmq`, `Identidad__Entra__ClientCredentials__0__ClientSecret`, `Identidad__ProteccionDatos__ClaveCertificado` (más `RABBITMQ_DEFAULT_USER`/`_PASS` y `REDIS_PASSWORD` para sus servicios) |
 | `atlas-tokens` | `firma.pfx`, `cifrado.pfx` y `clave` (certificados de OpenIddict) |
 | `atlas-correo` | `Plataforma__Correo__Smtp__Clave` |
 | almacenamiento **[por verificar]** | `Plataforma__Almacenamiento__Usuario`, `…__Clave`; para atlas-docs `ATLAS_DOCS_S3_ACCESS_KEY` y `ATLAS_DOCS_S3_SECRET_KEY` |
@@ -101,7 +142,7 @@ Los SealedSecrets los generan los scripts del host en `flit-gitops/docs/host-<vp
 
 | Pieza | Arranque | Listo | Vivo |
 |---|---|---|---|
-| atlas-api | `/health/live`, cada 5 s, 60 fallos (5 min: migraciones y llaves) | `/health/ready` (Postgres, Redis, RabbitMQ), cada 10 s, timeout 5 s, 3 fallos | `/health/live`, cada 30 s, timeout 5 s, 6 fallos |
+| atlas-api | `/health/live`, cada 5 s, 60 fallos (5 min: migraciones y llaves) | `/health/ready` (Postgres, Redis, RabbitMQ y el rol de la base sin privilegios, ATLAS-ADR-0050), cada 10 s, timeout 5 s, 3 fallos | `/health/live`, cada 30 s, timeout 5 s, 6 fallos |
 | atlas-web | — | `/healthz` cada 10 s | `/healthz`, retraso 10 s, cada 30 s, timeout 5 s, 5 fallos |
 | atlas-docs | — | `/health/ready` (bucket) | `/health/live` |
 

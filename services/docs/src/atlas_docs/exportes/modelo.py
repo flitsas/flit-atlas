@@ -17,6 +17,9 @@ MAX_SPECS = 30
 MAX_GUIAS = 50
 MAX_BYTES_SPEC = 5 * 1024 * 1024
 MAX_BYTES_GUIA = 512 * 1024
+# Tope del cuerpo de `POST /exportes` y de la entrada leída del S3, en bytes y antes de leerla (F4-SEC-12). Los topes de
+# arriba cuentan caracteres y solo se revisan después de leer y parsear todo: este es el que protege la memoria.
+MAX_BYTES_ENTRADA = 64 * 1024 * 1024
 
 
 class Formato(StrEnum):

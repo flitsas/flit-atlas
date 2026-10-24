@@ -160,7 +160,11 @@ public sealed class ModuloContratos : IModuloAtlas
         // Sandbox nivel 1 con Microcks (HU 4.7, ATLAS-ADR-0045): sin Contratos:Sandbox:UrlMicrocks no está disponible (503)
         // y el trabajo periódico no hace nada.
         servicios.AddOptions<Sandbox.OpcionesSandbox>().BindConfiguration(Sandbox.OpcionesSandbox.Seccion);
-        servicios.AddHttpClient(Sandbox.ClienteMicrocks.NombreCliente).RemoveAllLoggers();
+        // Sin seguir redirecciones: un mock (o Microcks) no puede llevar a atlas-api a otro host (F4-SEC-26).
+        servicios.AddHttpClient(Sandbox.ClienteMicrocks.NombreCliente).RemoveAllLoggers()
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        // La revisión de quien activó cada sandbox (F4-SEC-22) se guarda unos segundos.
+        servicios.AddMemoryCache();
         servicios.AddSingleton<Sandbox.IClienteMicrocks, Sandbox.ClienteMicrocks>();
         servicios.AddScoped<Sandbox.ServicioSandbox>();
         servicios.AddHostedService<Sandbox.TrabajoSandbox>();

@@ -43,11 +43,32 @@ public sealed class EntornoApi : IAsyncLifetime
 
     private int _bases;
 
+    /// <summary>
+    /// Rol con que corre atlas-api en las pruebas (ATLAS-ADR-0050): el de la aplicación, sin superusuario, sin BYPASSRLS y
+    /// sin ser dueño de las tablas, para que RLS aplique como en dev, qa y pdn. El superusuario del contenedor hace de
+    /// migrador (dueño) y de administrador de las pruebas.
+    /// </summary>
+    public const string RolAplicacion = RolesBaseDeDatos.RolAplicacionPorDefecto;
+
+    // Clave de un solo uso para el contenedor efímero, generada en cada corrida.
+    private readonly string _claveAplicacion = Guid.NewGuid().ToString("N");
+
     public async ValueTask InitializeAsync()
     {
         await Task.WhenAll(Postgres.StartAsync(), Redis.StartAsync());
+        await using (var conexion = new NpgsqlConnection(Postgres.GetConnectionString()))
+        {
+            await conexion.OpenAsync();
+            await using var comando = new NpgsqlCommand(
+                $"CREATE ROLE {RolAplicacion} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '{_claveAplicacion}'", conexion);
+            await comando.ExecuteNonQueryAsync();
+        }
         await MigrarAsync(Postgres.GetConnectionString());
     }
+
+    /// <summary>La misma base con el rol de la aplicación: la cadena que usa atlas-api.</summary>
+    public string ComoAplicacion(string? cadena = null) =>
+        new NpgsqlConnectionStringBuilder(cadena ?? Postgres.GetConnectionString()) { Username = RolAplicacion, Password = _claveAplicacion }.ConnectionString;
 
     /// <summary>Base nueva y migrada, para las pruebas que necesitan partir de cero (p. ej. el primer ingreso).</summary>
     public async Task<string> BaseNuevaAsync()
@@ -84,6 +105,8 @@ public sealed class EntornoApi : IAsyncLifetime
         await ExtensionesModulos.RegistrarBanderasAsync(plataforma, ModulosAtlas.Registrados, TimeProvider.System);
         await SembradorPermisos.SembrarAsync(plataforma, CatalogoPermisos.Crear(ModulosAtlas.Manifiestos));
         await ExtensionesModulos.SembrarModulosAsync(servicios, ModulosAtlas.Registrados);
+        // Y lo último que hace el migrador: los permisos del rol de la aplicación (ATLAS-ADR-0050).
+        await RolesBaseDeDatos.ConcederAsync(plataforma, RolAplicacion);
     }
 
     public async ValueTask DisposeAsync()
@@ -134,7 +157,7 @@ public sealed class EntornoApi : IAsyncLifetime
                 }
                 servicios?.Invoke(s);
             });
-            b.UseSetting("ConnectionStrings:atlas", baseDeDatos ?? Postgres.GetConnectionString());
+            b.UseSetting("ConnectionStrings:atlas", ComoAplicacion(baseDeDatos));
             b.UseSetting("ConnectionStrings:redis", Redis.GetConnectionString());
             // No se usa en estas pruebas (salvo las que traen su broker): la outbox solo abre la conexión cuando hay eventos
             // por publicar.
@@ -238,6 +261,8 @@ public sealed class EntornoApi : IAsyncLifetime
                     await siguiente(http);
                     return;
                 }
+                // Como el ingreso de verdad: antes de la sesión, alcance del sistema pedido explícitamente (ATLAS-ADR-0050).
+                using var sistema = AlcanceDelSistema.Abrir();
                 var pedido = await http.Request.ReadFromJsonAsync<PedidoIngresoPrueba>();
                 var usuarios = http.RequestServices.GetRequiredService<UserManager<UsuarioAtlas>>();
                 var usuario = (await usuarios.FindByIdAsync(pedido!.UsuarioId.ToString()))!;

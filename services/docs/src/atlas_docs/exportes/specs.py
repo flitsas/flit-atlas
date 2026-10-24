@@ -18,6 +18,27 @@ class SpecInvalidoError(ValueError):
     pass
 
 
+# Los mismos topes que la poda de atlas-api (TextoSpec): un spec patológico (alias de YAML que se multiplican, anidación
+# sin fin) es un spec inválido, no un fallo de infraestructura que se reintenta (F4-SEC-30).
+PROFUNDIDAD_MAXIMA = 128
+NODOS_MAXIMOS = 2_000_000
+
+
+def _revisar_forma(documento: Any, contrato: str) -> None:
+    """Cuenta los nodos como quedan al expandir los alias y mide la profundidad, sin recursión."""
+    pendientes: list[tuple[Any, int]] = [(documento, 1)]
+    nodos = 0
+    while pendientes:
+        nodo, profundidad = pendientes.pop()
+        nodos += 1
+        if nodos > NODOS_MAXIMOS or profundidad > PROFUNDIDAD_MAXIMA:
+            raise SpecInvalidoError(f"El spec «{contrato}» es demasiado grande o anidado (alias o profundidad).")
+        if isinstance(nodo, dict):
+            pendientes.extend((v, profundidad + 1) for v in nodo.values())
+        elif isinstance(nodo, list):
+            pendientes.extend((v, profundidad + 1) for v in nodo)
+
+
 class _CargadorSinFechas(yaml.SafeLoader):
     """SafeLoader sin el resolutor implícito de timestamps (las fechas quedan como texto)."""
 
@@ -64,6 +85,9 @@ def leer(spec: SpecExportar) -> SpecLeido:
         documento = yaml.load(spec.contenido, Loader=_CargadorSinFechas)  # noqa: S506 — SafeLoader sin timestamps
     except yaml.YAMLError as error:
         raise SpecInvalidoError(f"El spec «{spec.contrato}» no es YAML ni JSON válido.") from error
+    except (RecursionError, MemoryError) as error:
+        raise SpecInvalidoError(f"El spec «{spec.contrato}» es demasiado grande o anidado.") from error
+    _revisar_forma(documento, spec.contrato)
     if not isinstance(documento, dict):
         raise SpecInvalidoError(f"El spec «{spec.contrato}» no es un objeto.")
     deducido = "openapi" if "openapi" in documento else "asyncapi" if "asyncapi" in documento else None
@@ -76,6 +100,8 @@ def leer(spec: SpecExportar) -> SpecLeido:
         documento = json.loads(json.dumps(documento, ensure_ascii=False))
     except (TypeError, ValueError) as error:
         raise SpecInvalidoError(f"El spec «{spec.contrato}» trae valores que no son JSON.") from error
+    except (RecursionError, MemoryError) as error:
+        raise SpecInvalidoError(f"El spec «{spec.contrato}» es demasiado grande o anidado.") from error
     return SpecLeido(spec.contrato, spec.version, deducido, documento)
 
 

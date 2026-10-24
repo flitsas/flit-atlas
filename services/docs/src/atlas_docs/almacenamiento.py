@@ -41,15 +41,35 @@ def subir(cliente: BaseClient, bucket: str, clave: str, datos: bytes, tipo: str,
     cliente.put_object(Bucket=bucket, Key=clave, Body=datos, ContentType=tipo, Metadata={"sha256": sha256})
 
 
-def leer(cliente: BaseClient, bucket: str, clave: str) -> bytes | None:
-    """Lee un objeto; `None` si no existe. Cualquier otro error (S3 caído, credenciales) se propaga."""
+class ObjetoDemasiadoGrandeError(Exception):
+    """El objeto supera el tope: no se lee entero (F4-SEC-12)."""
+
+
+def leer(cliente: BaseClient, bucket: str, clave: str, tope: int | None = None) -> bytes | None:
+    """Lee un objeto; `None` si no existe. Cualquier otro error (S3 caído, credenciales) se propaga.
+
+    Con `tope`, un objeto más grande lanza `ObjetoDemasiadoGrandeError` sin leerlo entero: se mira `ContentLength` y,
+    por si no viene o miente, se leen como mucho `tope + 1` bytes.
+    """
     try:
         respuesta = cliente.get_object(Bucket=bucket, Key=clave)
     except ClientError as error:
         if error.response.get("Error", {}).get("Code") in {"404", "NoSuchKey"}:
             return None
         raise
-    return respuesta["Body"].read()
+    cuerpo = respuesta["Body"]
+    if tope is None:
+        return cuerpo.read()
+    try:
+        largo = respuesta.get("ContentLength")
+        if isinstance(largo, int) and largo > tope:
+            raise ObjetoDemasiadoGrandeError(clave)
+        datos = cuerpo.read(tope + 1)
+        if len(datos) > tope:
+            raise ObjetoDemasiadoGrandeError(clave)
+        return datos
+    finally:
+        cuerpo.close()
 
 
 def subir_resultado(

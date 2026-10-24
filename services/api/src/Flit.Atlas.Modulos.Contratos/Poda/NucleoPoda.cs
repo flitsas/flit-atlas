@@ -80,13 +80,6 @@ internal static class NucleoPoda
     /// <summary>Marcado como interno: <c>x-internal: true</c> o <c>x-interno: true</c>.</summary>
     public static bool EsInterno(JsonNode? nodo) => nodo is JsonObject o && (Verdadero(o["x-internal"]) || Verdadero(o["x-interno"]));
 
-    /// <summary>
-    /// Extensiones de procedencia interna (rutas del repo, appsettings, hojas del Excel, hosts por ambiente) que nunca
-    /// salen en un spec podado, en cualquier nivel. Las demás extensiones (<c>x-flit-obligatoriedad</c>,
-    /// <c>x-enum-descriptions</c>…) se conservan.
-    /// </summary>
-    public static IReadOnlySet<string> ExtensionesInternas { get; } = new HashSet<string>(StringComparer.Ordinal) { "x-flit-fuente", "x-flit-ambientes" };
-
     // --- Selección y destino ---
 
     /// <summary>Las entradas seleccionadas. Toda clave debe existir y ninguna puede ser interna.</summary>
@@ -171,9 +164,9 @@ internal static class NucleoPoda
     // --- Lo interno ---
 
     /// <summary>
-    /// Quita todo nodo con <c>x-internal: true</c> o <c>x-interno: true</c> (salvo la raíz) y toda
-    /// <see cref="ExtensionesInternas"/>. Si el nodo era una propiedad de un schema, también la quita de su
-    /// <c>required</c>. Devuelve cuántos quitó.
+    /// Quita todo nodo con <c>x-internal: true</c> o <c>x-interno: true</c> (salvo la raíz). Si el nodo era una
+    /// propiedad de un schema, también la quita de su <c>required</c>. Devuelve cuántos quitó. Las extensiones se quitan
+    /// después, con <see cref="ExtensionesPoda.Quitar"/> (sin las marcas no se sabría qué era interno).
     /// </summary>
     public static int QuitarInternos(JsonObject raiz)
     {
@@ -188,12 +181,6 @@ internal static class NucleoPoda
                 case JsonObject objeto:
                     foreach (var (clave, hijo) in objeto.ToList())
                     {
-                        if (ExtensionesInternas.Contains(clave))
-                        {
-                            objeto.Remove(clave);
-                            quitados++;
-                            continue;
-                        }
                         if (EsInterno(hijo))
                         {
                             objeto.Remove(clave);
@@ -432,11 +419,13 @@ internal static class NucleoPoda
     // --- Verificación final ---
 
     /// <summary>
-    /// Revisión independiente del resultado antes de devolverlo: toda <c>$ref</c> es local y resuelve y no queda nada
-    /// interno. Si algo falla es un error del podador, no del spec: se lanza <see cref="MotivoPoda.VerificacionFallida"/>.
+    /// Revisión independiente del resultado antes de devolverlo: toda <c>$ref</c> es local y resuelve, no queda nada
+    /// interno y toda extensión <c>x-*</c> está en la lista blanca con su forma saneada (<see cref="ExtensionesPoda.Verificar"/>,
+    /// falla cerrado). Si algo falla es un error del podador, no del spec: se lanza <see cref="MotivoPoda.VerificacionFallida"/>.
     /// </summary>
-    public static void Verificar(JsonObject resultado)
+    public static void Verificar(JsonObject resultado, bool cabecerasSonMapa)
     {
+        ExtensionesPoda.Verificar(resultado, cabecerasSonMapa);
         var pila = new Stack<JsonNode>();
         pila.Push(resultado);
         while (pila.Count > 0)
@@ -445,10 +434,6 @@ internal static class NucleoPoda
             if (!ReferenceEquals(nodo, resultado) && EsInterno(nodo))
             {
                 throw new PodaException(MotivoPoda.VerificacionFallida, "El resultado aún tiene un nodo interno.");
-            }
-            if (nodo is JsonObject conExtensiones && conExtensiones.Any(p => ExtensionesInternas.Contains(p.Key)))
-            {
-                throw new PodaException(MotivoPoda.VerificacionFallida, "El resultado aún tiene una extensión de procedencia interna.");
             }
             switch (nodo)
             {

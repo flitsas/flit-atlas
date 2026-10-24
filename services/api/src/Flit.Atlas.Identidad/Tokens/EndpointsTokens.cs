@@ -47,10 +47,12 @@ public static class EndpointsTokens
 
     internal static IEndpointRouteBuilder MapServidorTokens(this IEndpointRouteBuilder rutas, RouteGroupBuilder identidad)
     {
-        rutas.MapMethods(ServidorTokens.RutaAutorizar, [HttpMethods.Get, HttpMethods.Post], AutorizarAsync).ExcludeFromDescription();
+        // OpenIddict autentica al cliente y al titular del código o del refresh antes del endpoint; el titular puede ser de
+        // cualquier organización: alcance del sistema sin sesión (ATLAS-ADR-0050).
+        rutas.MapMethods(ServidorTokens.RutaAutorizar, [HttpMethods.Get, HttpMethods.Post], AutorizarAsync).ExcludeFromDescription().ConAlcanceDelSistemaSinSesion();
         rutas.MapGet(ServidorTokens.RutaContinuar, Continuar).ExcludeFromDescription();
-        rutas.MapPost(ServidorTokens.RutaToken, EmitirAsync).ExcludeFromDescription();
-        rutas.MapMethods(ServidorTokens.RutaUserinfo, [HttpMethods.Get, HttpMethods.Post], UserinfoAsync).ExcludeFromDescription();
+        rutas.MapPost(ServidorTokens.RutaToken, EmitirAsync).ExcludeFromDescription().ConAlcanceDelSistemaSinSesion();
+        rutas.MapMethods(ServidorTokens.RutaUserinfo, [HttpMethods.Get, HttpMethods.Post], UserinfoAsync).ExcludeFromDescription().ConAlcanceDelSistemaSinSesion();
 
         var scopes = rutas.ServiceProvider.GetRequiredService<RegistroScopes>().Nombres.Order(StringComparer.Ordinal).ToArray();
         identidad.MapGet("/token/yo", (ClaimsPrincipal portador) => new PortadorToken(
