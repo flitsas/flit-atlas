@@ -40,6 +40,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0034](0034-datos-sin-conexion.md) | Datos sin conexión: respuestas de la API guardadas en IndexedDB por recurso, con permiso y TTL, sin teléfonos y de una sola persona por dispositivo | propuesto | §11, §12, HU 2.12 |
 | [ATLAS-ADR-0035](0035-publicacion-de-contratos.md) | Publicación de contratos: token OIDC de GitHub Actions validado en Plataforma, lista blanca en el catálogo y versiones inmutables en el módulo de contratos | propuesto | A-08, A-09, §8.4, §9, HU 3.1, HU 3.2 |
 | [ATLAS-ADR-0036](0036-diff-de-contratos-en-render.md) | Diff de contratos en atlas-render: oasdiff como librería con la configuración de la CLI, caché LRU en memoria por par de SHA-256 y cliente tipado IRenderDiff en Plataforma | propuesto | A-09, §8.4, HU 3.5 |
-| [ATLAS-ADR-0037](0037-conversion-del-legado-ict.md) | Conversión del legado ICT: swagger de tsoa como base, Excel como enriquecimiento, un OpenAPI 3.1 por repo en contracts/legado/ y reglas de vacuum para lo compartible | propuesto | §8.4, HU 3.8 |
+| [ATLAS-ADR-0037](0037-enriquecimiento-contrato-ict-flit2.md) | Enriquecimiento del contrato de ICT de FLIT 2 con el Excel: core-ict.v1.yaml como base, un solo OpenAPI 3.1 con URL base única por ambiente en contracts/ict/ y reglas de vacuum para lo compartible | propuesto | §8.4, HU 3.8 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).
