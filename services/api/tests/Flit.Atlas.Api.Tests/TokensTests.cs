@@ -284,6 +284,37 @@ public class TokensTests(EntornoApi entorno)
     }
 
     [Fact]
+    public async Task El_token_de_un_servicio_interno_va_firmado_sin_cifrar_y_se_valida_con_el_JWKS()
+    {
+        // ATLAS-ADR-0044: atlas-docs (o atlas-render) valida el token con el JWKS público, sin la llave de cifrado; los de
+        // atlas-api siguen cifrados.
+        await using var api = await ApiAsync();
+        using var http = Cliente(api);
+        var (_, servicio) = await CredencialesDeServicioAsync(http, ServicioOtraAudiencia, ScopesAtlas.Publicar);
+        var (_, propio) = await CredencialesDeServicioAsync(http, Servicio, ScopesAtlas.Publicar);
+        var jws = servicio.GetProperty("access_token").GetString()!;
+
+        Assert.Equal(3, jws.Split('.').Length);
+        Assert.Equal(5, propio.GetProperty("access_token").GetString()!.Split('.').Length);
+        var jwks = new JsonWebKeySet(await http.GetStringAsync(new Uri(ServidorTokens.RutaJwks, UriKind.Relative), Ct));
+        var resultado = await new JsonWebTokenHandler().ValidateTokenAsync(jws, new TokenValidationParameters
+        {
+            ValidAudience = "atlas-render",
+            ValidIssuer = "https://localhost/",
+            IssuerSigningKeys = jwks.GetSigningKeys(),
+        });
+        Assert.True(resultado.IsValid, resultado.Exception?.Message);
+        Assert.Contains(ScopesAtlas.Publicar, resultado.Claims["scope"].ToString(), StringComparison.Ordinal);
+        var otraAudiencia = await new JsonWebTokenHandler().ValidateTokenAsync(jws, new TokenValidationParameters
+        {
+            ValidAudience = "atlas-docs",
+            ValidIssuer = "https://localhost/",
+            IssuerSigningKeys = jwks.GetSigningKeys(),
+        });
+        Assert.False(otraAudiencia.IsValid);
+    }
+
+    [Fact]
     public async Task La_cookie_no_basta_para_un_endpoint_con_scope_y_un_Bearer_no_abre_la_sesion_del_BFF()
     {
         await using var api = await ApiAsync();

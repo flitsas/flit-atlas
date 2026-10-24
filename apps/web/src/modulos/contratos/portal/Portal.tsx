@@ -5,6 +5,7 @@ import { Link, Route, Routes, useParams } from 'react-router';
 import { CargandoPagina } from '../../../app/layout/Shell';
 import { NoEncontrada } from '../../../app/paginas/Estados';
 import { useSesionOpcional } from '../../../app/sesion';
+import { BotonCompartir } from '../../../app/ui/Compartir';
 import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Tarjeta } from '../../../app/ui/Tarjeta';
 import { Buscador, Etiqueta } from '../componentes/ui';
@@ -13,6 +14,7 @@ import { PERMISO_PORTAL, recurso, rutaGuia, rutaPaquete } from '../favoritos/sin
 import { Cargando, VistaMarkdown } from '../guias/componentes';
 import { type PaqueteCompartido, useBusquedaPortal, useGuiaPortal, useInicioPortal, usePaquetePortal } from './api';
 import { AccionesPaquete, Avisos, ErrorPortal, fechaCorta, InsigniasContrato, Volver } from './componentes';
+import { ExportacionDelPortal } from './ExportacionDelPortal';
 
 // La pantalla del contrato lleva el lector de YAML y el visor: va en su propio chunk.
 const ContratoPortal = lazy(() => import('./ContratoPortal'));
@@ -35,6 +37,8 @@ export default function Portal() {
           <Route path="*" element={<NoEncontrada />} />
         </Routes>
       </Suspense>
+      {/* HU 4.5: conecta el botón «Exportar» de los paquetes con la exportación del portal. */}
+      <ExportacionDelPortal />
     </div>
   );
 }
@@ -195,6 +199,7 @@ function PaquetePortal() {
       </header>
       <DatosGuardados recurso={recurso(rutaPaquete(p.id), PERMISO_PORTAL).clave} sinTelefonos={false} />
       <Avisos avisos={avisos} />
+      <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(p.id)}`} titulo={p.nombre} que="este paquete" />
       {p.nivel === 'tecnico' ? (
         <AccionesPaquete paquete={p} />
       ) : (
@@ -276,6 +281,7 @@ function GuiaPortal() {
         </p>
         <VistaMarkdown texto={g.contenido} etiqueta={`Contenido de ${g.titulo}`} />
       </Tarjeta>
+      <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(paqueteId)}/guias/${encodeURIComponent(guiaId)}`} titulo={g.titulo} que="esta guía" />
     </>
   );
 }

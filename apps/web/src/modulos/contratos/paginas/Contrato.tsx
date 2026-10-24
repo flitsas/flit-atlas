@@ -1,11 +1,12 @@
 import { ArrowLeft, Download, History } from 'lucide-react';
 import { lazy, type ReactNode, Suspense, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
 import { NoEncontrada } from '../../../app/paginas/Estados';
 import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { formatearFecha } from '../../../app/ui/formato';
+import { BotonCompartir } from '../../../app/ui/Compartir';
 import { Hoja } from '../../../app/ui/Hoja';
 import { Boton } from '../../../app/ui/Tarjeta';
 import { type ContratoResumen, TIPOS, useContrato, useOperaciones, useSpec, useVersiones, type VersionResumen } from '../api';
@@ -74,6 +75,7 @@ function Contenido({ contrato: c, version, versiones }: { contrato: ContratoResu
   const escritorio = useEscritorio();
   const [parametros, setParametros] = useSearchParams();
   const [eligiendoVersion, setEligiendoVersion] = useState(false);
+  const { pathname } = useLocation();
   const datos = versiones.find((v) => v.version === version) ?? null;
 
   const documento = useMemo<Documento | null>(() => {
@@ -119,6 +121,14 @@ function Contenido({ contrato: c, version, versiones }: { contrato: ContratoResu
       { replace: true },
     );
   const nombreArchivo = `${c.codigo}-${version}`;
+  // HU 4.6: el enlace interno a lo que se ve (versión, pestaña y operación); exige sesión al abrirse.
+  const compartible = new URLSearchParams();
+  for (const clave of ['pestana', 'op']) {
+    const valor = parametros.get(clave);
+    if (valor) compartible.set(clave, valor);
+  }
+  const consulta = compartible.toString();
+  const rutaCompartida = `${pathname}${consulta ? `?${consulta}` : ''}`;
   const extension = datos?.formato === 'json' ? 'json' : datos?.formato === 'proto' ? 'proto' : 'yaml';
 
   return (
@@ -153,6 +163,7 @@ function Contenido({ contrato: c, version, versiones }: { contrato: ContratoResu
               Descargar spec
             </Boton>
           )}
+          <BotonCompartir ruta={rutaCompartida} titulo={`${c.nombre} · versión ${version}`} que="este contrato" />
         </div>
         <BotonFavorito objetivo={{ ambito: 'interno', contratoId: c.id }} que="el contrato" />
       </header>

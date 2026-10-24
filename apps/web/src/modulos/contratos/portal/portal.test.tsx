@@ -158,12 +158,14 @@ describe('navegación del portal', () => {
 describe('acciones del portal', () => {
   it('sin permiso, deshabilitada con el motivo; con permiso pero sin conectar, «pronto»; conectada, habilitada', () => {
     expect(estadoAccion('exportar', false)).toMatchObject({ habilitada: false, motivo: expect.stringContaining('no incluyen exportar') });
-    expect(estadoAccion('exportar', true)).toMatchObject({ habilitada: false, motivo: expect.stringContaining('pronto') });
+    // HU 4.5: exportar ya está conectada (ExportacionDelPortal, al cargar el portal); sandbox (HU 4.7) aún no.
+    expect(estadoAccion('exportar', true)).toMatchObject({ habilitada: true, motivo: null });
+    expect(estadoAccion('sandbox', true)).toMatchObject({ habilitada: false, motivo: expect.stringContaining('pronto') });
     const ejecutar = vi.fn();
-    const desconectar = conectarAccionPortal('exportar', ejecutar);
-    expect(estadoAccion('exportar', true)).toMatchObject({ habilitada: true, motivo: null, ejecutar });
+    const desconectar = conectarAccionPortal('sandbox', ejecutar);
+    expect(estadoAccion('sandbox', true)).toMatchObject({ habilitada: true, motivo: null, ejecutar });
     desconectar();
-    expect(estadoAccion('exportar', true).habilitada).toBe(false);
+    expect(estadoAccion('sandbox', true).habilitada).toBe(false);
   });
 });
 

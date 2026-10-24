@@ -56,6 +56,11 @@ jobs:
             contexto: apps/web
             dockerfile: apps/web/Dockerfile
             target: ""
+          # HU 4.5 (ATLAS-ADR-0042): exportaciones de paquetes, consumidor de la cola atlas.docs.exportaciones.
+          - nombre: atlas-docs
+            contexto: .
+            dockerfile: services/docs/Dockerfile
+            target: docs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -114,14 +119,14 @@ jobs:
           GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
         run: |
           set -euo pipefail
-          for nombre in atlas-api atlas-migrador atlas-web; do
+          for nombre in atlas-api atlas-migrador atlas-web atlas-docs; do
             d="$(cat "digests/${nombre}")"
             [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Digest inválido de ${nombre}: «$d»"; exit 1; }
           done
           git clone --depth 1 "https://x-access-token:${GITOPS_TOKEN}@github.com/flitsas/flit-gitops.git" gitops
           k="gitops/${CARPETA}/kustomization.yaml"
           [ -f "$k" ] || { echo "::error::No existe ${CARPETA}/kustomization.yaml en flit-gitops: el ambiente aún no está dado de alta"; exit 1; }
-          for nombre in atlas-api atlas-migrador atlas-web; do
+          for nombre in atlas-api atlas-migrador atlas-web atlas-docs; do
             digest="$(cat "digests/${nombre}")"
             img="${REGISTRO}/${nombre}" d="$digest" yq -i \
               '(.images[] | select(.name == strenv(img))) |= (.digest = strenv(d) | del(.newTag))' "$k"
