@@ -70,7 +70,7 @@ public static class ManifiestosNucleo
     public static ManifiestoPermisos Contratos { get; } = new("contratos", "Contratos de integración",
     [
         new("atlas.contratos.ver_internos", "Ver los contratos internos (OpenAPI, AsyncAPI y proto) y su historial.", LiderTecnico, Desarrollador, Soporte),
-        new("atlas.contratos.publicar_manual", "Publicar una versión de contrato a mano, por excepción.", LiderTecnico),
+        new("atlas.contratos.publicar_manual", "Publicar una versión de contrato a mano, por excepción, y deprecarla con su fecha de retiro.", LiderTecnico),
         new("atlas.contratos.guias.editar", "Editar las guías de integración.", LiderTecnico, Responsable),
     ]);
 

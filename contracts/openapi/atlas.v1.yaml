@@ -5279,6 +5279,155 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.exportaciones.solicitar
+  '/api/v1/contratos/{id}/versiones/{version}/deprecar':
+    post:
+      tags:
+        - Contratos
+      summary: Deprecar una versión con su fecha de retiro
+      description: 'Marca la versión como deprecada con su fecha de retiro (después de hoy en Bogotá y a lo sumo 730 días adelante); deprecarla otra vez cambia la fecha. El portal la muestra con el aviso y Atlas avisa, fuera de la petición, a las personas de las organizaciones con un paquete compartido vigente que la incluye (con las reglas del portal) y a los responsables del aplicativo, por la app, push y correo; después, 30 y 7 días antes del retiro. 409 retirada si ya se retiró. Auditado y con el evento atlas.contratos.version_deprecada. Requiere atlas.contratos.publicar_manual.'
+      operationId: DeprecarVersionContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: path
+          description: Versión semántica (3.3.0).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: La fecha de retiro.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDeprecacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDeprecacion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDeprecacion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDeprecacion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.contratos.publicar_manual.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.publicar_manual
+  /api/v1/contratos/favoritos:
+    get:
+      tags:
+        - Contratos
+      summary: Mis contratos favoritos
+      description: 'Los contratos que la persona marcó como favoritos (la PWA los guarda para verlos sin conexión), del más reciente al más antiguo. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarFavoritosContratos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FavoritoInterno'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/favoritos/contratos/{contratoId}':
+    put:
+      tags:
+        - Contratos
+      summary: Marcar un contrato como favorito
+      description: 'Idempotente: si ya era favorito, lo devuelve igual. 404 si el contrato no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: MarcarContratoFavorito
+      parameters:
+        - name: contratoId
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritoInterno'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.contratos.ver_internos.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+    delete:
+      tags:
+        - Contratos
+      summary: Quitar un contrato de los favoritos
+      description: 204 aunque no fuera favorito. Requiere atlas.contratos.ver_internos.
+      operationId: QuitarContratoFavorito
+      parameters:
+        - name: contratoId
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.contratos.ver_internos.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
   '/api/v1/contratos/organizaciones/{organizacionId}/sandboxes':
     get:
       tags:
@@ -5721,6 +5870,275 @@ paths:
           description: No hay una sesión activa o venció.
       security:
         - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  /api/v1/portal/favoritos:
+    get:
+      tags:
+        - Portal de clientes
+      summary: Mis favoritos del portal
+      description: 'Los paquetes, contratos y guías compartidos que la persona marcó y todavía ve (su organización, su alcance, la vigencia de la compartición y, en contratos y guías, el detalle técnico). Lo que ya no ve no aparece. Requiere atlas.portal.ver.'
+      operationId: ListarFavoritosPortal
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FavoritoPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.portal.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/favoritos/paquetes/{paqueteId}':
+    put:
+      tags:
+        - Portal de clientes
+      summary: Marcar un paquete compartido como favorito
+      description: Idempotente. 404 si no está compartido con la organización de la persona o queda fuera de su alcance (auditado). Requiere atlas.portal.ver.
+      operationId: MarcarPaqueteFavoritoPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritoPortal'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.portal.ver.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+    delete:
+      tags:
+        - Portal de clientes
+      summary: Quitar un paquete de los favoritos
+      description: Quita el favorito de la persona aunque ya no vea el paquete. 404 si no lo tenía. Requiere atlas.portal.ver.
+      operationId: QuitarPaqueteFavoritoPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.portal.ver.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/favoritos/paquetes/{paqueteId}/contratos/{contratoId}':
+    put:
+      tags:
+        - Portal de clientes
+      summary: Marcar un contrato compartido como favorito
+      description: Idempotente. 404 como el paquete o si el contrato no está en él; 403 solo_resumen si el rol de la persona no ve el detalle técnico. Requiere atlas.portal.ver.
+      operationId: MarcarContratoFavoritoPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: contratoId
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritoPortal'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+    delete:
+      tags:
+        - Portal de clientes
+      summary: Quitar un contrato compartido de los favoritos
+      description: Quita el favorito de la persona aunque ya no vea el contrato. 404 si no lo tenía. Requiere atlas.portal.ver.
+      operationId: QuitarContratoFavoritoPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: contratoId
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.portal.ver.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/favoritos/paquetes/{paqueteId}/guias/{guiaId}':
+    put:
+      tags:
+        - Portal de clientes
+      summary: Marcar una guía compartida como favorita
+      description: Idempotente. 404 como el paquete o si la guía no está en él; 403 solo_resumen. Requiere atlas.portal.ver.
+      operationId: MarcarGuiaFavoritaPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritoPortal'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+    delete:
+      tags:
+        - Portal de clientes
+      summary: Quitar una guía compartida de los favoritos
+      description: Quita el favorito de la persona aunque ya no vea la guía. 404 si no lo tenía. Requiere atlas.portal.ver.
+      operationId: QuitarGuiaFavoritaPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.portal.ver.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.portal.ver
   /api/v1/portal/sandbox:
@@ -9179,6 +9597,7 @@ components:
         - contrato
         - version
         - retiroEn
+        - reemplazo
         - mensaje
       type: object
       properties:
@@ -9202,8 +9621,14 @@ components:
             - 'null'
             - string
           format: date
+        reemplazo:
+          type:
+            - 'null'
+            - string
+          description: 'La versión estable vigente más alta posterior, si la hay (la que recomienda el aviso).'
         mensaje:
           type: string
+          description: 'El mismo texto que el aviso por correo y push: versión, contrato, fecha de retiro dd/mm/aaaa y su reemplazo.'
       description: Aviso de deprecación o retiro de una versión compartida.
     BajaSuscripcionDto:
       required:
@@ -11166,6 +11591,18 @@ components:
             type: string
           description: 'Con no_publicable: qué ya no se cumple en la revisión fijada.'
       description: 'Por qué no se hizo, con un código estable.'
+    ErrorDeprecacion:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: no_encontrado (404) o retirada (409).
+        mensaje:
+          type: string
+      description: 'Por qué no se pudo deprecar, con un código estable.'
     ErrorDiff:
       required:
         - codigo
@@ -11675,6 +12112,92 @@ components:
             - type: 'null'
             - $ref: '#/components/schemas/ErrorExportacionDto'
       description: Una exportación y su estado.
+    FavoritoInterno:
+      required:
+        - id
+        - contratoId
+        - codigo
+        - nombre
+        - tipo
+        - aplicativo
+        - version
+        - ruta
+        - marcadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contratoId:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        aplicativo:
+          $ref: '#/components/schemas/AplicativoDelContrato'
+        version:
+          type:
+            - 'null'
+            - string
+          description: 'La última publicada: la que abre la pantalla del contrato (y la que la PWA guarda sin conexión).'
+        ruta:
+          type: string
+          description: Ruta de la PWA.
+        marcadoEn:
+          type: string
+          format: date-time
+      description: Un contrato interno marcado como favorito.
+    FavoritoPortal:
+      required:
+        - id
+        - tipo
+        - paqueteId
+        - contratoId
+        - guiaId
+        - titulo
+        - detalle
+        - ruta
+        - marcadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          description: 'paquete, contrato o guia.'
+        paqueteId:
+          type: string
+          format: uuid
+        contratoId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        guiaId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        titulo:
+          type: string
+        detalle:
+          type:
+            - 'null'
+            - string
+          description: 'El paquete, en un contrato o una guía; la descripción, en un paquete.'
+        ruta:
+          type: string
+          description: Ruta de la PWA.
+        marcadoEn:
+          type: string
+          format: date-time
+      description: Lo compartido que la persona marcó como favorito y aún ve.
     FeedIcsCreadoDto:
       required:
         - id
@@ -14581,6 +15104,24 @@ components:
             - string
           format: int32
       description: Cuántas sesiones activas se cerraron.
+    ResultadoDeprecacion:
+      required:
+        - version
+        - reemplazo
+        - cambio
+      type: object
+      properties:
+        version:
+          $ref: '#/components/schemas/VersionResumen'
+        reemplazo:
+          type:
+            - 'null'
+            - string
+          description: 'La versión estable vigente más alta posterior, si la hay: la que los avisos recomiendan.'
+        cambio:
+          type: boolean
+          description: Falso si ya estaba deprecada con esa misma fecha (no se repite nada).
+      description: Resultado de deprecar una versión.
     ResultadoDirectorio:
       required:
         - personas
@@ -15838,6 +16379,18 @@ components:
         correo:
           type: string
       description: Correo de la cuenta externa que se quiere recuperar.
+    SolicitudDeprecacion:
+      required:
+        - retiroEn
+      type: object
+      properties:
+        retiroEn:
+          type:
+            - 'null'
+            - string
+          description: 'Fecha de retiro (aaaa-mm-dd): después de hoy y a lo sumo dentro de dos años. Deprecar otra vez cambia la fecha y avisa de nuevo.'
+          format: date
+      description: 'Deprecar una versión: la fecha en que se retira (hora de Bogotá).'
     SolicitudEnlace:
       required:
         - enlace

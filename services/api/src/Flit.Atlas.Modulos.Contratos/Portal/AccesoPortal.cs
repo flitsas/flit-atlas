@@ -182,7 +182,18 @@ internal sealed class AccesoPortal(
             return VistaPortal.Vacia(organizacion, persona);
         }
         var permisos = await permisosDeSesion.ObtenerAsync(usuario, ct).ConfigureAwait(false);
-        if (!permisos.Tiene(PermisosContratos.PortalVer))
+        return await VistaDeAsync(persona, organizacion, permisos, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Lo que ve una persona de una organización con estos permisos, sin sesión (HU 4.8: a quién le llega un aviso de
+    /// deprecación). Las mismas reglas que <see cref="VistaAsync"/>; quien llama calcula los permisos con
+    /// <c>CalculadoraPermisos</c> y la organización es la de la persona. No se guarda en la petición.
+    /// </summary>
+    public async Task<VistaPortal> VistaDeAsync(Guid persona, Guid organizacion, PermisosEfectivos permisos, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(permisos);
+        if (persona == Guid.Empty || organizacion == Guid.Empty || !permisos.Tiene(PermisosContratos.PortalVer))
         {
             return VistaPortal.Vacia(organizacion, persona);
         }

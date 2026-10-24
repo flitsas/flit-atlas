@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import { ErrorApi } from '../app/api';
-import { guardar, leer } from './almacen';
+import { guardar, leer, olvidar } from './almacen';
 
 /**
  * Datos sin conexión de los módulos (prompt maestro §11, HU 2.12, ATLAS-ADR-0034): lo que la API ya le devolvió a la
@@ -116,6 +116,39 @@ export async function conRespaldoDerivado<T, G>(
     if (!guardado || derivado === null) throw error;
     marcar(recurso.clave, guardado.guardadoEn);
     return derivado;
+  }
+}
+
+/** Bytes (UTF-8) de lo que se guardaría: un texto tal cual, lo demás como JSON. */
+export function bytes(datos: unknown): number {
+  const texto = typeof datos === 'string' ? datos : JSON.stringify(datos ?? null);
+  return new TextEncoder().encode(texto).length;
+}
+
+/**
+ * Para lo que la persona eligió guardar (sus favoritos, HU 4.9): en línea consulta y, **solo si ya estaba guardado**,
+ * lo refresca (una consulta cualquiera no llena el dispositivo; con `topeBytes`, lo que pase del tope no se guarda). Si
+ * el servidor responde 403 o 404 (perdió el acceso: compartición revocada o vencida, fuera de su alcance), lo guardado se
+ * borra. Sin red, responde con lo guardado y lo marca para el aviso «Sin conexión: datos del <fecha>».
+ */
+export async function conRespaldoGuardado<T>(recurso: RecursoGuardado, consulta: () => Promise<T>, topeBytes = Infinity): Promise<T> {
+  try {
+    const datos = await consulta();
+    marcar(recurso.clave, null);
+    const previo = await leer(recurso.clave).catch(() => null);
+    if (previo && bytes(datos) <= topeBytes) await guardarRecurso(recurso, datos);
+    return datos;
+  } catch (error) {
+    if (error instanceof ErrorApi && (error.estado === 403 || error.estado === 404)) {
+      await olvidar(recurso.clave).catch(() => undefined);
+      marcar(recurso.clave, null);
+      throw error;
+    }
+    if (!esFallaDeRed(error)) throw error;
+    const guardado = await leer<T>(recurso.clave).catch(() => null);
+    if (!guardado) throw error;
+    marcar(recurso.clave, guardado.guardadoEn);
+    return guardado.datos;
   }
 }
 
