@@ -484,6 +484,75 @@ public sealed class FavoritoContrato : Entidad
     public Guid? GuiaId { get; init; }
 }
 
+/// <summary>Estado de un sandbox (HU 4.7, ATLAS-ADR-0045).</summary>
+public enum EstadoSandbox
+{
+    /// <summary>Importado en Microcks: el proxy de atlas-api responde con su llave.</summary>
+    Activo,
+
+    /// <summary>Apagado (compartición revocada o vencida, sin sandbox, paquete archivado o sin contratos): la llave ya no sirve.</summary>
+    Apagado,
+}
+
+/// <summary>
+/// Sandbox nivel 1 de un paquete para una organización (plan 00 §8.4 y §8.8, HU 4.7, ATLAS-ADR-0045): el spec
+/// <b>podado</b> de cada contrato OpenAPI del paquete, importado en Microcks con un nombre opaco, y la llave con la que los
+/// sistemas de la organización llaman al proxy de atlas-api (se guarda solo su hash). Uno por paquete y organización, ligado
+/// a la compartición que lo permite; hereda su vigencia. Tiene <c>organizacion_id</c>: predicado obligatorio y RLS.
+/// </summary>
+public sealed class SandboxPaquete : Entidad
+{
+    public required Guid OrganizacionId { get; init; }
+
+    public required Guid PaqueteId { get; init; }
+
+    /// <summary>La compartición que lo permite (la misma fila aunque se haya revocado y vuelto a compartir).</summary>
+    public required Guid ComparticionId { get; set; }
+
+    /// <summary>1 = Microcks. El nivel 2 (QA real, P-07) no está en esta HU.</summary>
+    public int Nivel { get; init; } = 1;
+
+    /// <summary>Identificador opaco (128 bits aleatorios en hexadecimal) de la URL y de los servicios en Microcks; cambia al reactivar.</summary>
+    public required string Ruta { get; set; }
+
+    /// <summary>Revisión del paquete importada.</summary>
+    public int Revision { get; set; }
+
+    /// <summary>Contratos importados en JSON (<c>jsonb</c>): <c>[{contratoId, versionId, segmento, servicio, version, operaciones}]</c>.</summary>
+    public required string Contratos { get; set; }
+
+    /// <summary>SHA-256 de lo importado (revisión, contratos, versiones y operaciones): si cambia, se reimporta.</summary>
+    public required string Huella { get; set; }
+
+    public EstadoSandbox Estado { get; set; } = EstadoSandbox.Activo;
+
+    /// <summary>SHA-256 de la llave (la llave solo se muestra una vez).</summary>
+    public required byte[] LlaveHash { get; set; }
+
+    public required DateTimeOffset LlaveCreadaEn { get; set; }
+
+    /// <summary>Persona que lo activó (o regeneró la llave) por última vez.</summary>
+    public required Guid ActivadoPor { get; set; }
+
+    public required DateTimeOffset ActivadoEn { get; set; }
+
+    /// <summary>Hasta cuándo vale: la vigencia de la compartición; vacío = sin vencimiento.</summary>
+    public DateTimeOffset? ExpiraEn { get; set; }
+
+    public DateTimeOffset? ImportadoEn { get; set; }
+
+    public DateTimeOffset? ApagadoEn { get; set; }
+
+    /// <summary><c>revocada</c>, <c>vencida</c>, <c>sin_sandbox</c>, <c>paquete_no_disponible</c> o <c>sin_contratos</c>.</summary>
+    public string? MotivoApagado { get; set; }
+
+    /// <summary>Servicios de Microcks por borrar (<c>["nombre:version"]</c>, <c>jsonb</c>): los reintenta el trabajo periódico.</summary>
+    public string PorBorrar { get; set; } = "[]";
+
+    /// <summary>Último uso del proxy (a lo sumo una escritura por hora).</summary>
+    public DateTimeOffset? UltimoUsoEn { get; set; }
+}
+
 /// <summary>
 /// Qué versión de un contrato corre hoy en un ambiente (plan 00 §8.1 y §8.2, regla 5; HU 3.4 y ATLAS-ADR-0035 §8): una
 /// fila por contrato y ambiente, que mueve el CD con <c>PUT /api/v1/contratos/canales/{ambiente}</c>. Cada cambio deja
@@ -696,6 +765,7 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
     public DbSet<AvisoDeprecacion> AvisosDeprecacion => Set<AvisoDeprecacion>();
 
     public DbSet<FavoritoContrato> Favoritos => Set<FavoritoContrato>();
+    public DbSet<SandboxPaquete> Sandboxes => Set<SandboxPaquete>();
 
     public const int LargoAmbiente = 20;
 
@@ -973,11 +1043,40 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
             e.HasIndex(f => f.OrganizacionId);
         });
 
+        modelBuilder.Entity<SandboxPaquete>(e =>
+        {
+            e.ToTable(Prefijo + "sandbox", t =>
+            {
+                t.HasComment("Sandbox nivel 1 (Microcks) de un paquete por organización: spec podado importado y hash de la llave del proxy (HU 4.7, ATLAS-ADR-0045).");
+                t.HasCheckConstraint("ck_contratos_sandbox_nivel", "nivel = 1");
+                t.HasCheckConstraint("ck_contratos_sandbox_ruta", "ruta ~ '^[0-9a-f]{32}$'");
+                t.HasCheckConstraint("ck_contratos_sandbox_huella", "huella ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("ck_contratos_sandbox_llave", "octet_length(llave_hash) = 32");
+                t.HasCheckConstraint("ck_contratos_sandbox_contratos", "jsonb_typeof(contratos) = 'array' AND jsonb_typeof(por_borrar) = 'array'");
+                t.HasCheckConstraint("ck_contratos_sandbox_apagado", "(estado = 'apagado') = (apagado_en IS NOT NULL)");
+            });
+            e.Property(s => s.Id).ValueGeneratedNever();
+            e.Property(s => s.Ruta).HasMaxLength(32).IsFixedLength();
+            e.Property(s => s.Contratos).HasColumnType("jsonb");
+            e.Property(s => s.PorBorrar).HasColumnType("jsonb");
+            e.Property(s => s.Huella).HasMaxLength(64).IsFixedLength();
+            e.Property(s => s.MotivoApagado).HasMaxLength(40);
+            Enum(e.Property(s => s.Estado), 20);
+            e.HasOne<PaqueteContratos>().WithMany().HasForeignKey(s => s.PaqueteId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ComparticionPaquete>().WithMany().HasForeignKey(s => s.ComparticionId).OnDelete(DeleteBehavior.Restrict);
+            // Uno por paquete y organización: activar otra vez uno apagado lo reactiva con una ruta y una llave nuevas.
+            e.HasIndex(s => new { s.PaqueteId, s.OrganizacionId }).IsUnique();
+            // El proxy lo busca por la ruta opaca de la URL.
+            e.HasIndex(s => s.Ruta).IsUnique();
+            e.HasIndex(s => s.OrganizacionId);
+            e.HasIndex(s => s.Estado);
+        });
+
         // translate() y lower() para la búsqueda sin tildes, como en el catálogo.
         modelBuilder.HasDbFunction(typeof(FuncionesSql).GetMethod(nameof(FuncionesSql.Traducir))!).HasName("translate").IsBuiltIn();
         modelBuilder.HasDbFunction(typeof(FuncionesSql).GetMethod(nameof(FuncionesSql.Minusculas))!).HasName("lower").IsBuiltIn();
 
-        // Predicado obligatorio: contratos_comparticion (HU 4.3) solo devuelve filas de las organizaciones del alcance de la
+        // Predicado obligatorio: contratos_comparticion (HU 4.3) y contratos_sandbox (HU 4.7) solo devuelven filas de las organizaciones del alcance de la
         // petición. Los contratos, versiones, guías y paquetes son internos: el portal llega a ellos solo desde una
         // compartición de la organización de la sesión (ATLAS-ADR-0043). Las exportaciones de un externo llevan su organización
         // (HU 4.5): quedan filtradas aquí y por RLS.

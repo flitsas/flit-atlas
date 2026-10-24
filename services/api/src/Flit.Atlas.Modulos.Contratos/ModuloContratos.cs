@@ -95,7 +95,8 @@ public static class EventosContratos
 /// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). HU 4.1: paquetes con revisiones inmutables,
 /// publicación y fijación de una revisión anterior (ATLAS-ADR-0041). HU 4.2: la poda de specs para clientes
 /// (<see cref="Poda.Podadores"/>, ATLAS-ADR-0038). HU 4.3 y 4.4: comparticiones de paquetes con organizaciones y el portal
-/// de clientes en <c>/api/v1/portal</c> (ATLAS-ADR-0043). HU 4.8: deprecar con fecha de retiro y avisar a las organizaciones
+/// de clientes en <c>/api/v1/portal</c> (ATLAS-ADR-0043). HU 4.7: el sandbox nivel 1 con Microcks, con el spec podado y un
+/// proxy con llave en atlas-api (ATLAS-ADR-0045). HU 4.8: deprecar con fecha de retiro y avisar a las organizaciones
 /// afectadas (ATLAS-ADR-0046). HU 4.9: favoritos para ver sin conexión (ATLAS-ADR-0034). Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
 /// </summary>
 public sealed class ModuloContratos : IModuloAtlas
@@ -156,6 +157,13 @@ public sealed class ModuloContratos : IModuloAtlas
         servicios.AddSingleton<Deprecacion.DisparadorAvisos>();
         servicios.AddScoped<Deprecacion.AvisosDeprecacion>();
         servicios.AddHostedService<Deprecacion.TrabajoAvisosDeprecacion>();
+        // Sandbox nivel 1 con Microcks (HU 4.7, ATLAS-ADR-0045): sin Contratos:Sandbox:UrlMicrocks no está disponible (503)
+        // y el trabajo periódico no hace nada.
+        servicios.AddOptions<Sandbox.OpcionesSandbox>().BindConfiguration(Sandbox.OpcionesSandbox.Seccion);
+        servicios.AddHttpClient(Sandbox.ClienteMicrocks.NombreCliente).RemoveAllLoggers();
+        servicios.AddSingleton<Sandbox.IClienteMicrocks, Sandbox.ClienteMicrocks>();
+        servicios.AddScoped<Sandbox.ServicioSandbox>();
+        servicios.AddHostedService<Sandbox.TrabajoSandbox>();
     }
 
     public void MapearEndpoints(RouteGroupBuilder grupo)
@@ -171,6 +179,7 @@ public sealed class ModuloContratos : IModuloAtlas
         Exportaciones.EndpointsExportaciones.Mapear(grupo);
         Deprecacion.EndpointsDeprecacion.Mapear(grupo);
         Favoritos.EndpointsFavoritos.Mapear(grupo);
+        Sandbox.EndpointsSandbox.Mapear(grupo);
     }
 
     public void MapearEndpointsPortal(RouteGroupBuilder portal)
@@ -178,5 +187,6 @@ public sealed class ModuloContratos : IModuloAtlas
         Portal.EndpointsPortal.Mapear(portal);
         Exportaciones.EndpointsExportaciones.MapearPortal(portal);
         Favoritos.EndpointsFavoritos.MapearPortal(portal);
+        Sandbox.EndpointsSandbox.MapearPortal(portal);
     }
 }

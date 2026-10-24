@@ -1050,6 +1050,146 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.SandboxPaquete", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActivadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activado_en");
+
+                    b.Property<Guid>("ActivadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("activado_por");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset?>("ApagadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("apagado_en");
+
+                    b.Property<Guid>("ComparticionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparticion_id");
+
+                    b.Property<string>("Contratos")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("contratos");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTimeOffset?>("ExpiraEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expira_en");
+
+                    b.Property<string>("Huella")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("huella")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset?>("ImportadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("importado_en");
+
+                    b.Property<DateTimeOffset>("LlaveCreadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("llave_creada_en");
+
+                    b.Property<byte[]>("LlaveHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("llave_hash");
+
+                    b.Property<string>("MotivoApagado")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("motivo_apagado");
+
+                    b.Property<int>("Nivel")
+                        .HasColumnType("integer")
+                        .HasColumnName("nivel");
+
+                    b.Property<Guid>("OrganizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organizacion_id");
+
+                    b.Property<Guid>("PaqueteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paquete_id");
+
+                    b.Property<string>("PorBorrar")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("por_borrar");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("Ruta")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character(32)")
+                        .HasColumnName("ruta")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset?>("UltimoUsoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultimo_uso_en");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_sandbox");
+
+                    b.HasIndex("ComparticionId")
+                        .HasDatabaseName("ix_contratos_sandbox_comparticion_id");
+
+                    b.HasIndex("Estado")
+                        .HasDatabaseName("ix_contratos_sandbox_estado");
+
+                    b.HasIndex("OrganizacionId")
+                        .HasDatabaseName("ix_contratos_sandbox_organizacion_id");
+
+                    b.HasIndex("Ruta")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contratos_sandbox_ruta");
+
+                    b.HasIndex("PaqueteId", "OrganizacionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contratos_sandbox_paquete_id_organizacion_id");
+
+                    b.ToTable("contratos_sandbox", "atlas", t =>
+                        {
+                            t.HasComment("Sandbox nivel 1 (Microcks) de un paquete por organización: spec podado importado y hash de la llave del proxy (HU 4.7, ATLAS-ADR-0045).");
+
+                            t.HasCheckConstraint("ck_contratos_sandbox_apagado", "(estado = 'apagado') = (apagado_en IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_contratos_sandbox_contratos", "jsonb_typeof(contratos) = 'array' AND jsonb_typeof(por_borrar) = 'array'");
+
+                            t.HasCheckConstraint("ck_contratos_sandbox_huella", "huella ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_contratos_sandbox_llave", "octet_length(llave_hash) = 32");
+
+                            t.HasCheckConstraint("ck_contratos_sandbox_nivel", "nivel = 1");
+
+                            t.HasCheckConstraint("ck_contratos_sandbox_ruta", "ruta ~ '^[0-9a-f]{32}$'");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1318,6 +1458,23 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_contratos_paquete_revision_contratos_paquete_paquete_id");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.SandboxPaquete", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.ComparticionPaquete", null)
+                        .WithMany()
+                        .HasForeignKey("ComparticionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_sandbox_contratos_comparticion_comparticion_id");
+
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.PaqueteContratos", null)
+                        .WithMany()
+                        .HasForeignKey("PaqueteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_sandbox_contratos_paquete_paquete_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", b =>

@@ -31,7 +31,8 @@ public sealed class EscenarioPortal : IAsyncDisposable
     private readonly GitHubActionsSimulado _github = new();
     private readonly ResponsablesDePrueba _responsables = new();
 
-    public EscenarioPortal(EntornoApi entorno, IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null)
+    public EscenarioPortal(
+        EntornoApi entorno, IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null, Action<IServiceCollection>? servicios = null)
     {
         _entorno = entorno;
         var claves = new Dictionary<string, string>
@@ -51,6 +52,7 @@ public sealed class EscenarioPortal : IAsyncDisposable
             s.Replace(ServiceDescriptor.Scoped<IProveedorRolesImplicitos, ProveedorDePrueba>());
             // HU 4.8: los responsables de un aplicativo que reciben los avisos de deprecación salen del mismo mapa.
             s.Replace(ServiceDescriptor.Scoped<ILectorResponsables, LectorDePrueba>());
+            servicios?.Invoke(s);
         });
     }
 

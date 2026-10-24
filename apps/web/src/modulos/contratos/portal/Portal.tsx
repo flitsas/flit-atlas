@@ -12,9 +12,10 @@ import { Buscador, Etiqueta } from '../componentes/ui';
 import { BotonFavorito, FavoritosPortal } from '../favoritos/componentes';
 import { PERMISO_PORTAL, recurso, rutaGuia, rutaPaquete } from '../favoritos/sinConexion';
 import { Cargando, VistaMarkdown } from '../guias/componentes';
-import { type PaqueteCompartido, useBusquedaPortal, useGuiaPortal, useInicioPortal, usePaquetePortal } from './api';
+import { type DetallePaquetePortal, type PaqueteCompartido, useBusquedaPortal, useGuiaPortal, useInicioPortal, usePaquetePortal } from './api';
 import { AccionesPaquete, Avisos, ErrorPortal, fechaCorta, InsigniasContrato, Volver } from './componentes';
 import { ExportacionDelPortal } from './ExportacionDelPortal';
+import { PanelSandbox, useSandboxDisponible } from './Sandbox';
 
 // La pantalla del contrato lleva el lector de YAML y el visor: va en su propio chunk.
 const ContratoPortal = lazy(() => import('./ContratoPortal'));
@@ -185,6 +186,11 @@ function PaquetePortal() {
   if (detalle.isPending) return <Cargando etiqueta="Cargando el paquete" alto="h-60" />;
   if (detalle.isError) return <ErrorPortal error={detalle.error} que="este paquete" />;
   const { paquete: p, contratos, avisos } = detalle.data;
+  return <DetallePaquete paquete={p} contratos={contratos} avisos={avisos} />;
+}
+
+function DetallePaquete({ paquete: p, contratos, avisos }: DetallePaquetePortal) {
+  const sandboxDisponible = useSandboxDisponible(p);
   return (
     <>
       <Volver a="/portal" texto="Inicio del portal" />
@@ -201,12 +207,13 @@ function PaquetePortal() {
       <Avisos avisos={avisos} />
       <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(p.id)}`} titulo={p.nombre} que="este paquete" />
       {p.nivel === 'tecnico' ? (
-        <AccionesPaquete paquete={p} />
+        <AccionesPaquete paquete={p} disponibles={{ sandbox: sandboxDisponible }} />
       ) : (
         <p role="note" className="rounded-xl border border-border bg-card p-3 text-sm text-atlas-texto-suave">
           Tu rol ve el resumen de este paquete. El detalle técnico (operaciones, spec y guías) es para el equipo integrador de tu organización.
         </p>
       )}
+      <PanelSandbox paquete={p} />
       <ul aria-label="Contratos del paquete" className="flex flex-col gap-3">
         {contratos.map(({ contrato: c, operaciones, guias }) => (
           <li key={c.contratoId} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-tarjeta">

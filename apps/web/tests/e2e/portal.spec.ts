@@ -86,10 +86,39 @@ components:
         id: { type: string, description: Id del trámite }
 `;
 
-async function simularPortal(page: Page) {
+const URL_SANDBOX = 'https://localhost:4032/api/v1/contratos/sandbox/0123456789abcdef0123456789abcdef/api-tramites-demo';
+
+const SANDBOX = {
+  id: 's1',
+  paqueteId: 'p1',
+  paquete: PAQUETE.nombre,
+  revision: 2,
+  nivel: 1,
+  estado: 'activo',
+  motivoApagado: null,
+  activadoEn: '2026-10-24T10:00:00-05:00',
+  llaveCreadaEn: '2026-10-24T10:00:00-05:00',
+  expiraEn: '2027-01-31T23:59:59-05:00',
+  ultimoUsoEn: null,
+  cabecera: 'Authorization: Bearer $LLAVE_SANDBOX',
+  contratos: [{ contratoId: 'c1', codigo: CONTRATO.codigo, nombre: CONTRATO.nombre, version: '1.2.0', urlBase: URL_SANDBOX, operaciones: 1 }],
+  instrucciones: 'Guarda la llave en la variable de entorno LLAVE_SANDBOX y llama a la URL base más la ruta de la operación.',
+  ejemploCurl: `curl -g -X GET -H "Authorization: Bearer $LLAVE_SANDBOX" "${URL_SANDBOX}/tramites/{id}"`,
+};
+
+/** `sandbox`: la compartición lo permite (HU 4.7); `disponible = false`: el ambiente sin Microcks. */
+async function simularPortal(page: Page, { sandbox = false, disponible = true }: { sandbox?: boolean; disponible?: boolean } = {}) {
+  const paquete = { ...PAQUETE, puedeSandbox: sandbox };
+  let activo = false;
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     switch (url.pathname) {
+      case '/api/v1/portal/sandbox':
+        if (route.request().method() === 'POST') {
+          activo = true;
+          return json(route, { sandbox: SANDBOX, llave: 'atlsbx_llaveFicticiaDePruebaE2E' }, 201);
+        }
+        return json(route, { disponible, motivo: disponible ? null : 'El sandbox no está disponible en este ambiente.', sandboxes: activo ? [SANDBOX] : [] });
       case '/api/v1/identidad/proveedores':
         return json(route, { microsoft: false, simulado: true });
       case '/api/v1/plataforma/yo':
@@ -113,12 +142,12 @@ async function simularPortal(page: Page) {
         return json(route, {
           organizacion: { id: 'o1', nombre: 'Organismo Demo' },
           aplicativos: [{ aplicativo: CONTRATO.aplicativo, paquetes: ['p1'], contratos: 1, documentos: [] }],
-          paquetes: [PAQUETE],
+          paquetes: [paquete],
           avisos: [AVISO],
         });
       case '/api/v1/portal/paquetes/p1':
         return json(route, {
-          paquete: PAQUETE,
+          paquete,
           contratos: [
             {
               contrato: CONTRATO,
@@ -251,6 +280,31 @@ test.describe('portal de clientes (HU 4.4)', () => {
     await expect(hoja.getByRole('link', { name: 'Abrir en Teams' })).toHaveCount(0);
     if (movil) await sinScrollHorizontal(page, 'Compartir del portal a 360 px');
     await sinErroresCriticosDeAxe(page, 'Compartir del portal');
+  });
+
+  test('sandbox (HU 4.7): activar muestra la llave una vez, la URL base y el curl; accesible y sin scroll a 360 px', async ({ page }, info) => {
+    await simularPortal(page, { sandbox: true });
+    const movil = esMovil(info);
+    if (movil) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/portal/paquetes/p1/contratos/c1');
+    await page.getByRole('group', { name: 'Acciones del paquete' }).getByRole('button', { name: /Sandbox/ }).click();
+    const panel = page.getByRole('region', { name: 'Sandbox' });
+    await expect(panel).toBeFocused();
+    await panel.getByRole('button', { name: 'Activar el sandbox' }).click();
+    await expect(panel.getByLabel('Llave del sandbox')).toHaveText('atlsbx_llaveFicticiaDePruebaE2E');
+    await expect(panel.getByText(URL_SANDBOX, { exact: true })).toBeVisible();
+    await panel.getByText('Cómo usarlo').click();
+    await expect(panel.getByText(/curl -g -X GET -H "Authorization: Bearer \$LLAVE_SANDBOX"/)).toBeVisible();
+    if (movil) await sinScrollHorizontal(page, 'sandbox a 360 px');
+    await sinErroresCriticosDeAxe(page, 'sandbox del portal');
+  });
+
+  test('sin Microcks, el botón Sandbox sale deshabilitado con «El sandbox no está disponible»', async ({ page }) => {
+    await simularPortal(page, { sandbox: true, disponible: false });
+    await page.goto('/portal/paquetes/p1');
+    await expect(page.getByRole('group', { name: 'Acciones del paquete' }).getByRole('button', { name: /Sandbox/ })).toBeDisabled();
+    await expect(page.getByText('El sandbox no está disponible.')).toBeVisible();
+    await sinErroresCriticosDeAxe(page, 'paquete sin sandbox disponible');
   });
 
   test('en escritorio, la referencia interactiva usa Scalar en su iframe aislado con el spec podado', async ({ page }, info) => {

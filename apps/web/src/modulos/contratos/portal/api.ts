@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { pedir } from '../../../app/api';
+import { enviarJson, pedir } from '../../../app/api';
 import { conRespaldoGuardado } from '../../../pwa/sinConexion';
 import type { TipoContrato } from '../api';
 import { PERMISO_PORTAL, recurso, TOPE_RECURSO_BYTES } from '../favoritos/sinConexion';
@@ -141,6 +141,47 @@ export interface ResultadoPortal {
   ruta: string;
 }
 
+/** Sandbox nivel 1 (HU 4.7, ATLAS-ADR-0045): un contrato con la URL base de su mock en Microcks (por el proxy de atlas-api). */
+export interface ContratoSandbox {
+  contratoId: string;
+  codigo: string;
+  nombre: string;
+  version: string;
+  urlBase: string;
+  operaciones: number;
+}
+
+export interface SandboxPortal {
+  id: string;
+  paqueteId: string;
+  paquete: string;
+  revision: number;
+  nivel: number;
+  estado: 'activo' | 'apagado';
+  motivoApagado: string | null;
+  activadoEn: string;
+  llaveCreadaEn: string;
+  expiraEn: string | null;
+  ultimoUsoEn: string | null;
+  cabecera: string;
+  contratos: ContratoSandbox[];
+  instrucciones: string;
+  ejemploCurl: string;
+}
+
+export interface SandboxesPortal {
+  /** Falso si el ambiente no tiene Microcks: el botón Sandbox sale deshabilitado. */
+  disponible: boolean;
+  motivo: string | null;
+  sandboxes: SandboxPortal[];
+}
+
+/** La llave solo llega aquí, una vez: la PWA no la guarda (ni en caché ni en IndexedDB). */
+export interface SandboxActivado {
+  sandbox: SandboxPortal;
+  llave: string;
+}
+
 const BASE = '/api/v1/portal';
 const paquete = (id: string) => `${BASE}/paquetes/${encodeURIComponent(id)}`;
 
@@ -182,6 +223,15 @@ export async function buscarEnPortal(texto: string): Promise<ResultadoPortal[]> 
   return (await (await pedir(`${BASE}/buscar?q=${encodeURIComponent(texto)}`)).json()) as ResultadoPortal[];
 }
 
+export async function obtenerSandboxes(): Promise<SandboxesPortal> {
+  return (await (await pedir(`${BASE}/sandbox`)).json()) as SandboxesPortal;
+}
+
+/** Activa el sandbox del paquete o, si ya estaba activo, regenera su llave (la anterior deja de servir). */
+export async function activarSandbox(paqueteId: string): Promise<SandboxActivado> {
+  return (await (await enviarJson(`${BASE}/sandbox`, 'POST', { paqueteId })).json()) as SandboxActivado;
+}
+
 // Lo compartido cambia poco, pero una revocación o un vencimiento deben notarse pronto: un minuto de caché.
 const FRESCO = 60_000;
 
@@ -213,6 +263,12 @@ export function useCambiosPortal(paqueteId: string, contratoId: string, habilita
 
 export function useGuiaPortal(paqueteId: string, guiaId: string) {
   return useQuery({ queryKey: [...CLAVE_PORTAL, 'guia', paqueteId, guiaId], queryFn: () => obtenerGuiaPortal(paqueteId, guiaId), staleTime: FRESCO });
+}
+
+export const CLAVE_SANDBOX = [...CLAVE_PORTAL, 'sandbox'] as const;
+
+export function useSandboxes(habilitado: boolean) {
+  return useQuery({ queryKey: CLAVE_SANDBOX, queryFn: obtenerSandboxes, enabled: habilitado, staleTime: FRESCO });
 }
 
 export function useBusquedaPortal(texto: string) {

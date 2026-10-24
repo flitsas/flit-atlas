@@ -283,7 +283,7 @@ internal static class EndpointsComparticiones
         [Description("Id de la compartición.")] Guid comparticionId,
         [Description("La revisión, los permisos y la vigencia.")] SolicitudCambioComparticion solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, Sandbox.ServicioSandbox sandbox, TimeProvider reloj, CancellationToken ct)
     {
         var comparticion = await contexto.Comparticiones.FirstOrDefaultAsync(c => c.Id == comparticionId && c.PaqueteId == paqueteId, ct);
         if (comparticion is null)
@@ -325,6 +325,8 @@ internal static class EndpointsComparticiones
         {
             despues = DatosAuditoria(comparticion, reactivada: false), antes = anterior,
         }), ct);
+        // HU 4.7 (ATLAS-ADR-0045): sin sandbox o con otra revisión fijada, su sandbox se apaga o se reimporta ya.
+        await sandbox.RevisarComparticionAsync(comparticion.Id, ct);
         return Results.Ok(await DtoAsync(comparticion, paquete, true, plataforma, reloj, ct));
     }
 
@@ -332,7 +334,7 @@ internal static class EndpointsComparticiones
         [Description("Id del paquete.")] Guid paqueteId,
         [Description("Id de la compartición.")] Guid comparticionId,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, Sandbox.ServicioSandbox sandbox, TimeProvider reloj, CancellationToken ct)
     {
         var comparticion = await contexto.Comparticiones.FirstOrDefaultAsync(c => c.Id == comparticionId && c.PaqueteId == paqueteId, ct);
         if (comparticion is null)
@@ -352,6 +354,8 @@ internal static class EndpointsComparticiones
         comparticion.RevocadoEn = ahora;
         comparticion.RevocadoPor = PersonaDeSesion(http.User);
         await GuardarConAuditoriaAsync(contexto, plataforma, Evento(http, ahora, AccionRevocada, comparticion, DatosAuditoria(comparticion, reactivada: false)), ct);
+        // HU 4.7 (ATLAS-ADR-0045): revocar apaga su sandbox y lo borra de Microcks en este momento.
+        await sandbox.RevisarComparticionAsync(comparticion.Id, ct);
         return Results.Ok(await DtoAsync(comparticion, paquete, true, plataforma, reloj, ct));
     }
 

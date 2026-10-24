@@ -16,6 +16,7 @@ import { leerSpec } from '../spec/documento';
 import { operacionesOpenApi } from '../spec/openapi';
 import { useCambiosPortal, usePaquetePortal, useSpecPodado } from './api';
 import { AccionesPaquete, Avisos, ErrorPortal, InsigniasContrato, Volver } from './componentes';
+import { PanelSandbox, useSandboxDisponible } from './Sandbox';
 
 // Scalar en su iframe aislado (ATLAS-ADR-0039), solo en escritorio y en su propio chunk.
 const VisorScalar = lazy(() => import('../componentes/VisorScalar').then((m) => ({ default: m.VisorScalar })));
@@ -34,6 +35,7 @@ export default function ContratoPortal() {
   const spec = useSpecPodado(paqueteId, contratoId, tecnico);
   const cambios = useCambiosPortal(paqueteId, contratoId, tecnico && entrada?.contrato.tipo === 'openapi');
   const escritorio = useEscritorio();
+  const sandboxDisponible = useSandboxDisponible(detalle.data?.paquete);
   const [parametros, setParametros] = useSearchParams();
 
   const raiz = useMemo(() => (spec.data === undefined ? null : leerSpec(spec.data)), [spec.data]);
@@ -83,9 +85,10 @@ export default function ContratoPortal() {
         <ErrorPortal error={new ErrorApi(403, { codigo: 'solo_resumen' })} que="este contrato" />
       ) : (
         <>
-          <AccionesPaquete paquete={p} />
+          <AccionesPaquete paquete={p} disponibles={{ sandbox: sandboxDisponible }} />
           {/* HU 4.6: solo el enlace del portal, que el externo y sus colegas con acceso pueden abrir. */}
           <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(p.id)}/contratos/${encodeURIComponent(c.contratoId)}`} titulo={c.nombre} que="este contrato" />
+          {c.tipo === 'openapi' && <PanelSandbox paquete={p} contratoId={c.contratoId} />}
           <Pestanas etiqueta="Secciones del contrato" pestanas={pestanas} activa={activa} alElegir={(x) => cambiar({ pestana: x === 'operaciones' ? null : x, op: null })}>
             {spec.isPending && <Cargando etiqueta="Cargando el spec" alto="h-60" />}
             {spec.isError && <ErrorPortal error={spec.error} que="el spec de este contrato" />}
