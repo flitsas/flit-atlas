@@ -148,8 +148,8 @@ Hechos verificados:
 - **Esquema de Postman en las pruebas:** el oficial
   (`https://schema.getpostman.com/json/collection/v2.1.0/collection.json`, JSON Schema draft-04) en
   `services/docs/tests/exportes/esquemas/` con la licencia Apache-2.0 del repo `postmanlabs/schemas`.
-- **Imagen y CI:** `services/docs/Dockerfile` nuevo (Python 3.13 slim de Debian trixie y uv 0.11.16 fijados por
-  digest, Pango, HarfBuzz, DejaVu y tzdata, usuario sin privilegios, puerto `ATLAS_DOCS_PORT` o 4035) con un
+- **Imagen y CI:** `services/docs/Dockerfile` nuevo (`python:3.13.15-slim-trixie`, publicada el 25/09/2026, y uv
+  0.11.16, publicada el 21/05/2026, ambas fijadas por digest y con más de dos semanas de publicadas, Pango, HarfBuzz, DejaVu y tzdata, usuario sin privilegios, puerto `ATLAS_DOCS_PORT` o 4035) con un
   objetivo `pruebas` que corre pytest con Pango. El job `python` instala esas librerías para `docs` y exporta
   `ATLAS_DOCS_EXIGIR_PDF=1`: sin Pango, las pruebas del PDF fallan en el CI y en Windows se saltan. El job
   `imagenes` construye `atlas-docs`; `cd.yml` la publicará en la ola 2.
