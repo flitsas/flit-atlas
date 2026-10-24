@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Personas;
+using Flit.Atlas.Identidad.Sesiones;
 using Microsoft.Identity.Abstractions;
 
 namespace Flit.Atlas.Api.Tests;
@@ -43,6 +44,9 @@ public sealed class GraphSimulado : HttpMessageHandler
     /// <summary>Tamaño de página de los listados: con usuarios de más se prueba el <c>@odata.nextLink</c>.</summary>
     public int TamanoPagina { get; set; } = 2;
 
+    /// <summary>Si no es <c>null</c>, pedir el token lanza esta excepción (una falla que reintentar no arregla).</summary>
+    public Exception? ErrorDelToken { get; set; }
+
     public Usuario Agregar(string nombre, string? correo = null, bool habilitada = true, byte[]? foto = null)
     {
         var usuario = new Usuario { Id = Guid.NewGuid(), Nombre = nombre, Correo = correo, Habilitada = habilitada, Foto = foto };
@@ -52,7 +56,7 @@ public sealed class GraphSimulado : HttpMessageHandler
 
     /// <summary>El directorio de Atlas contra este Graph, con un token de aplicación ficticio.</summary>
     public DirectorioGraph Directorio() =>
-        new(new HttpClient(this, disposeHandler: false) { BaseAddress = new Uri("https://graph.microsoft.com/") }, new AutorizacionSimulada());
+        new(new HttpClient(this, disposeHandler: false) { BaseAddress = new Uri("https://graph.microsoft.com/") }, new AutorizacionSimulada(this));
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -137,12 +141,21 @@ public sealed class GraphSimulado : HttpMessageHandler
 
     private static HttpResponseMessage Json(object cuerpo) => new(HttpStatusCode.OK) { Content = JsonContent.Create(cuerpo) };
 
-    private sealed class AutorizacionSimulada : IAuthorizationHeaderProvider
+    private sealed class AutorizacionSimulada(GraphSimulado graph) : IAuthorizationHeaderProvider
     {
         public Task<string> CreateAuthorizationHeaderForAppAsync(string scopes, AuthorizationHeaderProviderOptions? downstreamApiOptions = null,
             CancellationToken cancellationToken = default)
         {
             Assert.Equal("https://graph.microsoft.com/.default", scopes);
+            // Como Microsoft.Identity.Web fuera del callback de OIDC: sin esquema nombrado toma el de la cookie y falla.
+            if (downstreamApiOptions?.AcquireTokenOptions?.AuthenticationOptionsName != ClaimsAtlas.EsquemaEntra)
+            {
+                throw new InvalidOperationException("IDW10503: Cannot determine the cloud Instance. The provided authentication scheme was ''.");
+            }
+            if (graph.ErrorDelToken is { } error)
+            {
+                throw error;
+            }
             return Task.FromResult(Token);
         }
 

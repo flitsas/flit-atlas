@@ -145,6 +145,13 @@ public sealed partial class TrabajoSincronizacionPersonas(
                 SinIntentos(log, ex);
                 return null;
             }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Reintentar no lo arregla (p. ej. la configuración de Entra): queda en el log y como corrida fallida en la
+                // pantalla. Nunca se escapa: el host tiene BackgroundServiceExceptionBehavior = StopHost y tumbaría la API.
+                FallaSinReintento(log, ex);
+                return null;
+            }
         }
     }
 
@@ -172,4 +179,7 @@ public sealed partial class TrabajoSincronizacionPersonas(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Sincronización de personas: se acabaron los reintentos; queda para la próxima corrida")]
     private static partial void SinIntentos(ILogger log, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Sincronización de personas: falló y reintentar no lo arregla; queda para la próxima corrida")]
+    private static partial void FallaSinReintento(ILogger log, Exception ex);
 }

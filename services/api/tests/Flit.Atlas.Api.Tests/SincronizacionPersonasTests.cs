@@ -353,6 +353,32 @@ public class SincronizacionPersonasTests(EntornoApi entorno)
     }
 
     [Fact]
+    public async Task Una_falla_que_reintentar_no_arregla_queda_registrada_y_no_tumba_el_trabajo()
+    {
+        var cadena = await entorno.BaseNuevaAsync();
+        var graph = new GraphSimulado();
+        await using var api = Api(cadena, graph, new() { [$"{OpcionesSincronizacionPersonas.Seccion}:Reintentos"] = "3" });
+        var ana = graph.Agregar("Ana Demo", "ana.demo@ejemplo.com");
+        await EmpleadoAsync(api, cadena, "Ana Demo", ana.Correo!, ana.Id);
+
+        // Como QA el 2026-10-23: el token de aplicación no se puede pedir (IDW10503). Antes se escapaba del
+        // BackgroundService y el host (StopHost) tumbaba atlas-api.
+        graph.ErrorDelToken = new InvalidOperationException("IDW10503: Cannot determine the cloud Instance.");
+        var trabajo = api.Services.GetRequiredService<TrabajoSincronizacionPersonas>();
+        Assert.Null(await trabajo.CorrerConReintentosAsync(DisparoSincronizacion.Manual, null, Ct));
+        Assert.Empty(graph.Peticiones);
+        await using (var plataforma = entorno.Plataforma(cadena))
+        {
+            var ultima = await SincronizadorPersonas.LeerEstadoAsync(plataforma, Ct);
+            Assert.Equal(("fallida", nameof(InvalidOperationException)), (ultima!.Resultado, ultima.Error));
+        }
+
+        // Corregida la causa, la siguiente corrida termina bien.
+        graph.ErrorDelToken = null;
+        Assert.Equal("exitosa", (await trabajo.CorrerConReintentosAsync(DisparoSincronizacion.Manual, null, Ct))!.Resultado);
+    }
+
+    [Fact]
     public async Task La_proxima_corrida_es_a_la_hora_de_Bogota()
     {
         var cinco = new TimeSpan(5, 0, 0);
