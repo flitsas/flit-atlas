@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Sesiones;
-using Microsoft.AspNetCore.Builder;
+using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,24 +14,15 @@ namespace Flit.Atlas.Identidad.Seguridad;
 /// vencida y lleva al usuario a <c>GET /api/v1/identidad/entrar/microsoft?reautenticar=true&amp;volver=…</c>, que
 /// fuerza a Entra a pedir las credenciales otra vez (<c>prompt=login</c>).
 /// </summary>
-/// <summary>Metadato de los endpoints que exigen reautenticación (lo lee el contrato OpenAPI).</summary>
-public sealed class MetadatoReautenticacion;
-
+/// <remarks>
+/// El metadato y la extensión <c>RequiereReautenticacion</c> viven en <c>Flit.Atlas.Plataforma.Permisos</c> para que los
+/// módulos también la exijan (ATLAS-ADR-0043); esta clase es la verificación que la identidad registra.
+/// </remarks>
 public static class Reautenticacion
 {
     public const string Codigo = "reautenticacion_requerida";
 
     private static readonly TimeSpan DesfaseTolerado = TimeSpan.FromMinutes(5);
-
-    /// <summary>Exige un ingreso reciente en el endpoint o en el grupo.</summary>
-    public static TBuilder RequiereReautenticacion<TBuilder>(this TBuilder builder) where TBuilder : IEndpointConventionBuilder =>
-        builder
-            .WithMetadata(new MetadatoReautenticacion())
-            .AddEndpointFilter(async (contexto, siguiente) =>
-            {
-                var http = contexto.HttpContext;
-                return EsReciente(http) ? await siguiente(contexto) : await RechazarAsync(http);
-            });
 
     /// <summary>¿El último ingreso de la sesión está dentro de la ventana?</summary>
     public static bool EsReciente(HttpContext http)
@@ -68,4 +59,12 @@ public static class Reautenticacion
         long.TryParse(usuario.FindFirstValue(ClaimsAtlas.AuthTime), NumberStyles.Integer, CultureInfo.InvariantCulture, out var segundos)
             ? DateTimeOffset.FromUnixTimeSeconds(segundos)
             : null;
+}
+
+/// <summary>La verificación de <see cref="Reautenticacion"/> para el filtro de Plataforma.</summary>
+internal sealed class VerificadorReautenticacion : IVerificadorReautenticacion
+{
+    public bool EsReciente(HttpContext http) => Reautenticacion.EsReciente(http);
+
+    public Task<IResult> RechazarAsync(HttpContext http) => Reautenticacion.RechazarAsync(http);
 }

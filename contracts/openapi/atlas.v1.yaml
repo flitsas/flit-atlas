@@ -4816,6 +4816,532 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.paquetes.gestionar
+  '/api/v1/contratos/paquetes/{paqueteId}/comparticiones':
+    get:
+      tags:
+        - Contratos
+      summary: Organizaciones con las que se comparte un paquete
+      description: '«Compartido con»: cada organización con su revisión, exportar, sandbox, vigencia y estado (calculado al leer), y si la persona puede compartir. 404 si el paquete no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarComparticionesPaquete
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoComparticiones'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+    post:
+      tags:
+        - Contratos
+      summary: Compartir un paquete con una organización
+      description: 'Solo un paquete publicado y con una organización cliente o proveedora activa (con un proveedor, con vencimiento). Una por paquete y organización: si ya se compartió, 409 ya_compartido; si se había revocado, la reactiva. Con revisión fijada, esa revisión debe seguir cumpliendo las reglas de publicación (409 no_publicable). Requiere atlas.paquetes.gestionar sobre los contratos del paquete y un ingreso reciente. Auditado.'
+      operationId: CompartirPaquete
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'La organización, la revisión, los permisos y la vigencia.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudComparticion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparticionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  '/api/v1/contratos/organizaciones/{organizacionId}/comparticiones':
+    get:
+      tags:
+        - Contratos
+      summary: Paquetes compartidos con una organización
+      description: 'Para la página de organizaciones de la administración: los paquetes compartidos con ella, con su vigencia y estado. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarComparticionesOrganizacion
+      parameters:
+        - name: organizacionId
+          in: path
+          description: Id de la organización.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoComparticiones'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  /api/v1/contratos/comparticiones/organizaciones:
+    get:
+      tags:
+        - Contratos
+      summary: Organizaciones con las que se puede compartir
+      description: 'Clientes y proveedores activos, por nombre, para elegir al compartir un paquete. Requiere atlas.paquetes.gestionar.'
+      operationId: ListarOrganizacionesCompartibles
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizacionCompartible'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.paquetes.gestionar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  '/api/v1/contratos/paquetes/{paqueteId}/comparticiones/{comparticionId}':
+    put:
+      tags:
+        - Contratos
+      summary: Cambiar una compartición
+      description: 'Reemplaza la revisión fijada, exportar, sandbox y la vigencia; el cambio vale desde la siguiente petición del portal. 409 revocada (compártelo otra vez para reactivarla). Requiere atlas.paquetes.gestionar sobre los contratos del paquete y un ingreso reciente. Auditado.'
+      operationId: CambiarComparticionPaquete
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: comparticionId
+          in: path
+          description: Id de la compartición.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'La revisión, los permisos y la vigencia.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCambioComparticion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparticionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+    delete:
+      tags:
+        - Contratos
+      summary: Revocar una compartición
+      description: La organización deja de ver el paquete desde la siguiente petición; la fila queda para la historia (revocadaEn). 409 revocada si ya lo estaba. Requiere atlas.paquetes.gestionar sobre los contratos del paquete y un ingreso reciente. Auditado.
+      operationId: RevocarComparticionPaquete
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: comparticionId
+          in: path
+          description: Id de la compartición.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparticionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorComparticion'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  /api/v1/portal/inicio:
+    get:
+      tags:
+        - Portal de clientes
+      summary: Inicio del cliente
+      description: 'El consolidado de la organización de la sesión: sus aplicativos (con la documentación funcional cuando llegue, F5), los paquetes compartidos vigentes con sus contratos y los avisos de deprecación de las versiones que usa. Recortado al alcance y al rol de la persona. Auditado. Requiere atlas.portal.ver.'
+      operationId: ObtenerInicioPortal
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InicioPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.portal.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/paquetes/{paqueteId}':
+    get:
+      tags:
+        - Portal de clientes
+      summary: Un paquete compartido
+      description: 'El paquete con la revisión que ve la organización: sus contratos y, con nivel técnico, las operaciones y las guías compartidas, y si puede exportar o usar el sandbox. 404 si no está compartido con la organización, venció, se revocó o queda fuera del alcance de la persona. Auditado. Requiere atlas.portal.ver.'
+      operationId: ObtenerPaquetePortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetallePaquetePortal'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.portal.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/paquetes/{paqueteId}/contratos/{contratoId}/spec':
+    get:
+      tags:
+        - Portal de clientes
+      summary: Spec podado de un contrato compartido
+      description: 'Nunca el spec completo: solo las operaciones del paquete, lo que ellas referencian, sin nada interno y con las URL públicas del ambiente (sin ellas, sin servers), en el formato en que se publicó (ATLAS-ADR-0038). El ETag es su SHA-256. 403 solo_resumen si el rol de la persona no ve el detalle técnico; 404 como el paquete; 422 si no se puede podar. Auditado. Requiere atlas.portal.ver.'
+      operationId: ObtenerSpecPodadoPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: contratoId
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: ambiente
+          in: query
+          description: 'sandbox, qa o pdn: las URL públicas que van en servers; vacío = el del ambiente de Atlas.'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+            application/yaml:
+              schema:
+                type: string
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/paquetes/{paqueteId}/contratos/{contratoId}/cambios':
+    get:
+      tags:
+        - Portal de clientes
+      summary: Cambios de un contrato compartido
+      description: 'Del changelog de la CI de la versión compartida, solo los cambios de operaciones compartidas (lo demás no se muestra). 403 solo_resumen; 404 como el paquete. Auditado. Requiere atlas.portal.ver.'
+      operationId: ListarCambiosPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: contratoId
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CambiosPortal'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/paquetes/{paqueteId}/guias/{guiaId}':
+    get:
+      tags:
+        - Portal de clientes
+      summary: Una guía compartida
+      description: 'La revisión de la guía que fijó el paquete (la aprobada por el responsable), nunca la última. 403 solo_resumen; 404 si la guía no está en el paquete que ve la persona. Auditado. Requiere atlas.portal.ver.'
+      operationId: ObtenerGuiaPortal
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuiaPortal'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPortal'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  /api/v1/portal/buscar:
+    get:
+      tags:
+        - Portal de clientes
+      summary: Buscar en lo compartido
+      description: 'Paquetes, contratos y (con nivel técnico) operaciones compartidas con la organización que coinciden con el texto (sin distinguir tildes ni mayúsculas), hasta 30. Nunca devuelve nada fuera de la vista de la persona. Auditado (sin el texto). Requiere atlas.portal.ver.'
+      operationId: BuscarEnPortal
+      parameters:
+        - name: q
+          in: query
+          description: Texto a buscar (2 a 100 caracteres).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResultadoPortal'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.portal.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -7841,6 +8367,35 @@ components:
             - string
           description: Id del recurso; vacío si es global.
       description: 'Alcance de una asignación: global o un recurso (organizacion, aplicativo, paquete, documento, ambiente…).'
+    AplicativoCompartido:
+      required:
+        - aplicativo
+        - paquetes
+        - contratos
+        - documentos
+      type: object
+      properties:
+        aplicativo:
+          $ref: '#/components/schemas/AplicativoDelPortal'
+        paquetes:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Ids de los paquetes que traen contratos de este aplicativo.
+        contratos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Contratos compartidos del aplicativo (sin repetir entre paquetes).
+          format: int32
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoDelAplicativo'
+          description: Documentación funcional (F5); vacía por ahora.
+      description: Un aplicativo con lo que se comparte de él.
     AplicativoDelContrato:
       required:
         - id
@@ -7862,6 +8417,26 @@ components:
             - string
           description: Nombre del aplicativo; vacío si ya no está en el catálogo.
       description: Aplicativo del catálogo al que pertenece el contrato.
+    AplicativoDelPortal:
+      required:
+        - id
+        - slug
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type:
+            - 'null'
+            - string
+          description: Vacío si ya no está en el catálogo.
+        nombre:
+          type:
+            - 'null'
+            - string
+      description: Aplicativo del catálogo de un contrato compartido.
     AplicativoRefDto:
       required:
         - id
@@ -8096,6 +8671,41 @@ components:
           type: string
           description: 'vacaciones, incapacidad u otra.'
       description: Ausencia de una persona (vale en todos sus equipos).
+    AvisoDelPortal:
+      required:
+        - tipo
+        - paqueteId
+        - paquete
+        - contratoId
+        - contrato
+        - version
+        - retiroEn
+        - mensaje
+      type: object
+      properties:
+        tipo:
+          type: string
+          description: deprecada o retirada.
+        paqueteId:
+          type: string
+          format: uuid
+        paquete:
+          type: string
+        contratoId:
+          type: string
+          format: uuid
+        contrato:
+          type: string
+        version:
+          type: string
+        retiroEn:
+          type:
+            - 'null'
+            - string
+          format: date
+        mensaje:
+          type: string
+      description: Aviso de deprecación o retiro de una versión compartida.
     BajaSuscripcionDto:
       required:
         - endpoint
@@ -8467,6 +9077,36 @@ components:
           type: boolean
           description: Si entra en la generación.
       description: Cambio de estado de un participante.
+    CambioPortal:
+      required:
+        - id
+        - texto
+        - nivel
+        - metodo
+        - ruta
+      type: object
+      properties:
+        id:
+          type: string
+          description: Regla de oasdiff.
+        texto:
+          type: string
+        nivel:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: '1 info, 2 advertencia, 3 rompe compatibilidad.'
+          format: int32
+        metodo:
+          type:
+            - 'null'
+            - string
+        ruta:
+          type:
+            - 'null'
+            - string
+      description: Un cambio de la versión compartida que toca una operación compartida.
     CambioPreferencia:
       required:
         - tipo
@@ -8482,6 +9122,29 @@ components:
         activa:
           type: boolean
       description: 'Cambio de una preferencia: activar o apagar un canal para un tipo.'
+    CambiosPortal:
+      required:
+        - contratoId
+        - version
+        - base
+        - elementos
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        version:
+          type: string
+        base:
+          type:
+            - 'null'
+            - string
+          description: 'Versión contra la que se calcularon, si se conoce.'
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/CambioPortal'
+      description: 'Cambios de la versión compartida (del changelog de la CI), solo los de operaciones compartidas.'
     CambioTurno:
       required:
         - horaInicio
@@ -8910,6 +9573,93 @@ components:
             $ref: '#/components/schemas/CambioVersionDto'
           description: Cambios de la base a la comparada.
       description: Comparación de dos versiones del reparto.
+    ComparticionDto:
+      required:
+        - id
+        - paqueteId
+        - paqueteNombre
+        - paqueteEstado
+        - organizacion
+        - revisionFijada
+        - revisionQueVe
+        - puedeExportar
+        - puedeSandbox
+        - vigenteDesde
+        - vigenteHasta
+        - estado
+        - otorgadoPor
+        - creadaEn
+        - actualizadaEn
+        - revocadaEn
+        - puedeGestionar
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paqueteId:
+          type: string
+          format: uuid
+        paqueteNombre:
+          type: string
+          description: Nombre actual del paquete.
+        paqueteEstado:
+          type: string
+          description: 'borrador, publicado o archivado: el portal solo muestra los publicados.'
+        organizacion:
+          $ref: '#/components/schemas/OrganizacionDeComparticion'
+        revisionFijada:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Revisión fijada para esta organización; vacío = sigue la vigente del paquete.
+          format: int32
+        revisionQueVe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: La revisión que ve hoy la organización (la fijada o la vigente); vacío si el paquete no tiene.
+          format: int32
+        puedeExportar:
+          type: boolean
+          description: Si las personas de la organización pueden exportar (además de su permiso).
+        puedeSandbox:
+          type: boolean
+          description: Si pueden usar el sandbox (además de su permiso).
+        vigenteDesde:
+          type: string
+          format: date-time
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: 'Al pasar, el acceso se corta sin intervención; vacío = sin vencimiento.'
+          format: date-time
+        estado:
+          type: string
+          description: 'vigente, programada (empieza después), vencida o revocada; se calcula al leer.'
+        otorgadoPor:
+          description: Quién compartió (o reactivó).
+          $ref: '#/components/schemas/PersonaRef'
+        creadaEn:
+          type: string
+          format: date-time
+        actualizadaEn:
+          type: string
+          format: date-time
+        revocadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        puedeGestionar:
+          type: boolean
+          description: Si la persona puede cambiarla o revocarla.
+      description: Un paquete compartido con una organización.
     CompensacionDto:
       required:
         - id
@@ -9097,6 +9847,67 @@ components:
           items:
             $ref: '#/components/schemas/ContratoConsolidado'
       description: El consolidado de contratos por ambiente.
+    ContratoCompartido:
+      required:
+        - contratoId
+        - codigo
+        - nombre
+        - tipo
+        - aplicativo
+        - versionId
+        - version
+        - estadoVersion
+        - retiroEn
+        - nivel
+        - operaciones
+        - guias
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        aplicativo:
+          $ref: '#/components/schemas/AplicativoDelPortal'
+        versionId:
+          type: string
+          format: uuid
+        version:
+          type: string
+          description: Versión semántica que comparte el paquete.
+        estadoVersion:
+          type: string
+          description: 'vigente, deprecada o retirada (retirada: sin spec ni operaciones).'
+        retiroEn:
+          type:
+            - 'null'
+            - string
+          description: Fecha de retiro si está deprecada.
+          format: date
+        nivel:
+          type: string
+          description: resumen (sin detalle técnico) o tecnico.
+        operaciones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Operaciones compartidas; 0 con nivel resumen.
+          format: int32
+        guias:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Guías compartidas; 0 con nivel resumen.
+          format: int32
+      description: Un contrato compartido dentro de un paquete.
     ContratoConsolidado:
       required:
         - id
@@ -9136,6 +9947,24 @@ components:
             - description: Vacío si qa o pdn no tienen versión o tienen la misma versión base (X.Y.Z).
               $ref: '#/components/schemas/BreakingPendientes'
       description: Un contrato con su versión por ambiente.
+    ContratoDelPaquete:
+      required:
+        - contrato
+        - operaciones
+        - guias
+      type: object
+      properties:
+        contrato:
+          $ref: '#/components/schemas/ContratoCompartido'
+        operaciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperacionCompartida'
+        guias:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuiaCompartida'
+      description: Contrato compartido con sus operaciones y sus guías (nivel técnico).
     ContratoElegible:
       required:
         - id
@@ -9352,6 +10181,24 @@ components:
         mensaje:
           type: string
       description: Diferencia entre dos ambientes vecinos en el orden de promoción (dev → qa → pdn).
+    DetallePaquetePortal:
+      required:
+        - paquete
+        - contratos
+        - avisos
+      type: object
+      properties:
+        paquete:
+          $ref: '#/components/schemas/PaqueteCompartido'
+        contratos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContratoDelPaquete'
+        avisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvisoDelPortal'
+      description: Detalle de un paquete compartido.
     DiferenciaDto:
       required:
         - patron
@@ -9449,6 +10296,24 @@ components:
           type: boolean
           description: La respuesta salió de la caché de atlas-render.
       description: 'Diff entre dos versiones de un contrato: primero los cambios que rompen compatibilidad, del más grave al menos.'
+    DocumentoDelAplicativo:
+      required:
+        - id
+        - titulo
+        - tipo
+        - ruta
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        tipo:
+          type: string
+        ruta:
+          type: string
+      description: 'Documento funcional de un aplicativo (llega con la documentación, F5).'
     DocumentoVigente:
       required:
         - documento
@@ -9726,6 +10591,26 @@ components:
         referencia:
           type: string
       description: 'Reporte recibido: la referencia con la que quedó en el log.'
+    ErrorComparticion:
+      required:
+        - codigo
+        - mensaje
+        - detalles
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso (403); no_publicado, ya_compartido, revocada, no_publicable (409).'
+        mensaje:
+          type: string
+        detalles:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Con no_publicable: qué ya no se cumple en la revisión fijada.'
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorDiff:
       required:
         - codigo
@@ -9795,6 +10680,18 @@ components:
             type: string
           description: 'Con no_publicable: qué falta o ya no se cumple.'
       description: 'Por qué no se hizo, con un código estable.'
+    ErrorPortal:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); solo_resumen (403); no_soportado, sin_operaciones, ambiente_invalido o un código de la poda (422).'
+        mensaje:
+          type: string
+      description: 'Por qué no se pudo, con un código estable.'
     ErrorPublicacion:
       required:
         - codigo
@@ -10494,6 +11391,31 @@ components:
           type: string
           format: date-time
       description: 'Fuente de la lista blanca: qué repo puede publicar qué tipos de fuente de un aplicativo desde la CI.'
+    GuiaCompartida:
+      required:
+        - id
+        - titulo
+        - operacion
+        - revision
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        operacion:
+          type:
+            - 'null'
+            - string
+          description: Clave de la operación si es de una.
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+      description: 'Guía compartida: la revisión que fijó el paquete.'
     GuiaDetalle:
       required:
         - guia
@@ -10573,6 +11495,42 @@ components:
           description: Revisión que se comparte.
           format: int32
       description: Guía de un contrato dentro de una revisión del paquete.
+    GuiaPortal:
+      required:
+        - id
+        - paqueteId
+        - contratoId
+        - titulo
+        - operacion
+        - revision
+        - contenido
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paqueteId:
+          type: string
+          format: uuid
+        contratoId:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        operacion:
+          type:
+            - 'null'
+            - string
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        contenido:
+          type: string
+          description: 'Markdown tal cual (la PWA lo muestra sanitizado, sin HTML).'
+      description: Guía compartida con su cuerpo en Markdown.
     GuiaResumen:
       required:
         - id
@@ -10873,6 +11831,29 @@ components:
           description: Aplicados sobre sus turnos ya pasados (0 a 1); vacío si aún no tiene turnos pasados.
           format: double
       description: Indicadores de una persona en el rango.
+    InicioPortal:
+      required:
+        - organizacion
+        - aplicativos
+        - paquetes
+        - avisos
+      type: object
+      properties:
+        organizacion:
+          $ref: '#/components/schemas/OrganizacionDelPortal'
+        aplicativos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AplicativoCompartido'
+        paquetes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaqueteCompartido'
+        avisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvisoDelPortal'
+      description: 'Inicio del cliente: sus aplicativos, sus paquetes y los avisos de deprecación de lo que usa.'
     InvitacionEnviada:
       required:
         - invitacion
@@ -11063,6 +12044,21 @@ components:
           items:
             $ref: '#/components/schemas/AplicativoResumen'
       description: 'Listado del catálogo filtrado, ordenado por grupo y por la ruta en la jerarquía.'
+    ListadoComparticiones:
+      required:
+        - puedeCompartir
+        - elementos
+      type: object
+      properties:
+        puedeCompartir:
+          type: boolean
+          description: Si la persona puede compartir este paquete (solo en el listado de un paquete).
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComparticionDto'
+          description: 'Las vigentes y programadas primero; luego vencidas y revocadas, de la más reciente a la más antigua.'
+      description: Comparticiones de un paquete o de una organización.
     ListadoContratos:
       required:
         - total
@@ -11525,6 +12521,40 @@ components:
           type: string
           description: 'PublicKeyCredentialCreationOptionsJSON o PublicKeyCredentialRequestOptionsJSON (WebAuthn nivel 3), como texto JSON.'
       description: Opciones para que el navegador cree o use una passkey (WebAuthn) y el id del paso que las acompaña.
+    OperacionCompartida:
+      required:
+        - clave
+        - metodo
+        - ruta
+        - operationId
+        - resumen
+        - etiquetas
+      type: object
+      properties:
+        clave:
+          type: string
+          description: 'GET /ruta, POST webhook:<nombre>, send <canal>…'
+        metodo:
+          type:
+            - 'null'
+            - string
+        ruta:
+          type:
+            - 'null'
+            - string
+        operationId:
+          type:
+            - 'null'
+            - string
+        resumen:
+          type:
+            - 'null'
+            - string
+        etiquetas:
+          type: array
+          items:
+            type: string
+      description: Operación compartida (del índice de la versión).
     OperacionDto:
       required:
         - clave
@@ -11620,6 +12650,59 @@ components:
             format: uuid
           description: Ids de los participantes en el orden nuevo.
       description: 'Nuevo orden de la rotación del equipo: todos sus participantes, del primero al último.'
+    OrganizacionCompartible:
+      required:
+        - id
+        - nombre
+        - tipo
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: cliente o proveedor.
+      description: 'Organización con la que se puede compartir: cliente o proveedora, activa.'
+    OrganizacionDeComparticion:
+      required:
+        - id
+        - nombre
+        - tipo
+        - estado
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre; «Organización no disponible» si ya no está.
+        tipo:
+          type:
+            - 'null'
+            - string
+          description: cliente o proveedor.
+        estado:
+          type:
+            - 'null'
+            - string
+          description: activa o suspendida (una suspendida no entra a Atlas).
+      description: Organización con la que se comparte.
+    OrganizacionDelPortal:
+      required:
+        - id
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+      description: Organización de la sesión.
     OrganizacionInvitable:
       required:
         - id
@@ -11697,6 +12780,55 @@ components:
           type: string
           format: date-time
       description: 'Organización de Atlas: FLIT (interna), un cliente o un proveedor.'
+    PaqueteCompartido:
+      required:
+        - id
+        - nombre
+        - descripcion
+        - revision
+        - nivel
+        - puedeExportar
+        - puedeSandbox
+        - vigenteHasta
+        - contratos
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        descripcion:
+          type:
+            - 'null'
+            - string
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Revisión del paquete que ve la organización.
+          format: int32
+        nivel:
+          type: string
+          description: 'resumen o tecnico: lo que la persona ve según su rol y su alcance.'
+        puedeExportar:
+          type: boolean
+          description: Si la persona puede exportarlo (compartición con exportar y su permiso); la acción llega con la HU 4.5.
+        puedeSandbox:
+          type: boolean
+          description: Si puede usar el sandbox (compartición con sandbox y su permiso); la acción llega con la HU 4.7.
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo se comparte; vacío = sin vencimiento.
+          format: date-time
+        contratos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContratoCompartido'
+      description: Un paquete compartido con la organización.
     PaqueteDetalle:
       required:
         - paquete
@@ -12803,6 +13935,37 @@ components:
           description: 'El informe: lo mismo que la vista previa confirmada.'
           $ref: '#/components/schemas/VistaPreviaImportacionDto'
       description: 'Resultado de la importación, con el informe final.'
+    ResultadoPortal:
+      required:
+        - tipo
+        - titulo
+        - detalle
+        - paqueteId
+        - contratoId
+        - ruta
+      type: object
+      properties:
+        tipo:
+          type: string
+          description: 'paquete, contrato u operacion.'
+        titulo:
+          type: string
+        detalle:
+          type:
+            - 'null'
+            - string
+        paqueteId:
+          type: string
+          format: uuid
+        contratoId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        ruta:
+          type: string
+          description: Ruta de la PWA.
+      description: Resultado de la búsqueda dentro de lo compartido.
     ResultadoRestablecimiento:
       required:
         - correoEnviado
@@ -13530,6 +14693,40 @@ components:
           description: Hasta cuándo vale; obligatoria para roles externos.
           format: date-time
       description: Rol que se asigna a una persona. Un rol externo exige vencimiento (máximo 90 días) y queda en la organización de la persona.
+    SolicitudCambioComparticion:
+      required:
+        - revisionFijada
+        - puedeExportar
+        - puedeSandbox
+        - vigenteDesde
+        - vigenteHasta
+      type: object
+      properties:
+        revisionFijada:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Vacío = sigue la vigente del paquete.
+          format: int32
+        puedeExportar:
+          type: boolean
+        puedeSandbox:
+          type: boolean
+        vigenteDesde:
+          type:
+            - 'null'
+            - string
+          description: Vacío = conserva la actual.
+          format: date-time
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: Vacío = sin vencimiento (obligatorio con un proveedor).
+          format: date-time
+      description: 'Cambiar una compartición: reemplaza la revisión fijada, los permisos y la vigencia.'
     SolicitudCambioDto:
       required:
         - id
@@ -13689,6 +14886,46 @@ components:
           description: Siguiente revisión; tres meses después si no se dice.
           format: date
       description: 'Cierre de la revisión: queda hecha y se programa la siguiente.'
+    SolicitudComparticion:
+      required:
+        - organizacionId
+        - revisionFijada
+        - puedeExportar
+        - puedeSandbox
+        - vigenteDesde
+        - vigenteHasta
+      type: object
+      properties:
+        organizacionId:
+          type: string
+          format: uuid
+        revisionFijada:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Revisión del paquete que verá la organización; vacío = sigue la vigente (publicada o fijada).
+          format: int32
+        puedeExportar:
+          type: boolean
+          description: Si sus personas pueden exportar el paquete (si además tienen el permiso).
+        puedeSandbox:
+          type: boolean
+          description: Si pueden usar el sandbox (si además tienen el permiso).
+        vigenteDesde:
+          type:
+            - 'null'
+            - string
+          description: Desde cuándo vale; vacío = ahora.
+          format: date-time
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo vale; vacío = sin vencimiento (obligatorio con un proveedor).
+          format: date-time
+      description: Compartir un paquete publicado con una organización cliente o proveedora.
     SolicitudCompletarRecuperacion:
       required:
         - enlace
@@ -15070,6 +16307,8 @@ tags:
     description: 'Invitaciones de externos con rol, alcance, vencimiento y permisos extra: crear, reenviar, suspender, renovar y revocar (HU 1.5, ATLAS-ADR-0025).'
   - name: Directorio
     description: 'Directorio interno de empleados sincronizado a diario con Microsoft Graph: nombre, cargo, área, foto y estado; el teléfono solo con atlas.equipo.ver_contacto (ATLAS-ADR-0030).'
+  - name: Portal de clientes
+    description: 'Lo que FLIT comparte con la organización de la persona: su consolidado (aplicativos, paquetes y avisos de deprecación), el detalle de cada paquete, el spec podado por contrato, las guías y los cambios, y la búsqueda dentro de lo compartido. Siempre filtrado por la organización de la sesión, el alcance de la persona y la vigencia de la compartición; cada vista queda en la auditoría (ATLAS-ADR-0043).'
   - name: Permisos
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
   - name: Catálogo

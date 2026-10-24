@@ -51,6 +51,7 @@ internal static class ContratoOpenApi
         ("Organizaciones", "FLIT, clientes y proveedores: crear, editar, suspender y eliminar, y habilitar el administrador de la organización (HU 1.5, ATLAS-ADR-0025)."),
         ("Invitaciones", "Invitaciones de externos con rol, alcance, vencimiento y permisos extra: crear, reenviar, suspender, renovar y revocar (HU 1.5, ATLAS-ADR-0025)."),
         ("Directorio", "Directorio interno de empleados sincronizado a diario con Microsoft Graph: nombre, cargo, área, foto y estado; el teléfono solo con atlas.equipo.ver_contacto (ATLAS-ADR-0030)."),
+        (ExtensionesModulos.EtiquetaPortal, "Lo que FLIT comparte con la organización de la persona: su consolidado (aplicativos, paquetes y avisos de deprecación), el detalle de cada paquete, el spec podado por contrato, las guías y los cambios, y la búsqueda dentro de lo compartido. Siempre filtrado por la organización de la sesión, el alcance de la persona y la vigencia de la compartición; cada vista queda en la auditoría (ATLAS-ADR-0043)."),
         ("Permisos","Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023)."),
     ];
 

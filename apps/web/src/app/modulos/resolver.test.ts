@@ -127,8 +127,12 @@ describe('registro', () => {
   });
 
   it('los módulos del MVP quedan en la barra inferior del móvil: Inicio, Buscar, Soporte y Asistente (más «Más»)', () => {
-    const nav = resolverNavegacion(MODULOS_REGISTRADOS, { banderas: {} });
+    const nav = resolverNavegacion(MODULOS_REGISTRADOS, { banderas: {}, tipoPrincipal: 'empleado' });
     expect(nav.barraInferior.map((e) => e.etiqueta)).toEqual(['Inicio', 'Buscar', 'Soporte', 'Asistente']);
+    // Un externo (HU 4.4, ATLAS-ADR-0043): el portal en la barra inferior, en lugar de Soporte (que no ve).
+    const externo = resolverNavegacion(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.portal.ver', 'atlas.asistente.usar', 'atlas.docs.ver'], tipoPrincipal: 'externo' });
+    expect(externo.barraInferior.map((e) => e.etiqueta)).toEqual(['Inicio', 'Buscar', 'Portal', 'Asistente']);
+    expect(externo.mas.map((e) => e.etiqueta)).toEqual(['Documentación']);
     // «Roles y permisos» (HU 1.4), Invitaciones, Organizaciones (HU 1.5) y «Asignación de roles» también van en «Más», el Consolidado de contratos (HU 3.4) y los Paquetes (HU 4.1); «hola» (HU 1.9) está apagado por defecto.
     expect(nav.mas.map((e) => e.etiqueta)).toEqual(['Catálogo', 'Equipo', 'Responsables', 'Contratos', 'Consolidado', 'Paquetes', 'Documentación', 'Roles y permisos', 'Invitaciones', 'Organizaciones', 'Asignación de roles']);
     const mvp = MODULOS_REGISTRADOS.filter((m) => !['permisos', 'hola', 'administracion'].includes(m.id));

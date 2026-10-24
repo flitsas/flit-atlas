@@ -40,8 +40,8 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.paquetes.gestionar` | Armar paquetes de contratos y compartirlos con organizaciones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 | `atlas.portal.ver` | Entrar al portal de clientes y ver lo compartido con la organización. | ✔ | ✔ |   | ✔ |   |   |   |   | ✔ | ✔ | ✔ | ✔ | ✔ |   |
-| `atlas.exportaciones.solicitar` | Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP). | ✔ | ✔ | ✔ |   | ✔ |   |   |   |   |   | ✔ |   |   |   |
-| `atlas.sandbox.usar` | Usar el sandbox de los contratos. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
+| `atlas.exportaciones.solicitar` | Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP). | ✔ | ✔ | ✔ |   | ✔ |   |   |   | ✔ |   | ✔ |   |   |   |
+| `atlas.sandbox.usar` | Usar el sandbox de los contratos. | ✔ | ✔ | ✔ | ✔ |   |   |   |   | ✔ |   |   |   |   |   |
 
 ## Documentación (`documentacion`)
 

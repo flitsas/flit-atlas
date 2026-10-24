@@ -145,6 +145,7 @@ public static class ExtensionesIdentidad
     {
         servicios.AgregarManifiestoPermisos(PermisosIdentidad.Manifiesto);
         servicios.AddScoped<IPermisosDeSesion, PermisosDeSesion>();
+        servicios.AddSingleton<IVerificadorReautenticacion, Seguridad.VerificadorReautenticacion>();
         servicios.Replace(ServiceDescriptor.Scoped<IAlcanceDatos, AlcanceDatosDeSesion>());
         servicios.AddScoped<AdministracionRoles>();
         servicios.AddOptions<OpcionesVencimientos>().BindConfiguration(OpcionesVencimientos.Seccion);
