@@ -6,6 +6,7 @@ import { formatearFechaHora } from '../../../app/ui/formato';
 import { Icono } from '../../../app/ui/Icono';
 import { cn, Insignia } from '../../../app/ui/Tarjeta';
 import { type ContratoResumen, TIPOS, type TipoContrato, useContratos, useVersiones, type VersionResumen } from '../api';
+import { FavoritosInternos } from '../favoritos/componentes';
 import { moduloContratos } from '../modulo';
 
 const OPCIONES_TIPO: Array<{ valor: TipoContrato | ''; etiqueta: string }> = [
@@ -54,6 +55,8 @@ export default function Lista() {
           </p>
         </div>
       </header>
+
+      <FavoritosInternos />
 
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-atlas-texto-suave" aria-hidden="true" />

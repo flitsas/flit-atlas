@@ -5,8 +5,11 @@ import { Link, Route, Routes, useParams } from 'react-router';
 import { CargandoPagina } from '../../../app/layout/Shell';
 import { NoEncontrada } from '../../../app/paginas/Estados';
 import { useSesionOpcional } from '../../../app/sesion';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Tarjeta } from '../../../app/ui/Tarjeta';
 import { Buscador, Etiqueta } from '../componentes/ui';
+import { BotonFavorito, FavoritosPortal } from '../favoritos/componentes';
+import { PERMISO_PORTAL, recurso, rutaGuia, rutaPaquete } from '../favoritos/sinConexion';
 import { Cargando, VistaMarkdown } from '../guias/componentes';
 import { type PaqueteCompartido, useBusquedaPortal, useGuiaPortal, useInicioPortal, usePaquetePortal } from './api';
 import { AccionesPaquete, Avisos, ErrorPortal, fechaCorta, InsigniasContrato, Volver } from './componentes';
@@ -45,7 +48,14 @@ function InicioCliente() {
   const buscado = useDeferredValue(texto);
 
   if (inicio.isPending) return <Cargando etiqueta="Cargando lo que FLIT comparte contigo" alto="h-60" />;
-  if (inicio.isError) return <ErrorPortal error={inicio.error} que="el portal" />;
+  if (inicio.isError)
+    return (
+      <>
+        {/* Sin conexión, el Inicio no está guardado, pero los favoritos sí (HU 4.9). */}
+        <FavoritosPortal />
+        <ErrorPortal error={inicio.error} que="el portal" />
+      </>
+    );
   const { organizacion, aplicativos, paquetes, avisos } = inicio.data;
   const porId = new Map(paquetes.map((p) => [p.id, p]));
 
@@ -62,6 +72,8 @@ function InicioCliente() {
       </header>
 
       <Avisos avisos={avisos} />
+
+      <FavoritosPortal />
 
       {paquetes.length > 0 && (
         <section aria-label="Buscar en lo compartido" className="flex flex-col gap-2">
@@ -179,7 +191,9 @@ function PaquetePortal() {
         </p>
         <h1 className="text-2xl font-semibold break-words sm:text-3xl">{p.nombre}</h1>
         {p.descripcion && <p className="max-w-3xl text-sm break-words text-white/85">{p.descripcion}</p>}
+        <BotonFavorito objetivo={{ ambito: 'portal', tipo: 'paquete', paqueteId: p.id }} que="el paquete" />
       </header>
+      <DatosGuardados recurso={recurso(rutaPaquete(p.id), PERMISO_PORTAL).clave} sinTelefonos={false} />
       <Avisos avisos={avisos} />
       {p.nivel === 'tecnico' ? (
         <AccionesPaquete paquete={p} />
@@ -253,6 +267,8 @@ function GuiaPortal() {
   return (
     <>
       <Volver a={`/portal/paquetes/${paqueteId}`} texto="Paquete" />
+      <DatosGuardados recurso={recurso(rutaGuia(paqueteId, guiaId), PERMISO_PORTAL).clave} sinTelefonos={false} />
+      <BotonFavorito objetivo={{ ambito: 'portal', tipo: 'guia', paqueteId, guiaId }} que="la guía" enPortada={false} />
       <Tarjeta titulo={g.titulo}>
         <p className="mb-3 text-xs text-atlas-texto-suave">
           Revisión {g.revision}

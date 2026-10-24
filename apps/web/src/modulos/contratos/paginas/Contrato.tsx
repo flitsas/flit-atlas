@@ -4,12 +4,15 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
 import { NoEncontrada } from '../../../app/paginas/Estados';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { formatearFecha } from '../../../app/ui/formato';
 import { Hoja } from '../../../app/ui/Hoja';
 import { Boton } from '../../../app/ui/Tarjeta';
 import { type ContratoResumen, TIPOS, useContrato, useOperaciones, useSpec, useVersiones, type VersionResumen } from '../api';
 import { Canales } from '../componentes/Canales';
 import { MatrizObligatoriedad } from '../componentes/MatrizObligatoriedad';
+import { BotonFavorito } from '../favoritos/componentes';
+import { PERMISO_INTERNO, recurso, rutaContrato } from '../favoritos/sinConexion';
 import { Operaciones } from '../componentes/Operaciones';
 import { PaquetesDelContrato } from '../paquetes/PaquetesDelContrato';
 import { PuntoGuias } from '../componentes/PuntoGuias';
@@ -151,7 +154,9 @@ function Contenido({ contrato: c, version, versiones }: { contrato: ContratoResu
             </Boton>
           )}
         </div>
+        <BotonFavorito objetivo={{ ambito: 'interno', contratoId: c.id }} que="el contrato" />
       </header>
+      <DatosGuardados recurso={recurso(rutaContrato(c.id), PERMISO_INTERNO).clave} sinTelefonos={false} />
 
       <Pestanas etiqueta="Secciones del contrato" pestanas={pestanas} activa={activa} alElegir={(p) => cambiar({ pestana: p === 'documentacion' ? null : p, op: null })}>
         {spec.isPending && <div role="status" aria-label="Cargando el spec" className="h-60 animate-pulse rounded-2xl bg-card" />}

@@ -49,6 +49,8 @@ channels:
         $ref: '#/components/messages/contratosVersionPublicadaV1'
       contratosCanalActualizadoV1:
         $ref: '#/components/messages/contratosCanalActualizadoV1'
+      contratosVersionDeprecadaV1:
+        $ref: '#/components/messages/contratosVersionDeprecadaV1'
     bindings:
       amqp:
         is: routingKey
@@ -73,6 +75,7 @@ operations:
       - $ref: '#/components/messages/sobreEvento'
       - $ref: '#/components/messages/contratosVersionPublicadaV1'
       - $ref: '#/components/messages/contratosCanalActualizadoV1'
+      - $ref: '#/components/messages/contratosVersionDeprecadaV1'
     bindings:
       amqp:
         deliveryMode: 2
@@ -212,6 +215,50 @@ components:
               repositorio: flitsas-demo/api-demo
               rama: staging
               commit: 0123456789abcdef0123456789abcdef01234567
+
+    contratosVersionDeprecadaV1:
+      name: atlas.contratos.version_deprecada
+      x-atlas-tipo: atlas.contratos.version_deprecada
+      x-atlas-version: 1
+      title: Versión de contrato deprecada
+      summary: Una versión de un contrato quedó deprecada con su fecha de retiro, o cambió esa fecha (HU 4.8, ATLAS-ADR-0046).
+      description: |
+        Se emite en la misma transacción que `POST /api/v1/contratos/{id}/versiones/{version}/deprecar` cuando cambia el
+        estado o la fecha de retiro; si ya estaba deprecada con la misma fecha no se repite. Los avisos a las
+        organizaciones afectadas y a los responsables los manda atlas-api (no este evento). Lo consumirán el asistente y el
+        sandbox (plan 00 §12). Es interno: `tenantId` va en ceros.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.contratos.version_deprecada
+              version:
+                const: 1
+              data:
+                $ref: '#/components/schemas/ContratosVersionDeprecadaV1'
+      examples:
+        - name: deprecadaConReemplazo
+          summary: Un contrato ficticio depreca la 1.2.0 con retiro el 31/12/2026; la reemplaza la 2.0.0.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50
+            type: atlas.contratos.version_deprecada
+            version: 1
+            occurredAt: '2026-10-24T15:00:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              contratoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d30
+              versionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d51
+              aplicativoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d32
+              contrato: api-externa
+              version: 1.2.0
+              retiroEn: '2026-12-31'
+              retiroAnterior: null
+              reemplazo: 2.0.0
 
   schemas:
     SobreEvento:
@@ -385,7 +432,55 @@ components:
           type: string
           description: Commit desplegado.
 
-# Eventos publicados: atlas.contratos.version_publicada (HU 3.2) y atlas.contratos.canal_actualizado (HU 3.4). Cada evento nuevo se agrega en el mismo PR que su
+    ContratosVersionDeprecadaV1:
+      type: object
+      description: '`data` de atlas.contratos.version_deprecada v1: qué versión se depreca, hasta cuándo y qué la reemplaza.'
+      additionalProperties: false
+      required:
+        - contratoId
+        - versionId
+        - aplicativoId
+        - contrato
+        - version
+        - retiroEn
+        - retiroAnterior
+        - reemplazo
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+          description: Id del contrato en Atlas.
+        versionId:
+          type: string
+          format: uuid
+          description: Id de la versión deprecada.
+        aplicativoId:
+          type: string
+          format: uuid
+          description: Id del aplicativo del catálogo.
+        contrato:
+          type: string
+          description: Código del contrato dentro del aplicativo.
+        version:
+          type: string
+          description: Versión semántica deprecada.
+        retiroEn:
+          type: string
+          format: date
+          description: Fecha de retiro (hora de Bogotá).
+        retiroAnterior:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: La fecha de retiro anterior si ya estaba deprecada; null la primera vez.
+        reemplazo:
+          type:
+            - string
+            - 'null'
+          description: La versión estable vigente más alta posterior, si la hay.
+
+# Eventos publicados: atlas.contratos.version_publicada (HU 3.2), atlas.contratos.canal_actualizado (HU 3.4) y atlas.contratos.version_deprecada (HU 4.8). Cada evento nuevo se agrega en el mismo PR que su
 # TipoEvento, así:
 #
 #   components:

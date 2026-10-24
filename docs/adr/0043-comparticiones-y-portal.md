@@ -153,6 +153,7 @@ da `SpecsDelPortal.PodarAsync(paquete, contrato, ambiente)`.
 | `GET /paquetes/{id}/contratos/{contratoId}/cambios` | Del changelog de la CI, solo los cambios cuya operación (método y ruta) está compartida |
 | `GET /paquetes/{id}/guias/{guiaId}` | La revisión de la guía que fijó el paquete |
 | `GET /buscar?q=` | Paquetes, contratos y operaciones compartidas que coinciden; nunca fuera de la vista |
+| `GET /favoritos` · `PUT`/`DELETE /favoritos/paquetes/{id}[/contratos/{c} \| /guias/{g}]` | HU 4.9: favoritos para ver sin conexión (ATLAS-ADR-0034); solo lo que la persona ve |
 
 - Todo con `atlas.portal.ver`. Un paquete fuera de la vista (de otra organización, vencido, revocado, archivado o fuera
   del alcance) responde **404** `no_encontrado`, sin revelar si existe; lo técnico con nivel resumen, 403 `solo_resumen`.
@@ -241,3 +242,5 @@ da `SpecsDelPortal.PodarAsync(paquete, contrato, ambiente)`.
   organización (hoy ve el de FLIT, vacío); las URL públicas por contrato y ambiente y el ambiente por defecto del spec;
   si compartir con un proveedor debe tener un vencimiento máximo; que la búsqueda global (cuando exista, ATLAS-ADR-0026)
   incluya los resultados del portal para externos.
+- HU 4.8 (ATLAS-ADR-0046): los avisos de deprecación usan `AccesoPortal.VistaDeAsync` (la misma vista, sin sesión) para
+  decidir a quién le llegan, y el aviso del Inicio suma `reemplazo` con el mismo texto que el correo.

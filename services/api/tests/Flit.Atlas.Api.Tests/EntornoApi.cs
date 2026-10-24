@@ -111,6 +111,8 @@ public sealed class EntornoApi : IAsyncLifetime
             // HU 2.11: sin la corrida diaria de recordatorios (la base es compartida y mandaría correos y avisos a otras
             // pruebas); las pruebas la piden con «Enviar ahora» o llaman al servicio.
             b.UseSetting("Soporte:Recordatorios:Habilitados", "false");
+            // HU 4.8: lo mismo con los avisos de deprecación; las pruebas corren AvisosDeprecacion por versión.
+            b.UseSetting("Contratos:AvisosDeprecacion:Habilitados", "false");
             foreach (var (clave, valor) in configuracion ?? new Dictionary<string, string>())
             {
                 b.UseSetting(clave, valor);

@@ -24,7 +24,7 @@ public class ModuloContratosTests(Contenedores contenedores)
         Assert.True(modulo.ActivoPorDefecto);
         Assert.Equal(typeof(ContratosDbContext), modulo.ContextoDatos);
         Assert.Equal("__ef_migraciones_contratos", ContratosDbContext.TablaHistorial);
-        Assert.Equal([EventosContratos.VersionPublicada, EventosContratos.CanalActualizado], modulo.EventosPublicados);
+        Assert.Equal([EventosContratos.VersionPublicada, EventosContratos.CanalActualizado, EventosContratos.VersionDeprecada], modulo.EventosPublicados);
         // Los mismos códigos y concesiones de la lista base del §7.4 (son contrato).
         Assert.Equal(
             ManifiestosNucleo.Contratos.Permisos.Select(p => (p.Codigo, string.Join(',', p.ConcedidoA))),
@@ -71,7 +71,7 @@ public class ModuloContratosTests(Contenedores contenedores)
         await contratos.Database.MigrateAsync(Ct);
 
         Assert.Empty(await contratos.Database.GetPendingMigrationsAsync(Ct));
-        Assert.Equal(["__ef_migraciones_contratos", "contratos_canal", "contratos_canal_historial", "contratos_comparticion", "contratos_contrato", "contratos_guia", "contratos_guia_revision", "contratos_operacion", "contratos_paquete", "contratos_paquete_revision", "contratos_version"],
+        Assert.Equal(["__ef_migraciones_contratos", "contratos_aviso_deprecacion", "contratos_canal", "contratos_canal_historial", "contratos_comparticion", "contratos_contrato", "contratos_favorito", "contratos_guia", "contratos_guia_revision", "contratos_operacion", "contratos_paquete", "contratos_paquete_revision", "contratos_version"],
             (await Tablas(bd)).Except(delNucleo).Order(StringComparer.Ordinal));
     }
 

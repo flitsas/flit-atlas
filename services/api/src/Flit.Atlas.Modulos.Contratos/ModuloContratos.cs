@@ -20,7 +20,7 @@ public static class PermisosContratos
     /// <summary>Ver los contratos internos, sus versiones, sus specs y su índice de operaciones.</summary>
     public const string VerInternos = "atlas.contratos.ver_internos";
 
-    /// <summary>Publicar a mano, por excepción, y deprecar versiones (HU siguientes).</summary>
+    /// <summary>Publicar a mano, por excepción, y deprecar versiones con su fecha de retiro (HU 4.8).</summary>
     public const string PublicarManual = "atlas.contratos.publicar_manual";
 
     /// <summary>Guías de integración con revisiones (HU 3.7).</summary>
@@ -60,6 +60,13 @@ public static class EventosContratos
     /// consumirá arquitectura para relacionar el despliegue con la versión del contrato (plan 00 §12).
     /// </summary>
     public static readonly TipoEvento CanalActualizado = new("atlas.contratos.canal_actualizado", 1);
+
+    /// <summary>
+    /// Una versión quedó deprecada con su fecha de retiro, o cambió esa fecha (HU 4.8, ATLAS-ADR-0046; no se emite si ya
+    /// estaba deprecada con la misma). Los avisos a las organizaciones afectadas los manda el propio módulo; lo consumirán
+    /// el asistente (marcar la versión) y el sandbox (plan 00 §12).
+    /// </summary>
+    public static readonly TipoEvento VersionDeprecada = new("atlas.contratos.version_deprecada", 1);
 }
 
 /// <summary>
@@ -70,7 +77,8 @@ public static class EventosContratos
 /// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). HU 4.1: paquetes con revisiones inmutables,
 /// publicación y fijación de una revisión anterior (ATLAS-ADR-0041). HU 4.2: la poda de specs para clientes
 /// (<see cref="Poda.Podadores"/>, ATLAS-ADR-0038). HU 4.3 y 4.4: comparticiones de paquetes con organizaciones y el portal
-/// de clientes en <c>/api/v1/portal</c> (ATLAS-ADR-0043). Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
+/// de clientes en <c>/api/v1/portal</c> (ATLAS-ADR-0043). HU 4.8: deprecar con fecha de retiro y avisar a las organizaciones
+/// afectadas (ATLAS-ADR-0046). HU 4.9: favoritos para ver sin conexión (ATLAS-ADR-0034). Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
 /// </summary>
 public sealed class ModuloContratos : IModuloAtlas
 {
@@ -89,7 +97,10 @@ public sealed class ModuloContratos : IModuloAtlas
 
     public Type? ContextoDatos => typeof(ContratosDbContext);
 
-    public IReadOnlyList<TipoEvento> EventosPublicados => [EventosContratos.VersionPublicada, EventosContratos.CanalActualizado];
+    public IReadOnlyList<TipoEvento> EventosPublicados => [EventosContratos.VersionPublicada, EventosContratos.CanalActualizado, EventosContratos.VersionDeprecada];
+
+    /// <summary>Avisos de deprecación (HU 4.8, ATLAS-ADR-0046): app, push y correo.</summary>
+    public IReadOnlyList<Plataforma.Notificaciones.TipoNotificacion> TiposNotificacion => [Deprecacion.AvisosDeprecacion.Tipo];
 
     public void RegistrarDatos(IServiceCollection servicios, string cadenaConexion) =>
         servicios.AddDbContext<ContratosDbContext>(o => ContratosDbContext.Configurar(o, cadenaConexion));
@@ -104,6 +115,11 @@ public sealed class ModuloContratos : IModuloAtlas
         servicios.AddSingleton<Portal.CachePodas>();
         servicios.AddScoped<Portal.AccesoPortal>();
         servicios.AddScoped<Portal.SpecsDelPortal>();
+        // Avisos de deprecación (HU 4.8, ATLAS-ADR-0046): corrida programada y la que pide deprecar, fuera de la petición.
+        servicios.AddOptions<Deprecacion.OpcionesAvisosDeprecacion>().BindConfiguration(Deprecacion.OpcionesAvisosDeprecacion.Seccion);
+        servicios.AddSingleton<Deprecacion.DisparadorAvisos>();
+        servicios.AddScoped<Deprecacion.AvisosDeprecacion>();
+        servicios.AddHostedService<Deprecacion.TrabajoAvisosDeprecacion>();
     }
 
     public void MapearEndpoints(RouteGroupBuilder grupo)
@@ -116,7 +132,13 @@ public sealed class ModuloContratos : IModuloAtlas
         EndpointsVistaContrato.Mapear(grupo);
         Paquetes.EndpointsPaquetes.Mapear(grupo);
         Comparticiones.EndpointsComparticiones.Mapear(grupo);
+        Deprecacion.EndpointsDeprecacion.Mapear(grupo);
+        Favoritos.EndpointsFavoritos.Mapear(grupo);
     }
 
-    public void MapearEndpointsPortal(RouteGroupBuilder portal) => Portal.EndpointsPortal.Mapear(portal);
+    public void MapearEndpointsPortal(RouteGroupBuilder portal)
+    {
+        Portal.EndpointsPortal.Mapear(portal);
+        Favoritos.EndpointsFavoritos.MapearPortal(portal);
+    }
 }

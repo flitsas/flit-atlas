@@ -1,6 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { pedir } from '../../app/api';
+import { conRespaldoGuardado } from '../../pwa/sinConexion';
+import { PERMISO_INTERNO, recurso, TOPE_RECURSO_BYTES } from './favoritos/sinConexion';
+
+/** HU 4.9: un contrato favorito se refresca en el dispositivo al consultarlo y, sin red, sale de ahí. */
+function guardado<T>(ruta: string, consulta: () => Promise<T>): Promise<T> {
+  return conRespaldoGuardado(recurso(ruta, PERMISO_INTERNO), consulta, TOPE_RECURSO_BYTES);
+}
 
 /** Contrato de `/api/v1/contratos` (contracts/openapi/atlas.v1.yaml, etiqueta «Contratos», HU 3.2). */
 export type TipoContrato = 'openapi' | 'asyncapi' | 'proto';
@@ -60,7 +67,8 @@ export async function listarContratos(filtro: FiltroContratos = {}): Promise<Lis
 }
 
 export async function listarVersiones(contratoId: string): Promise<VersionResumen[]> {
-  return (await (await pedir(`/api/v1/contratos/${encodeURIComponent(contratoId)}/versiones`)).json()) as VersionResumen[];
+  const ruta = `/api/v1/contratos/${encodeURIComponent(contratoId)}/versiones`;
+  return guardado(ruta, async () => (await (await pedir(ruta)).json()) as VersionResumen[]);
 }
 
 export function useContratos(filtro: FiltroContratos = {}) {
@@ -120,7 +128,7 @@ const rutaContrato = (id: string) => `/api/v1/contratos/${encodeURIComponent(id)
 export function useContrato(id: string) {
   return useQuery({
     queryKey: ['contratos', 'contrato', id],
-    queryFn: async () => (await (await pedir(rutaContrato(id))).json()) as ContratoResumen,
+    queryFn: () => guardado(rutaContrato(id), async () => (await (await pedir(rutaContrato(id))).json()) as ContratoResumen),
     staleTime: 60_000,
   });
 }
@@ -129,7 +137,10 @@ export function useContrato(id: string) {
 export function useSpec(id: string, version: string | undefined) {
   return useQuery({
     queryKey: ['contratos', 'spec', id, version],
-    queryFn: async () => (await pedir(`${rutaContrato(id)}/versiones/${encodeURIComponent(version!)}/spec`)).text(),
+    queryFn: () => {
+      const ruta = `${rutaContrato(id)}/versiones/${encodeURIComponent(version!)}/spec`;
+      return guardado(ruta, async () => (await pedir(ruta)).text());
+    },
     enabled: !!version,
     staleTime: Infinity,
     gcTime: 10 * 60_000,
@@ -139,8 +150,10 @@ export function useSpec(id: string, version: string | undefined) {
 export function useOperaciones(id: string, version: string | undefined) {
   return useQuery({
     queryKey: ['contratos', 'operaciones', id, version],
-    queryFn: async () =>
-      (await (await pedir(`${rutaContrato(id)}/versiones/${encodeURIComponent(version!)}/operaciones`)).json()) as OperacionIndice[],
+    queryFn: () => {
+      const ruta = `${rutaContrato(id)}/versiones/${encodeURIComponent(version!)}/operaciones`;
+      return guardado(ruta, async () => (await (await pedir(ruta)).json()) as OperacionIndice[]);
+    },
     enabled: !!version,
     staleTime: Infinity,
   });

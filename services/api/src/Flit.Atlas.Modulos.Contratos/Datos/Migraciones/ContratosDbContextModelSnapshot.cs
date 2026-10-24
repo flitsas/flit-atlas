@@ -24,6 +24,98 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.AvisoDeprecacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Canal")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("canal");
+
+                    b.Property<string>("Clave")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("clave");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<int?>("Dias")
+                        .HasColumnType("integer")
+                        .HasColumnName("dias");
+
+                    b.Property<DateTimeOffset?>("EnviadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enviado_en");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("error");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<int>("Intentos")
+                        .HasColumnType("integer")
+                        .HasColumnName("intentos");
+
+                    b.Property<string>("Momento")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("momento");
+
+                    b.Property<Guid>("OrganizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organizacion_id");
+
+                    b.Property<Guid>("PersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_id");
+
+                    b.Property<DateOnly>("RetiroEn")
+                        .HasColumnType("date")
+                        .HasColumnName("retiro_en");
+
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_aviso_deprecacion");
+
+                    b.HasIndex("Clave")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contratos_aviso_deprecacion_clave");
+
+                    b.HasIndex("OrganizacionId")
+                        .HasDatabaseName("ix_contratos_aviso_deprecacion_organizacion_id");
+
+                    b.HasIndex("VersionId", "RetiroEn")
+                        .HasDatabaseName("ix_contratos_aviso_deprecacion_version_id_retiro_en");
+
+                    b.ToTable("contratos_aviso_deprecacion", "atlas", t =>
+                        {
+                            t.HasComment("Avisos de deprecación enviados por persona y canal: la marca que los hace idempotentes (HU 4.8, ATLAS-ADR-0046).");
+
+                            t.HasCheckConstraint("ck_contratos_aviso_deprecacion_dias", "(momento = 'recordatorio') = (dias IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.CanalContrato", b =>
                 {
                     b.Property<Guid>("Id")
@@ -232,6 +324,66 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                             t.HasComment("Contratos de integración de cada aplicativo (plan 00 §8.4, ATLAS-ADR-0035).");
 
                             t.HasCheckConstraint("ck_contratos_contrato_codigo", "codigo ~ '^[a-z0-9]+(-[a-z0-9]+)*$'");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.FavoritoContrato", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid?>("ContratoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contrato_id");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("GuiaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("guia_id");
+
+                    b.Property<Guid>("OrganizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organizacion_id");
+
+                    b.Property<Guid?>("PaqueteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paquete_id");
+
+                    b.Property<Guid>("PersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_id");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("tipo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_favorito");
+
+                    b.HasIndex("OrganizacionId")
+                        .HasDatabaseName("ix_contratos_favorito_organizacion_id");
+
+                    b.HasIndex("PersonaId", "Tipo", "PaqueteId", "ContratoId", "GuiaId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contratos_favorito_persona_id_tipo_paquete_id_contrato_id_g");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("PersonaId", "Tipo", "PaqueteId", "ContratoId", "GuiaId"), false);
+
+                    b.ToTable("contratos_favorito", "atlas", t =>
+                        {
+                            t.HasComment("Contratos, paquetes y guías favoritos de cada persona, para verlos sin conexión (HU 4.9, ATLAS-ADR-0034).");
+
+                            t.HasCheckConstraint("ck_contratos_favorito_tipo", "(tipo = 'contrato' AND contrato_id IS NOT NULL AND paquete_id IS NULL AND guia_id IS NULL) OR (tipo = 'paquete' AND paquete_id IS NOT NULL AND contrato_id IS NULL AND guia_id IS NULL) OR (tipo = 'contrato_compartido' AND paquete_id IS NOT NULL AND contrato_id IS NOT NULL AND guia_id IS NULL) OR (tipo = 'guia' AND paquete_id IS NOT NULL AND guia_id IS NOT NULL AND contrato_id IS NULL)");
                         });
                 });
 
@@ -893,6 +1045,16 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
 
                             t.HasCheckConstraint("ck_contratos_version_sha256", "sha256 ~ '^[0-9a-f]{64}$'");
                         });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.AvisoDeprecacion", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", null)
+                        .WithMany()
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_aviso_deprecacion_contratos_version_version_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.CanalContrato", b =>
