@@ -11,8 +11,8 @@ import type { ContratoResumen, DiffContrato, VersionResumen } from './api';
 /**
  * Pantalla del contrato (HU 3.6 y 3.9) con el contrato real de ICT de FLIT 2 enriquecido con el Excel
  * (`contracts/ict/core-ict.enriquecido.v1.yaml`, ya saneado, ATLAS-ADR-0037) como fixture: operaciones con su ficha,
- * matriz de obligatoriedad, tablas de referencia, versiones con diff, guías (HU 3.7), canales (HU 3.4) y el marcador de
- * paquetes. En jsdom no hay escritorio: no aparece la referencia con Scalar.
+ * matriz de obligatoriedad, tablas de referencia, versiones con diff, guías (HU 3.7), canales (HU 3.4) y los paquetes
+ * que lo usan (HU 4.1). En jsdom no hay escritorio: no aparece la referencia con Scalar.
  */
 const SPEC = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../contracts/ict/core-ict.enriquecido.v1.yaml'), 'utf8');
 
@@ -106,6 +106,16 @@ function apiFalsa() {
       if (ruta.startsWith('/api/v1/contratos/c7/diff')) return json(diff);
       if (ruta.startsWith('/api/v1/contratos/c7/guias')) return json({ contratoId: 'c7', puedeEditar: false, puedeAprobar: false, elementos: [] });
       if (ruta === '/api/v1/contratos/c7/canales') return json(canales);
+      if (ruta === '/api/v1/contratos/paquetes?contrato=c7')
+        return json({
+          puedeCrear: false,
+          elementos: [
+            {
+              id: 'p1', nombre: 'Paquete Integradores ICT', descripcion: null, estado: 'publicado', revisionActual: 2, revisionPublicada: 2, cambiosSinPublicar: false,
+              publicadaEn: '2026-10-24T15:00:00Z', publicadaPor: null, contratos: ['c7'], operaciones: 4, actualizadoEn: '2026-10-24T15:00:00Z', puedeGestionar: false,
+            },
+          ],
+        });
       return new Response('', { status: 404 });
     }),
   );
@@ -174,7 +184,7 @@ describe('pantalla del contrato', () => {
     expect(within(tablaDocumento).getByText('PA')).toBeInTheDocument();
   });
 
-  it('línea de tiempo y diff con lo que rompe primero; guías y canales montados, y paquetes como marcador', async () => {
+  it('línea de tiempo y diff con lo que rompe primero; guías, canales y paquetes que lo usan', async () => {
     const llamadas = apiFalsa();
     window.history.pushState({}, '', '/contratos/c7/v/3.0.0?pestana=versiones');
     render(<App />);
@@ -199,8 +209,10 @@ describe('pantalla del contrato', () => {
     expect(within(within(porAmbiente).getByRole('listitem', { name: 'pdn' })).getByRole('link', { name: '3.0.0' })).toBeInTheDocument();
     expect(within(porAmbiente).getByRole('listitem', { name: 'dev' })).toHaveTextContent('Sin versión desplegada todavía.');
     expect(within(screen.getByRole('list', { name: 'Historial de canales' })).getAllByRole('listitem')).toHaveLength(2);
+    // Paquetes (HU 4.1): los que incluyen el contrato.
     fireEvent.click(screen.getByRole('tab', { name: 'Paquetes' }));
-    expect(await screen.findByText(/fase F4/)).toBeInTheDocument();
+    const paquetes = await screen.findByRole('list', { name: 'Paquetes que usan el contrato' }, ESPERA);
+    expect(within(paquetes).getByRole('link', { name: /Paquete Integradores ICT/ })).toHaveAttribute('href', '/contratos/paquetes/p1');
   });
 
   it('una versión que no existe es 404', async () => {

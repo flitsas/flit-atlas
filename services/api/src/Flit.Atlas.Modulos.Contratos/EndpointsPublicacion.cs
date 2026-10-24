@@ -230,6 +230,12 @@ internal static partial class EndpointsPublicacion
         contrato.Nombre = nombre;
         contrato.Descripcion = analizado.Descripcion;
         contrato.Repositorio = publicador.Repositorio;
+        // La visibilidad la decide el repo (info.x-flit-visibilidad) y sigue a la última versión estable: una prerelease de
+        // develop no cambia lo que puede ir en paquetes de clientes. Sin la marca, interna (HU 4.1, ATLAS-ADR-0041).
+        if (version.EsEstable)
+        {
+            contrato.Visibilidad = analizado.VisibilidadDeclarada ?? VisibilidadContrato.Interna;
+        }
 
         var nueva = new VersionContrato
         {

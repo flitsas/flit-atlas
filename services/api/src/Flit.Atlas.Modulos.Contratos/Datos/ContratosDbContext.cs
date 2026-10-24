@@ -270,6 +270,86 @@ public sealed class RevisionGuia : Entidad
     public required string Huella { get; init; }
 }
 
+/// <summary>Estado de un paquete (plan 00 §8.4, HU 4.1, ATLAS-ADR-0041).</summary>
+public enum EstadoPaquete
+{
+    /// <summary>Nunca se publicó: ningún cliente lo ve.</summary>
+    Borrador,
+
+    /// <summary>Tiene una revisión vigente (la que verán las comparticiones de la HU 4.3).</summary>
+    Publicado,
+
+    /// <summary>Ya no se usa: no admite revisiones ni publicaciones; la historia queda.</summary>
+    Archivado,
+}
+
+/// <summary>
+/// Paquete de contratos para compartir con clientes (plan 00 §8.1 y §8.4, HU 4.1, ATLAS-ADR-0041): una selección curada
+/// de contratos compartibles en versiones estables, sus operaciones y sus guías compartibles. Esta fila guarda la foto de
+/// la última revisión (nombre y descripción), el estado y qué revisión está vigente. Solo se escribe junto con una
+/// revisión, una publicación, una fijación o el archivo, en la misma transacción que su auditoría.
+/// </summary>
+public sealed class PaqueteContratos : Entidad
+{
+    public required string Nombre { get; set; }
+
+    public string? Descripcion { get; set; }
+
+    public EstadoPaquete Estado { get; set; } = EstadoPaquete.Borrador;
+
+    /// <summary>Número de la última revisión.</summary>
+    public int RevisionActual { get; set; }
+
+    /// <summary>
+    /// Revisión vigente (publicada o fijada): la que leerán las comparticiones que no fijen otra (HU 4.3). Vacío si nunca
+    /// se publicó.
+    /// </summary>
+    public int? RevisionPublicada { get; set; }
+
+    public Guid? PublicadaPor { get; set; }
+
+    public DateTimeOffset? PublicadaEn { get; set; }
+
+    /// <summary>Persona que lo creó: la única, además de los gestores globales, que puede tocarlo mientras no tenga contratos.</summary>
+    public required Guid CreadoPor { get; init; }
+
+    public Guid? ArchivadoPor { get; set; }
+
+    public DateTimeOffset? ArchivadoEn { get; set; }
+}
+
+/// <summary>
+/// Una revisión <b>inmutable</b> de un paquete (plan 00 §8.2, regla 6, y §8.4): la foto completa de lo guardado (nombre,
+/// descripción y definición), su autor, su fecha, su nota y su huella. La definición es
+/// <c>[{contratoId, versionId, operaciones:[clave…], guias:[{guiaId, revision}]}]</c>, normalizada (ordenada) para que
+/// la huella no dependa del orden en que llegó. Un trigger de la base rechaza cualquier <c>UPDATE</c>. La unicidad
+/// <c>(paquete_id, numero)</c> es la llave a la que apuntará una compartición que fije una revisión (HU 4.3).
+/// </summary>
+public sealed class RevisionPaquete : Entidad
+{
+    public required Guid PaqueteId { get; init; }
+
+    /// <summary>1, 2, 3… dentro del paquete.</summary>
+    public required int Numero { get; init; }
+
+    public required string Nombre { get; init; }
+
+    public string? Descripcion { get; init; }
+
+    /// <summary>La definición en JSON (<c>jsonb</c>).</summary>
+    public required string Definicion { get; init; }
+
+    /// <summary>Mensaje del cambio (texto libre: puede traer datos personales; nunca va a la auditoría ni a los logs).</summary>
+    public required string Nota { get; init; }
+
+    public required Guid AutorPersonaId { get; init; }
+
+    public required DateTimeOffset GuardadaEn { get; init; }
+
+    /// <summary>SHA-256 (hexadecimal) de la foto sin autor, fecha ni nota: dos revisiones con la misma huella son iguales.</summary>
+    public required string Huella { get; init; }
+}
+
 /// <summary>
 /// Qué versión de un contrato corre hoy en un ambiente (plan 00 §8.1 y §8.2, regla 5; HU 3.4 y ATLAS-ADR-0035 §8): una
 /// fila por contrato y ambiente, que mueve el CD con <c>PUT /api/v1/contratos/canales/{ambiente}</c>. Cada cambio deja
@@ -350,6 +430,8 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
     public const int LargoEtiqueta = 100;
     public const int LargoTituloGuia = 200;
     public const int LargoNotaGuia = 500;
+    public const int LargoNombrePaquete = 200;
+    public const int LargoNotaPaquete = 500;
 
     /// <summary>Tope del cuerpo de una guía, en caracteres.</summary>
     public const int LargoContenidoGuia = 200_000;
@@ -367,6 +449,10 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
     public DbSet<CanalContrato> Canales => Set<CanalContrato>();
 
     public DbSet<HistorialCanal> HistorialCanales => Set<HistorialCanal>();
+
+    public DbSet<PaqueteContratos> Paquetes => Set<PaqueteContratos>();
+
+    public DbSet<RevisionPaquete> RevisionesPaquete => Set<RevisionPaquete>();
 
     public const int LargoAmbiente = 20;
 
@@ -512,6 +598,44 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
             e.HasOne<VersionContrato>().WithMany().HasForeignKey(h => h.VersionId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<VersionContrato>().WithMany().HasForeignKey(h => h.VersionAnteriorId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(h => new { h.ContratoId, h.Ambiente, h.DesplegadoEn });
+        });
+
+        modelBuilder.Entity<PaqueteContratos>(e =>
+        {
+            e.ToTable(Prefijo + "paquete", t =>
+            {
+                t.HasComment("Paquetes de contratos para clientes, con la foto de su última revisión (HU 4.1, ATLAS-ADR-0041).");
+                t.HasCheckConstraint("ck_contratos_paquete_revisiones",
+                    "revision_actual >= 1 AND (revision_publicada IS NULL OR revision_publicada BETWEEN 1 AND revision_actual)");
+                t.HasCheckConstraint("ck_contratos_paquete_estado",
+                    "(estado <> 'publicado' OR revision_publicada IS NOT NULL) AND (estado <> 'borrador' OR revision_publicada IS NULL) "
+                    + "AND ((estado = 'archivado') = (archivado_en IS NOT NULL))");
+            });
+            e.Property(p => p.Id).ValueGeneratedNever();
+            e.Property(p => p.Nombre).HasMaxLength(LargoNombrePaquete);
+            e.Property(p => p.Descripcion).HasMaxLength(LargoDescripcion);
+            Enum(e.Property(p => p.Estado), 20);
+            e.HasIndex(p => p.Estado);
+        });
+
+        modelBuilder.Entity<RevisionPaquete>(e =>
+        {
+            e.ToTable(Prefijo + "paquete_revision", t =>
+            {
+                t.HasComment("Revisiones inmutables de cada paquete: nombre, descripción, definición, autor, fecha, nota y huella (HU 4.1, ATLAS-ADR-0041).");
+                t.HasCheckConstraint("ck_contratos_paquete_revision_huella", "huella ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("ck_contratos_paquete_revision_definicion", "jsonb_typeof(definicion) = 'array'");
+            });
+            e.Property(r => r.Id).ValueGeneratedNever();
+            e.Property(r => r.Nombre).HasMaxLength(LargoNombrePaquete);
+            e.Property(r => r.Descripcion).HasMaxLength(LargoDescripcion);
+            e.Property(r => r.Definicion).HasColumnType("jsonb");
+            e.Property(r => r.Nota).HasMaxLength(LargoNotaPaquete).HasComment("@pii texto libre del autor");
+            e.Property(r => r.Huella).HasMaxLength(64).IsFixedLength();
+            e.HasOne<PaqueteContratos>().WithMany().HasForeignKey(r => r.PaqueteId).OnDelete(DeleteBehavior.Restrict);
+            // Dos guardados a la vez del mismo paquete: el segundo choca aquí y responde 409. Es también la llave que usará
+            // una compartición que fije una revisión (HU 4.3).
+            e.HasIndex(r => new { r.PaqueteId, r.Numero }).IsUnique();
         });
 
         // translate() y lower() para la búsqueda sin tildes, como en el catálogo.

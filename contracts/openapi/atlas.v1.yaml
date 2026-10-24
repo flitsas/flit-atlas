@@ -4359,6 +4359,463 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.contratos.ver_internos
+  /api/v1/contratos/paquetes:
+    get:
+      tags:
+        - Contratos
+      summary: Paquetes de contratos
+      description: 'Los paquetes (sin archivados, salvo que se pidan), del más reciente al más antiguo, con lo que la persona puede hacer con cada uno. Con contrato, solo los que lo incluyen en su última revisión o en la vigente. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarPaquetesContratos
+      parameters:
+        - name: estado
+          in: query
+          description: 'borrador, publicado o archivado; vacío = borradores y publicados.'
+          schema:
+            type: string
+        - name: contrato
+          in: query
+          description: 'Id de un contrato: solo los paquetes que lo incluyen.'
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoPaquetes'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+    post:
+      tags:
+        - Contratos
+      summary: Crear un paquete
+      description: 'Crea el paquete en borrador con su revisión 1, auditada en la misma transacción. Solo contratos compartibles en versiones estables (vigentes o deprecadas), operaciones de su índice y guías compartibles publicadas del mismo contrato. Requiere atlas.paquetes.gestionar global o sobre el aplicativo de cada contrato (responsable principal o secundario); si no, 403.'
+      operationId: CrearPaqueteContratos
+      requestBody:
+        description: El paquete y su primera revisión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPaquete'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaqueteDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  /api/v1/contratos/paquetes/elegibles:
+    get:
+      tags:
+        - Contratos
+      summary: 'Contratos, versiones y guías que pueden ir en un paquete'
+      description: 'Pasos 1 y 3 del asistente: los contratos compartibles que la persona puede usar (todos para el gestor global; los de sus aplicativos para el responsable), con sus versiones estables no retiradas y sus guías compartibles publicadas. Requiere atlas.paquetes.gestionar.'
+      operationId: ListarElegiblesPaquete
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoElegibles'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.paquetes.gestionar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  '/api/v1/contratos/paquetes/versiones/{versionId}/operaciones':
+    get:
+      tags:
+        - Contratos
+      summary: 'Operaciones de una versión, con filtro por etiqueta o x-public'
+      description: 'Paso 2 del asistente: el índice de la versión con publica (x-public: true o la etiqueta public) y las etiquetas, filtrado por etiqueta o solo las públicas, más todas las etiquetas de la versión. 404 si la versión no existe; 403 si el contrato no es de un aplicativo de la persona. Requiere atlas.paquetes.gestionar.'
+      operationId: ListarOperacionesParaPaquete
+      parameters:
+        - name: versionId
+          in: path
+          description: Id de la versión.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: etiqueta
+          in: query
+          description: Solo las que llevan esta etiqueta (sin distinguir mayúsculas).
+          schema:
+            type: string
+        - name: soloPublicas
+          in: query
+          description: 'Solo las públicas: x-public: true o la etiqueta public.'
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperacionesParaPaquete'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  '/api/v1/contratos/paquetes/{paqueteId}':
+    get:
+      tags:
+        - Contratos
+      summary: Un paquete con su última revisión y su historial
+      description: 'El paquete, su última revisión con la definición (nombres resueltos y estado actual de cada versión) y todas sus revisiones sin la definición. 404 si no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ObtenerPaqueteContratos
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaqueteDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/paquetes/{paqueteId}/revisiones/{numero}':
+    get:
+      tags:
+        - Contratos
+      summary: Una revisión de un paquete con su definición
+      description: 'La revisión tal como se guardó (inmutable), con los nombres resueltos. 404 si no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ObtenerRevisionPaquete
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la revisión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionPaqueteDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/paquetes/{paqueteId}/revisiones':
+    post:
+      tags:
+        - Contratos
+      summary: Guardar una revisión nueva
+      description: 'Cada guardado crea una revisión inmutable con autor, fecha y nota; la vigente no cambia hasta publicar. 409 revision_desactualizada si revisionBase no es la última; 409 sin_cambios si es igual a la última; 409 archivado. Requiere atlas.paquetes.gestionar sobre los aplicativos de los contratos de antes y de después.'
+      operationId: RevisarPaqueteContratos
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPaquete'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaqueteDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  '/api/v1/contratos/paquetes/{paqueteId}/publicacion':
+    post:
+      tags:
+        - Contratos
+      summary: Publicar la última revisión
+      description: 'Marca la última revisión como la vigente, después de revisar otra vez las reglas (contratos compartibles, versiones no retiradas, guías aún compartibles y publicadas, al menos un contrato con una operación): si no se cumplen, 409 no_publicable con el detalle. 409 revision_desactualizada, ya_publicada o archivado. Auditado en la misma transacción.'
+      operationId: PublicarPaqueteContratos
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión a publicar.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPublicacionPaquete'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaqueteDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  '/api/v1/contratos/paquetes/{paqueteId}/revisiones/{numero}/fijacion':
+    post:
+      tags:
+        - Contratos
+      summary: Fijar una revisión anterior como la vigente
+      description: 'Vuelve a publicar una revisión anterior a la última sin borrar las nuevas («volver» un paquete, plan 00 §8.2 regla 6), con las mismas reglas que publicar (409 no_publicable). 409 es_la_ultima (para la última, publica), ya_vigente o archivado. Requiere atlas.paquetes.gestionar sobre los contratos de la última revisión y de la fijada. Auditado.'
+      operationId: FijarRevisionPaquete
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Revisión anterior que vuelve a ser la vigente.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaqueteDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
+  '/api/v1/contratos/paquetes/{paqueteId}/archivo':
+    post:
+      tags:
+        - Contratos
+      summary: Archivar un paquete
+      description: El paquete deja de admitir revisiones y publicaciones; su historia queda. 409 archivado si ya lo está. Requiere atlas.paquetes.gestionar sobre los aplicativos de sus contratos. Auditado.
+      operationId: ArchivarPaqueteContratos
+      parameters:
+        - name: paqueteId
+          in: path
+          description: Id del paquete.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaqueteDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPaquete'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.paquetes.gestionar
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -8679,6 +9136,39 @@ components:
             - description: Vacío si qa o pdn no tienen versión o tienen la misma versión base (X.Y.Z).
               $ref: '#/components/schemas/BreakingPendientes'
       description: Un contrato con su versión por ambiente.
+    ContratoElegible:
+      required:
+        - id
+        - codigo
+        - nombre
+        - tipo
+        - aplicativo
+        - versiones
+        - guias
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        aplicativo:
+          $ref: '#/components/schemas/AplicativoDelContrato'
+        versiones:
+          type: array
+          items:
+            $ref: '#/components/schemas/VersionElegible'
+          description: De la más reciente a la más antigua.
+        guias:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuiaElegible'
+      description: Contrato compartible con sus versiones estables y sus guías compartibles.
     ContratoResumen:
       required:
         - id
@@ -8983,6 +9473,100 @@ components:
           type: string
           description: 'SHA-256 (hex) del texto: queda en la evidencia de la aceptación.'
       description: 'Documento legal vigente (términos de uso o aviso de privacidad, Ley 1581) con su versión y su texto en Markdown.'
+    EntradaPaqueteDto:
+      required:
+        - contratoId
+        - codigo
+        - nombre
+        - tipo
+        - visibilidad
+        - aplicativo
+        - versionId
+        - version
+        - estadoVersion
+        - operaciones
+        - guias
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        codigo:
+          type:
+            - 'null'
+            - string
+          description: Código del contrato; vacío si ya no existe.
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: Nombre del contrato; vacío si ya no existe.
+        tipo:
+          type:
+            - 'null'
+            - string
+          description: 'openapi, asyncapi o proto.'
+        visibilidad:
+          type:
+            - 'null'
+            - string
+          description: 'interna o compartible, hoy.'
+        aplicativo:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/AplicativoDelContrato'
+        versionId:
+          type: string
+          format: uuid
+        version:
+          type:
+            - 'null'
+            - string
+          description: Versión semántica fijada.
+        estadoVersion:
+          type:
+            - 'null'
+            - string
+          description: 'vigente, deprecada o retirada, hoy.'
+        operaciones:
+          type: array
+          items:
+            type: string
+        guias:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuiaEnPaqueteDto'
+      description: 'Un contrato dentro de una revisión del paquete, con sus nombres resueltos.'
+    EntradaSolicitud:
+      required:
+        - contratoId
+        - versionId
+        - operaciones
+        - guias
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        versionId:
+          type: string
+          description: 'Versión estable (sin prerelease), vigente o deprecada, del contrato.'
+          format: uuid
+        operaciones:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Claves del índice de esa versión (GET /tramites/{id}, POST webhook:<nombre>, send <canal>…).'
+        guias:
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/GuiaSolicitud'
+          description: Guías compartibles y publicadas del mismo contrato.
+      description: 'Un contrato del paquete: su versión estable, las operaciones elegidas y sus guías.'
     EquipoDto:
       required:
         - id
@@ -9190,6 +9774,26 @@ components:
           description: 'no_encontrado (404); sin_permiso, aprobacion_requerida (403); revision_desactualizada, sin_cambios, ya_publicada (409).'
         mensaje:
           type: string
+      description: 'Por qué no se hizo, con un código estable.'
+    ErrorPaquete:
+      required:
+        - codigo
+        - mensaje
+        - detalles
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso (403); revision_desactualizada, sin_cambios, ya_publicada, ya_vigente, es_la_ultima, archivado, no_publicable (409).'
+        mensaje:
+          type: string
+        detalles:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Con no_publicable: qué falta o ya no se cumple.'
       description: 'Por qué no se hizo, con un código estable.'
     ErrorPublicacion:
       required:
@@ -9908,6 +10512,67 @@ components:
         puedeAprobar:
           type: boolean
       description: Una guía con su última revisión y lo que la persona puede hacer.
+    GuiaElegible:
+      required:
+        - id
+        - titulo
+        - operacion
+        - revisionPublicada
+        - aplicaDesde
+        - aplicaHasta
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        operacion:
+          type:
+            - 'null'
+            - string
+          description: Clave de la operación si la guía es de una; vacío si es del contrato.
+        revisionPublicada:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Revisión publicada: la que se comparte.'
+          format: int32
+        aplicaDesde:
+          type:
+            - 'null'
+            - string
+          description: Primera versión a la que aplica; vacío = desde la primera.
+        aplicaHasta:
+          type:
+            - 'null'
+            - string
+          description: Última versión a la que aplica; vacío = hasta la última.
+      description: Guía compartible y publicada que puede ir en un paquete.
+    GuiaEnPaqueteDto:
+      required:
+        - guiaId
+        - titulo
+        - revision
+      type: object
+      properties:
+        guiaId:
+          type: string
+          format: uuid
+        titulo:
+          type:
+            - 'null'
+            - string
+          description: Título actual de la guía; vacío si ya no existe.
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Revisión que se comparte.
+          format: int32
+      description: Guía de un contrato dentro de una revisión del paquete.
     GuiaResumen:
       required:
         - id
@@ -9989,6 +10654,24 @@ components:
           type: string
           format: date-time
       description: Guía de integración con la foto de su última revisión.
+    GuiaSolicitud:
+      required:
+        - guiaId
+        - revision
+      type: object
+      properties:
+        guiaId:
+          type: string
+          format: uuid
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Revisión que se comparte: debe ser la publicada (aprobada por el responsable). Vacío = la publicada.'
+          format: int32
+      description: Una guía compartible dentro de un contrato del paquete.
     HistorialCanalDto:
       required:
         - ambiente
@@ -10398,6 +11081,16 @@ components:
           items:
             $ref: '#/components/schemas/ContratoResumen'
       description: 'Contratos que cumplen el filtro, ordenados por aplicativo y código.'
+    ListadoElegibles:
+      required:
+        - elementos
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContratoElegible'
+      description: Lo que la persona puede poner en un paquete (pasos 1 y 3 del asistente).
     ListadoGuias:
       required:
         - contratoId
@@ -10420,6 +11113,20 @@ components:
           items:
             $ref: '#/components/schemas/GuiaResumen'
       description: Guías de un contrato y lo que la persona puede hacer con ellas.
+    ListadoPaquetes:
+      required:
+        - puedeCrear
+        - elementos
+      type: object
+      properties:
+        puedeCrear:
+          type: boolean
+          description: Si tiene atlas.paquetes.gestionar (global o sobre sus aplicativos).
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaqueteResumen'
+      description: Paquetes y si la persona puede crear uno.
     MapaCargaDto:
       required:
         - media
@@ -10862,6 +11569,42 @@ components:
           type: boolean
           description: 'x-public: true o la etiqueta public.'
       description: 'Operación, webhook, canal o rpc del índice de una versión.'
+    OperacionesParaPaquete:
+      required:
+        - contratoId
+        - versionId
+        - version
+        - total
+        - etiquetas
+        - elementos
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        versionId:
+          type: string
+          format: uuid
+        version:
+          type: string
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Operaciones de la versión, sin filtrar.'
+          format: int32
+        etiquetas:
+          type: array
+          items:
+            type: string
+          description: 'Todas las etiquetas de la versión, ordenadas: las opciones del filtro.'
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperacionDto'
+          description: 'Las que cumplen el filtro, ordenadas por clave.'
+      description: Operaciones de una versión para el paso 2 del asistente.
     OrdenParticipantes:
       required:
         - participantes
@@ -10954,6 +11697,101 @@ components:
           type: string
           format: date-time
       description: 'Organización de Atlas: FLIT (interna), un cliente o un proveedor.'
+    PaqueteDetalle:
+      required:
+        - paquete
+        - revision
+        - revisiones
+      type: object
+      properties:
+        paquete:
+          $ref: '#/components/schemas/PaqueteResumen'
+        revision:
+          description: 'La última revisión, con su definición.'
+          $ref: '#/components/schemas/RevisionPaqueteDetalle'
+        revisiones:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevisionPaqueteResumen'
+          description: 'Todas las revisiones, de la más reciente a la más antigua.'
+      description: 'Un paquete con su última revisión, su historial y lo que la persona puede hacer.'
+    PaqueteResumen:
+      required:
+        - id
+        - nombre
+        - descripcion
+        - estado
+        - revisionActual
+        - revisionPublicada
+        - cambiosSinPublicar
+        - publicadaEn
+        - publicadaPor
+        - contratos
+        - operaciones
+        - actualizadoEn
+        - puedeGestionar
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        descripcion:
+          type:
+            - 'null'
+            - string
+        estado:
+          type: string
+          description: 'borrador (nunca publicado), publicado o archivado.'
+        revisionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de la última revisión.
+          format: int32
+        revisionPublicada:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Revisión vigente (publicada o fijada); vacío si nunca se publicó.
+          format: int32
+        cambiosSinPublicar:
+          type: boolean
+          description: Si hay revisiones más nuevas que la vigente (o nunca se publicó).
+        publicadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        publicadaPor:
+          oneOf:
+            - type: 'null'
+            - description: Quién publicó o fijó la revisión vigente.
+              $ref: '#/components/schemas/PersonaRef'
+        contratos:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Contratos de la última revisión.
+        operaciones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Operaciones de la última revisión, sumando todos sus contratos.'
+          format: int32
+        actualizadoEn:
+          type: string
+          format: date-time
+        puedeGestionar:
+          type: boolean
+          description: 'Si la persona puede revisarlo, publicarlo, fijar una revisión o archivarlo.'
+      description: Paquete de contratos con la foto de su última revisión.
     ParticipanteDto:
       required:
         - id
@@ -12245,6 +13083,102 @@ components:
           description: Cuántos días antes sale el recordatorio.
           format: int32
       description: 'Revisiones del reparto: la próxima y las hechas.'
+    RevisionPaqueteDetalle:
+      required:
+        - numero
+        - nombre
+        - descripcion
+        - definicion
+        - nota
+        - autor
+        - guardadaEn
+        - huella
+        - vigente
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        nombre:
+          type: string
+        descripcion:
+          type:
+            - 'null'
+            - string
+        definicion:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntradaPaqueteDto'
+        nota:
+          type: string
+        autor:
+          $ref: '#/components/schemas/PersonaRef'
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+        vigente:
+          type: boolean
+      description: Revisión inmutable de un paquete con su definición.
+    RevisionPaqueteResumen:
+      required:
+        - numero
+        - nombre
+        - nota
+        - autor
+        - guardadaEn
+        - huella
+        - contratos
+        - operaciones
+        - guias
+        - vigente
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        nombre:
+          type: string
+        nota:
+          type: string
+          description: Mensaje del cambio.
+        autor:
+          $ref: '#/components/schemas/PersonaRef'
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+          description: 'SHA-256 de la foto (nombre, descripción y definición): igual huella, igual revisión.'
+        contratos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        operaciones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        guias:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        vigente:
+          type: boolean
+          description: Si es la revisión vigente (publicada o fijada).
+      description: 'Revisión inmutable de un paquete, sin la definición.'
     RevisionResumen:
       required:
         - numero
@@ -13101,6 +14035,42 @@ components:
           type: boolean
           description: Habilita el rol ext.admin_organizacion en esta organización.
       description: Organización nueva o cambios de una existente.
+    SolicitudPaquete:
+      required:
+        - nombre
+        - descripcion
+        - definicion
+        - nota
+        - revisionBase
+      type: object
+      properties:
+        nombre:
+          type: string
+          description: Hasta 200 caracteres.
+        descripcion:
+          type:
+            - 'null'
+            - string
+          description: Hasta 2000 caracteres.
+        definicion:
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/EntradaSolicitud'
+          description: 'Hasta 50 contratos compartibles, uno por contrato. Puede ir vacía en un borrador; publicar exige al menos un contrato con una operación.'
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        revisionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Al revisar: la última revisión que vio la persona (409 si ya hay otra más nueva). Al crear se ignora.'
+          format: int32
+      description: Lo que se guarda en una revisión nueva del paquete.
     SolicitudPasskey:
       required:
         - estado
@@ -13169,6 +14139,19 @@ components:
           description: 'La revisión a publicar: debe ser la última (409 si no).'
           format: int32
       description: Publicar la última revisión de una guía.
+    SolicitudPublicacionPaquete:
+      required:
+        - revision
+      type: object
+      properties:
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La revisión a publicar: debe ser la última (409 si no). Para volver a una anterior, fíjala.'
+          format: int32
+      description: Publicar la última revisión del paquete.
     SolicitudRenovacion:
       required:
         - accesoVenceEn
@@ -13554,6 +14537,48 @@ components:
           description: Sus tablas en Markdown.
           $ref: '#/components/schemas/TablasRepartoDto'
       description: Una versión del reparto con su foto completa y sus tablas.
+    VersionElegible:
+      required:
+        - id
+        - version
+        - estado
+        - retiroEn
+        - publicadoEn
+        - operaciones
+        - publicas
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        estado:
+          type: string
+          description: vigente o deprecada (las retiradas no entran).
+        retiroEn:
+          type:
+            - 'null'
+            - string
+          format: date
+        publicadoEn:
+          type: string
+          format: date-time
+        operaciones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Operaciones del índice de la versión.
+          format: int32
+        publicas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántas de ellas son x-public o llevan la etiqueta public.
+          format: int32
+      description: Versión estable que puede ir en un paquete.
     VersionPublicada:
       required:
         - contratoId

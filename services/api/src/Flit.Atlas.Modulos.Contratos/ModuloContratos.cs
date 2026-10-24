@@ -26,6 +26,13 @@ public static class PermisosContratos
     /// <summary>Guías de integración con revisiones (HU 3.7).</summary>
     public const string GuiasEditar = "atlas.contratos.guias.editar";
 
+    /// <summary>
+    /// Armar, revisar, publicar, fijar y archivar paquetes (HU 4.1, ATLAS-ADR-0041): global para el líder técnico y, por
+    /// el rol implícito, sobre los aplicativos del responsable. No lleva el prefijo del módulo, así que sigue declarado en
+    /// <see cref="ManifiestosNucleo.Portal"/> (ATLAS-ADR-0035); el módulo solo lo exige.
+    /// </summary>
+    public const string PaquetesGestionar = "atlas.paquetes.gestionar";
+
     public static ManifiestoPermisos Manifiesto { get; } =
         new(ModuloContratos.IdModulo, ManifiestosNucleo.Contratos.Nombre, [.. ManifiestosNucleo.Contratos.Permisos]);
 }
@@ -51,8 +58,8 @@ public static class EventosContratos
 /// la CI con el token OIDC de GitHub Actions y la lista blanca del catálogo, versiones inmutables (201, 200 idempotente,
 /// 409 y 422), el índice de operaciones y canales, y la lectura interna. HU 3.3 y 3.4: la versión base de pdn para la CI,
 /// los canales por ambiente que mueve el CD (con historial) y el Consolidado. HU 3.7: guías con revisiones inmutables,
-/// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). Diff, paquetes y portal llegan en las HU
-/// siguientes. Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
+/// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). HU 4.1: paquetes con revisiones inmutables,
+/// publicación y fijación de una revisión anterior (ATLAS-ADR-0041). Comparticiones y portal llegan en las HU siguientes. Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
 /// </summary>
 public sealed class ModuloContratos : IModuloAtlas
 {
@@ -90,5 +97,6 @@ public sealed class ModuloContratos : IModuloAtlas
         EndpointsContratos.Mapear(grupo);
         Guias.EndpointsGuias.Mapear(grupo);
         EndpointsVistaContrato.Mapear(grupo);
+        Paquetes.EndpointsPaquetes.Mapear(grupo);
     }
 }
