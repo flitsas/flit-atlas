@@ -314,10 +314,23 @@ en `Verificar` (fail-closed); revisar las descripciones de `info`.
   autor (`properties`, cabeceras…) y en los datos (`example`, `enum`…), y `Verificar` falla cerrado si queda una.
   ATLAS-ADR-0038 y el oráculo de las pruebas de propiedades actualizados. Pruebas: `PentestPodaTests` (sin `Skip`),
   `PodaTests.Solo_salen_las_extensiones_de_la_lista_blanca…`, `…La_verificacion_falla_cerrado…` y la del ICT real.
-  **Pendiente [por verificar]:** las *descripciones* del contrato del ICT (no son extensiones) aún nombran piezas
+  ~~**Pendiente [por verificar]:** las *descripciones* del contrato del ICT (no son extensiones) aún nombran piezas
   internas: `info.description` (`services/core-ict`, la HU de origen, `python -m atlas_docs.ict`, rutas de `contracts/`
   del repo `flit`), la del webhook (`Flit.Ict.Infrastructure/Jobs/WebhookNotificationJob.cs`) y «Esquema `X` de
-  core-ict»; se corrigen en el generador `atlas_docs.ict` y en el contrato de flit.
+  core-ict»; se corrigen en el generador `atlas_docs.ict` y en el contrato de flit.~~
+- **Descripciones: corregido** en la rama `f4/ict-descripciones` (commit «F4: descripciones del contrato ICT sin piezas
+  internas», ATLAS-ADR-0037 actualizado). El generador `atlas_docs.ict` deja `description`, `summary`, `title` y
+  `x-enum-descriptions` en lenguaje funcional: `info.description` es una descripción de la API, los esquemas tienen su
+  propia descripción, el webhook ya no nombra archivos ni clases y los textos del contrato de `flit` con piezas internas
+  (registro, estado v2, reproceso, edición del pre-trámite) se reescriben desde `mapeo.TEXTOS_FUNCIONALES`. La
+  procedencia queda en `info.x-flit-fuente` (descripción original del contrato, generador, visibilidad), en
+  `x-flit-descripcion-contrato` junto a cada texto reescrito, en `x-flit-origen` y `x-flit-hoja-excel` (la poda las
+  quita) y en `contracts/ict/informe.md`; el «[por verificar] RFC8725» pasó del esquema de seguridad al informe. La
+  conversión falla si un texto de cara al cliente conserva una pieza interna (`atlas_docs/ict/lenguaje.py`: rutas de
+  repo, archivos, proyectos `Flit.*`, tickets, comandos, servicios internos, infraestructura, clases, hosts, IP, ADR,
+  notas del equipo y el Excel). Pruebas: `services/docs/tests/ict/` (patrones, conversión y spec versionado) y
+  `PodaIctDescripcionesTests` (ICT real podado con todas sus operaciones compartibles hacia pdn). El contrato de `flit`
+  se actualiza con `contracts/ict/propuesta-flit/core-ict.v1.yaml`.
 
 **F4-SEC-10 · Media, endurecimiento (5.0, `AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N`) · RLS no es segunda barrera en las
 peticiones anónimas.** Sin sesión, `AlcanceDatosDeSesion.De` devuelve `AlcanceDatos.Sistema` (`alcance_total=on`,
@@ -437,7 +450,7 @@ respondía 204. No explotable entre orígenes sin CORS (el preflight lo bloquea)
 **No se recomienda todavía.** Los externos son justamente el modelo de amenaza de las cuentas locales, y hoy:
 
 1. **Bloqueantes** (deben corregirse y su prueba omitida pasar): F4-SEC-01 (fuerza bruta del TOTP), F4-SEC-02, F4-SEC-03,
-   F4-SEC-05, ~~F4-SEC-09~~ (corregido en `ca7dadc`; quedan las descripciones del ICT, §6), ~~F4-SEC-11~~ (corregido en
+   F4-SEC-05, ~~F4-SEC-09~~ (corregido en `ca7dadc`; las descripciones del ICT, en `f4/ict-descripciones`, §6), ~~F4-SEC-11~~ (corregido en
    `ca7dadc`) y F4-SEC-13 (o la verificación en flit-gitops de `RedesConfiables` y del nginx del host). *F4-SEC-01, 02, 03,
    05 y 13 corregidos en `2078282`; falta poner `Atlas__Proxy__RedesConfiables` en el ConfigMap de qa y pdn (sin ella
    atlas-api ya no arranca).*
