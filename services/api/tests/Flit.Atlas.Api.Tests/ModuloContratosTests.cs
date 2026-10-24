@@ -5,10 +5,12 @@ using System.Text.Json;
 using Flit.Atlas.Modulos.Contratos.Tests;
 using Flit.Atlas.Plataforma.Permisos;
 using Flit.Atlas.Plataforma.Publicacion;
+using Flit.Atlas.Plataforma.Render;
 using Flit.Atlas.Plataforma.Tests;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Atlas.Api.Tests;
 
@@ -265,6 +267,187 @@ public sealed class ModuloContratosTests(EntornoApi entorno) : IDisposable
         var operaciones = (await (await lider.GetAsync($"/api/v1/contratos/{publicada.ContratoId}/versiones/2.0.0-dev.a1b2c3d/operaciones")).Content.ReadFromJsonAsync<List<Operacion>>(Ct))!;
         Assert.Equal(["receive tramites.radicado", "send tramites.radicado"], operaciones.Select(o => o.Clave));
         Assert.True(operaciones.Single(o => o.Metodo == "send").Publica);
+    }
+
+    private sealed record BaseComparacion(Guid ContratoId, Guid VersionId, string Version, string Sha256, string Origen, string Ambiente, string Spec);
+
+    private sealed record CanalActualizado(Guid ContratoId, string Ambiente, string Version, string? VersionAnterior, bool Cambio);
+
+    private sealed record CanalConsolidado(string Ambiente, string? Version);
+
+    private sealed record Desfase(string Ambiente, string RespectoDe, string Tipo, string Mensaje);
+
+    private sealed record CambioBreaking(string Regla, string Texto, string? Metodo, string? Ruta);
+
+    private sealed record BreakingPendientes(string Desde, string Hasta, string Estado, string? Fuente, List<CambioBreaking> Cambios);
+
+    private sealed record ContratoConsolidado(Guid Id, string Codigo, List<CanalConsolidado> Canales, List<Desfase> Desfases, BreakingPendientes? BreakingPendientes);
+
+    private sealed record Consolidado(List<string> Ambientes, int Total, int ConDesfases, int ConBreaking, List<ContratoConsolidado> Elementos);
+
+    private static async Task<HttpResponseMessage> CiAsync(WebApplicationFactory<Program> api, HttpMethod metodo, string ruta, string token, object? cuerpo = null)
+    {
+        using var cliente = api.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        using var peticion = new HttpRequestMessage(metodo, ruta) { Content = cuerpo is null ? null : JsonContent.Create(cuerpo) };
+        peticion.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await cliente.SendAsync(peticion, Ct);
+    }
+
+    private static async Task<string?> CodigoAsync(HttpResponseMessage respuesta)
+    {
+        var texto = await respuesta.Content.ReadAsStringAsync(Ct);
+        return texto.StartsWith('{') && JsonDocument.Parse(texto).RootElement.TryGetProperty("codigo", out var c) ? c.GetString() : null;
+    }
+
+    private static string SpecVersion(string version) => SpecsDeEjemplo.OpenApiYaml.Replace("version: 1.2.0", $"version: {version}", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task La_ci_baja_la_base_de_pdn_el_cd_mueve_los_canales_con_historial_y_el_consolidado_muestra_desfases_y_breaking()
+    {
+        await using var api = Api();
+        var lider = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
+        var (aplicativo, repositorio) = await FuenteAsync(lider, ["openapi"], ramas: ["develop", "staging", "release"]);
+        var (otroAplicativo, _) = await FuenteAsync(lider, ["openapi"]);
+        var baseUrl = $"/api/v1/contratos/publicaciones/base?aplicativo={aplicativo}&contrato=api-externa";
+
+        // Sin contrato todavía: 404; de un aplicativo ajeno: 403 (no revela si existe).
+        Assert.Equal("contrato_inexistente", await CodigoAsync(await CiAsync(api, HttpMethod.Get, baseUrl, Token(repositorio))));
+        Assert.Equal(HttpStatusCode.Forbidden, (await CiAsync(api, HttpMethod.Get, $"/api/v1/contratos/publicaciones/base?aplicativo={otroAplicativo}&contrato=api-externa", Token(repositorio))).StatusCode);
+
+        // Solo un prerelease de develop: no hay base estable.
+        var dev = await PublicarAsync(api, Token(repositorio), new { aplicativo, contrato = "api-externa", tipo = "openapi", prerelease = "dev.a1b2c3d", spec = SpecsDeEjemplo.OpenApiYaml });
+        Assert.True(dev.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK, $"{(int)dev.StatusCode}");
+        Assert.Equal("1.2.0-dev.a1b2c3d", (await dev.Content.ReadFromJsonAsync<Publicada>(Ct))!.Version);
+        Assert.Equal("sin_base", await CodigoAsync(await CiAsync(api, HttpMethod.Get, baseUrl, Token(repositorio))));
+
+        // release publica la 1.2.0: sin canal en pdn, la base es la última estable.
+        Assert.Equal(HttpStatusCode.Created, (await PublicarAsync(api, Token(repositorio, rama: "release"), Cuerpo(aplicativo, version: null))).StatusCode);
+        var base1 = (await (await CiAsync(api, HttpMethod.Get, baseUrl, Token(repositorio))).Content.ReadFromJsonAsync<BaseComparacion>(Ct))!;
+        Assert.Equal(("1.2.0", "ultima_estable", "pdn", SpecsDeEjemplo.OpenApiYaml), (base1.Version, base1.Origen, base1.Ambiente, base1.Spec));
+
+        // El CD de release la marca en pdn; repetirlo no cambia nada.
+        async Task<HttpResponseMessage> Canal(string ambiente, string version, string rama) =>
+            await CiAsync(api, HttpMethod.Put, $"/api/v1/contratos/canales/{ambiente}", Token(repositorio, rama: rama), new { aplicativo, contrato = "api-externa", version });
+        var pdn = (await (await Canal("pdn", "1.2.0", "release")).Content.ReadFromJsonAsync<CanalActualizado>(Ct))!;
+        Assert.Equal(("pdn", "1.2.0", (string?)null, true), (pdn.Ambiente, pdn.Version, pdn.VersionAnterior, pdn.Cambio));
+        Assert.False((await (await Canal("pdn", "1.2.0", "release")).Content.ReadFromJsonAsync<CanalActualizado>(Ct))!.Cambio);
+        Assert.Equal("canal", (await (await CiAsync(api, HttpMethod.Get, baseUrl, Token(repositorio))).Content.ReadFromJsonAsync<BaseComparacion>(Ct))!.Origen);
+
+        // staging publica la 1.3.0-rc con el changelog calculado contra la de pdn (con un breaking) y la marca en qa.
+        const string changelog = """[{"id":"api-removed-without-deprecation","text":"Se quitó DELETE /tramites/{id}.","level":3,"operation":"DELETE","path":"/tramites/{id}"},{"id":"endpoint-added","text":"Ruta nueva.","level":1}]""";
+        var rc = await PublicarAsync(api, Token(repositorio, rama: "staging"),
+            new { aplicativo, contrato = "api-externa", tipo = "openapi", prerelease = "rc.a1b2c3d", spec = SpecVersion("1.3.0"), changelog, changelogBase = "1.2.0" });
+        Assert.Equal(HttpStatusCode.Created, rc.StatusCode);
+        Assert.Equal("1.3.0-rc.a1b2c3d", (await rc.Content.ReadFromJsonAsync<Publicada>(Ct))!.Version);
+        Assert.Equal(HttpStatusCode.OK, (await Canal("qa", "1.3.0-rc.a1b2c3d", "staging")).StatusCode);
+
+        // Rama que no despliega el ambiente, prerelease en pdn, versión o ambiente que no existen.
+        var ajena = await Canal("qa", "1.3.0-rc.a1b2c3d", "develop");
+        Assert.Equal((HttpStatusCode.Forbidden, "ambiente_no_permitido"), (ajena.StatusCode, await CodigoAsync(ajena)));
+        var noEstable = await Canal("pdn", "1.3.0-rc.a1b2c3d", "release");
+        Assert.Equal((HttpStatusCode.UnprocessableEntity, "version_no_estable"), (noEstable.StatusCode, await CodigoAsync(noEstable)));
+        Assert.Equal("version_inexistente", await CodigoAsync(await Canal("qa", "9.9.9", "staging")));
+        Assert.Equal("ambiente_inexistente", await CodigoAsync(await Canal("sandbox", "1.2.0", "release")));
+        // Con la cookie de la PWA, ni el líder: 401.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await lider.EnviarAsync(HttpMethod.Put, "/api/v1/contratos/canales/qa",
+            JsonContent.Create(new { aplicativo, contrato = "api-externa", version = "1.2.0" }))).StatusCode);
+
+        // El consolidado: versión por ambiente, qa adelante de pdn, sin versión en pdn... y el breaking pendiente del changelog.
+        var desarrollador = await EmpleadoAsync(api, RolesAtlas.Desarrollador);
+        var consolidado = (await (await desarrollador.GetAsync($"/api/v1/contratos/consolidado?aplicativo={aplicativo}")).Content.ReadFromJsonAsync<Consolidado>(Ct))!;
+        Assert.Equal(["dev", "qa", "pdn"], consolidado.Ambientes);
+        var fila = Assert.Single(consolidado.Elementos);
+        Assert.Equal([("dev", (string?)null), ("qa", "1.3.0-rc.a1b2c3d"), ("pdn", "1.2.0")], fila.Canales.Select(c => (c.Ambiente, c.Version)));
+        var desfase = Assert.Single(fila.Desfases);
+        Assert.Equal(("qa", "pdn", "adelante"), (desfase.Ambiente, desfase.RespectoDe, desfase.Tipo));
+        Assert.Equal(("1.2.0", "1.3.0-rc.a1b2c3d", "con_breaking", "changelog"),
+            (fila.BreakingPendientes!.Desde, fila.BreakingPendientes.Hasta, fila.BreakingPendientes.Estado, fila.BreakingPendientes.Fuente));
+        Assert.Equal(("api-removed-without-deprecation", "DELETE", "/tramites/{id}"),
+            (fila.BreakingPendientes.Cambios.Single().Regla, fila.BreakingPendientes.Cambios.Single().Metodo, fila.BreakingPendientes.Cambios.Single().Ruta));
+        Assert.Equal((1, 1, 1), (consolidado.Total, consolidado.ConDesfases, consolidado.ConBreaking));
+        Assert.Single((await (await desarrollador.GetAsync($"/api/v1/contratos/consolidado?aplicativo={aplicativo}&desfases=true")).Content.ReadFromJsonAsync<Consolidado>(Ct))!.Elementos);
+        Assert.Equal(HttpStatusCode.BadRequest, (await desarrollador.GetAsync("/api/v1/contratos/consolidado?tipo=wsdl")).StatusCode);
+
+        // Canales e historial del contrato.
+        var canales = await (await desarrollador.GetAsync($"/api/v1/contratos/{fila.Id}/canales")).Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal(["qa", "pdn"], canales.GetProperty("canales").EnumerateArray().Select(c => c.GetProperty("ambiente").GetString()));
+        Assert.Equal(["qa", "pdn"], canales.GetProperty("historial").EnumerateArray().Select(c => c.GetProperty("ambiente").GetString()));
+        Assert.Equal($"github:{repositorio}@staging", canales.GetProperty("canales")[0].GetProperty("desplegadoPor").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await desarrollador.GetAsync($"/api/v1/contratos/{Guid.NewGuid()}/canales")).StatusCode);
+
+        // qa promovida a pdn: la misma entrega (1.3.0) ya no es desfase ni breaking pendiente.
+        Assert.Equal(HttpStatusCode.Created, (await PublicarAsync(api, Token(repositorio, rama: "release"),
+            new { aplicativo, contrato = "api-externa", tipo = "openapi", spec = SpecVersion("1.3.0"), changelog, changelogBase = "1.2.0" })).StatusCode);
+        var promovida = (await (await Canal("pdn", "1.3.0", "release")).Content.ReadFromJsonAsync<CanalActualizado>(Ct))!;
+        Assert.Equal(("1.3.0", "1.2.0"), (promovida.Version, promovida.VersionAnterior));
+        var despues = (await (await desarrollador.GetAsync($"/api/v1/contratos/consolidado?aplicativo={aplicativo}")).Content.ReadFromJsonAsync<Consolidado>(Ct))!.Elementos.Single();
+        Assert.Empty(despues.Desfases);
+        Assert.Null(despues.BreakingPendientes);
+
+        // Auditado y con su evento, una vez por cambio de canal (no en el repetido).
+        await using var plataforma = entorno.Plataforma();
+        var auditoria = await plataforma.Auditoria.Where(a => a.Accion == "contratos.canal_actualizado" && a.ActorId!.StartsWith($"github:{repositorio}@"))
+            .ToListAsync(Ct);
+        Assert.Equal(3, auditoria.Count);
+        Assert.All(auditoria, a => Assert.DoesNotContain("eyJ", a.Datos, StringComparison.Ordinal));
+        Assert.Equal(3, await plataforma.Outbox.CountAsync(m => m.Tipo == "atlas.contratos.canal_actualizado" && m.Sobre.Contains(aplicativo), Ct));
+    }
+
+    [Fact]
+    public async Task Sin_un_changelog_contra_la_version_de_pdn_el_consolidado_pide_el_diff_a_atlas_render()
+    {
+        var render = new RenderDiffSimulado
+        {
+            Responder = s => new ResultadoDiff
+            {
+                Tipo = TiposContrato.OpenApi, Motor = "simulado", Idioma = s.Idioma, HashBase = RenderDiffSimulado.Hash(s.Base), HashRevision = RenderDiffSimulado.Hash(s.Revision),
+                Resumen = new ResumenDiff(2, 1, 1, 0, 2, true),
+                Breaking =
+                [
+                    new CambioContrato { Regla = "response-property-removed", Nivel = NivelesCambio.Error, Texto = "Se quitó una propiedad.", Metodo = "GET", Ruta = "/tramites/{id}" },
+                    new CambioContrato { Regla = "response-property-became-optional", Nivel = NivelesCambio.Advertencia, Texto = "Una propiedad pasó a opcional." },
+                ],
+            },
+        };
+        await using var api = entorno.Api(
+            configuracion: new Dictionary<string, string>
+            {
+                [$"{OpcionesPublicacion.Seccion}:Audiencia"] = GitHubActionsSimulado.Audiencia,
+                [$"{OpcionesPublicacion.Seccion}:Propietarios:0"] = GitHubActionsSimulado.Propietario,
+                [$"{OpcionesPublicacion.Seccion}:WorkflowsReutilizables:0"] = GitHubActionsSimulado.PatronWorkflowOficial,
+            },
+            servicios: s =>
+            {
+                s.AddPlataformaPublicacionDePruebaEnApi(_github);
+                s.RemoveAll<IRenderDiff>();
+                s.AddSingleton<IRenderDiff>(render);
+            });
+        var lider = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
+        var (aplicativo, repositorio) = await FuenteAsync(lider, ["openapi"], ramas: ["staging", "release"]);
+        async Task Canal(string ambiente, string version, string rama) => Assert.Equal(HttpStatusCode.OK,
+            (await CiAsync(api, HttpMethod.Put, $"/api/v1/contratos/canales/{ambiente}", Token(repositorio, rama: rama), new { aplicativo, contrato = "api-externa", version })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Created, (await PublicarAsync(api, Token(repositorio, rama: "release"), Cuerpo(aplicativo, version: null))).StatusCode);
+        // Publicada sin base de Atlas (la CI comparó contra la rama release): el changelog guardado no sirve.
+        Assert.Equal(HttpStatusCode.Created, (await PublicarAsync(api, Token(repositorio, rama: "staging"),
+            new { aplicativo, contrato = "api-externa", tipo = "openapi", prerelease = "rc.b2c3d4e", spec = SpecVersion("2.0.0") })).StatusCode);
+        await Canal("pdn", "1.2.0", "release");
+        await Canal("qa", "2.0.0-rc.b2c3d4e", "staging");
+
+        var lector = await EmpleadoAsync(api, RolesAtlas.Desarrollador);
+        var fila = (await (await lector.GetAsync($"/api/v1/contratos/consolidado?aplicativo={aplicativo}")).Content.ReadFromJsonAsync<Consolidado>(Ct))!.Elementos.Single();
+        Assert.Equal(("con_breaking", "render"), (fila.BreakingPendientes!.Estado, fila.BreakingPendientes.Fuente));
+        Assert.Equal(["response-property-removed"], fila.BreakingPendientes.Cambios.Select(c => c.Regla));
+        var pedido = Assert.Single(render.Recibidas);
+        Assert.Equal((SpecsDeEjemplo.OpenApiYaml, SpecVersion("2.0.0")), (pedido.Base, pedido.Revision));
+
+        // atlas-render caído: el consolidado responde igual, con el breaking «no disponible».
+        render.Responder = _ => throw new RenderDiffException("caído", MotivoErrorDiff.NoDisponible, 503);
+        fila = (await (await lector.GetAsync($"/api/v1/contratos/consolidado?aplicativo={aplicativo}")).Content.ReadFromJsonAsync<Consolidado>(Ct))!.Elementos.Single();
+        Assert.Equal(("no_disponible", (string?)null), (fila.BreakingPendientes!.Estado, fila.BreakingPendientes.Fuente));
+
+        // qa vuelve a la de pdn: la base compartida no deja diffs pendientes para las demás pruebas (atlas-render no existe allí).
+        await Canal("qa", "1.2.0", "staging");
     }
 
     [Fact]

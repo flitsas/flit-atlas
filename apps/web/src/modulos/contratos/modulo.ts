@@ -2,8 +2,8 @@ import type { ModuloAtlas } from '../../app/modulos/contrato';
 
 /**
  * Contratos de integración (prompt maestro §8.4, ATLAS-ADR-0035). Desde la HU 3.2: la lista de contratos publicados
- * desde la CI y sus versiones. La pantalla completa del contrato (HU 3.6), el consolidado por ambiente (HU 3.4) y el
- * portal (F4) llegan después.
+ * desde la CI y sus versiones; desde la HU 3.4, el consolidado por ambiente (versión en dev, qa y pdn, desfases y
+ * breaking pendientes). La pantalla completa del contrato (HU 3.6) y el portal (F4) llegan después.
  */
 export const moduloContratos: ModuloAtlas = {
   id: 'contratos',
@@ -11,8 +11,14 @@ export const moduloContratos: ModuloAtlas = {
   descripcion: 'OpenAPI, AsyncAPI y proto versionados desde los repos, con diff, guías, paquetes y exportación.',
   icono: 'contratos',
   estado: 'disponible',
-  rutas: [{ path: '/contratos', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Contratos') }],
-  navegacion: [{ etiqueta: 'Contratos', ruta: '/contratos', movil: 'mas', orden: 40 }],
+  rutas: [
+    { path: '/contratos', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Contratos') },
+    { path: '/contratos/consolidado', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Consolidado') },
+  ],
+  navegacion: [
+    { etiqueta: 'Contratos', ruta: '/contratos', movil: 'mas', orden: 40 },
+    { etiqueta: 'Consolidado', ruta: '/contratos/consolidado', movil: 'mas', orden: 41 },
+  ],
   widgetsInicio: [
     {
       id: 'contratos-cambios',

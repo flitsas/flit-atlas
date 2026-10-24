@@ -191,6 +191,36 @@ const CONTRATOS = [
   },
 ];
 
+/** Consolidado ficticio por ambiente (HU 3.4): un contrato con desfase y breaking pendientes, otro al día. */
+const CONSOLIDADO_CONTRATOS = [
+  {
+    id: 'c1', codigo: 'api-externa', nombre: CONTRATOS[0]!.nombre, tipo: 'openapi', aplicativo: CONTRATOS[0]!.aplicativo,
+    canales: [
+      { ambiente: 'dev', version: '1.3.0-dev.a1b2c3d', esEstable: false, desplegadoEn: '2026-10-23T16:00:00Z' },
+      { ambiente: 'qa', version: '1.3.0-rc.a1b2c3d', esEstable: false, desplegadoEn: '2026-10-23T17:00:00Z' },
+      { ambiente: 'pdn', version: '1.2.0', esEstable: true, desplegadoEn: '2026-10-01T15:00:00Z' },
+    ],
+    desfases: [{ ambiente: 'qa', respectoDe: 'pdn', tipo: 'adelante', mensaje: 'qa (1.3.0-rc.a1b2c3d) va adelante de pdn (1.2.0)' }],
+    breakingPendientes: {
+      desde: '1.2.0', hasta: '1.3.0-rc.a1b2c3d', estado: 'con_breaking', fuente: 'changelog',
+      cambios: [
+        { regla: 'api-removed-without-deprecation', texto: 'Se quitó la operación sin deprecarla', metodo: 'GET', ruta: '/api/v1/tramites-demo/{id}/adjuntos-con-una-ruta-larga' },
+        { regla: 'request-property-became-required', texto: 'La propiedad «placa» del cuerpo pasó a ser obligatoria', metodo: 'POST', ruta: '/api/v1/tramites-demo' },
+      ],
+    },
+  },
+  {
+    id: 'c2', codigo: 'eventos', nombre: 'Eventos Demo', tipo: 'asyncapi', aplicativo: CONTRATOS[1]!.aplicativo,
+    canales: [
+      { ambiente: 'dev', version: null, esEstable: null, desplegadoEn: null },
+      { ambiente: 'qa', version: '1.2.0', esEstable: true, desplegadoEn: '2026-10-20T15:00:00Z' },
+      { ambiente: 'pdn', version: '1.2.0', esEstable: true, desplegadoEn: '2026-10-20T16:00:00Z' },
+    ],
+    desfases: [],
+    breakingPendientes: null,
+  },
+];
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
@@ -253,6 +283,18 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         const tipo = url.searchParams.get('tipo');
         const elementos = CONTRATOS.filter((c) => !tipo || c.tipo === tipo);
         return json(route, { total: elementos.length, elementos });
+      }
+      case '/api/v1/contratos/consolidado': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        const tipo = url.searchParams.get('tipo');
+        const soloDesfases = url.searchParams.get('desfases') === 'true';
+        const elementos = CONSOLIDADO_CONTRATOS.filter((c) => (!tipo || c.tipo === tipo) && (!soloDesfases || c.desfases.length > 0));
+        return json(route, {
+          ambientes: ['dev', 'qa', 'pdn'], total: elementos.length,
+          conDesfases: elementos.filter((c) => c.desfases.length > 0).length,
+          conBreaking: elementos.filter((c) => c.breakingPendientes?.estado === 'con_breaking').length,
+          elementos,
+        });
       }
       case '/api/v1/contratos/c1/versiones':
       case '/api/v1/contratos/c2/versiones':

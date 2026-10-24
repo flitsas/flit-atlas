@@ -47,6 +47,8 @@ channels:
         $ref: '#/components/messages/sobreEvento'
       contratosVersionPublicadaV1:
         $ref: '#/components/messages/contratosVersionPublicadaV1'
+      contratosCanalActualizadoV1:
+        $ref: '#/components/messages/contratosCanalActualizadoV1'
     bindings:
       amqp:
         is: routingKey
@@ -70,6 +72,7 @@ operations:
     messages:
       - $ref: '#/components/messages/sobreEvento'
       - $ref: '#/components/messages/contratosVersionPublicadaV1'
+      - $ref: '#/components/messages/contratosCanalActualizadoV1'
     bindings:
       amqp:
         deliveryMode: 2
@@ -163,6 +166,52 @@ components:
               commit: 0123456789abcdef0123456789abcdef01234567
               tieneBreaking: false
               operaciones: 3
+
+    contratosCanalActualizadoV1:
+      name: atlas.contratos.canal_actualizado
+      x-atlas-tipo: atlas.contratos.canal_actualizado
+      x-atlas-version: 1
+      title: Canal de contrato actualizado
+      summary: El CD de un repo avisó que otra versión de un contrato corre en un ambiente (HU 3.4, ATLAS-ADR-0035).
+      description: |
+        Se emite cuando `PUT /api/v1/contratos/canales/{ambiente}` cambia la versión del canal, en la misma transacción que
+        el canal y su historial; si el canal ya tenía esa versión no se repite. Lo consumirá arquitectura para relacionar
+        el despliegue con la versión del contrato (plan 00 §12). Es interno: `tenantId` va en ceros.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.contratos.canal_actualizado
+              version:
+                const: 1
+              data:
+                $ref: '#/components/schemas/ContratosCanalActualizadoV1'
+      examples:
+        - name: promocionAQa
+          summary: Un contrato ficticio pasa a una versión candidata en qa.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d40
+            type: atlas.contratos.canal_actualizado
+            version: 1
+            occurredAt: '2026-10-23T16:00:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              contratoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d30
+              versionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d41
+              aplicativoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d32
+              aplicativo: api-demo
+              contrato: api-externa
+              ambiente: qa
+              version: 1.3.0-rc.a1b2c3d
+              versionAnterior: 1.2.0-rc.f0e1d2c
+              repositorio: flitsas-demo/api-demo
+              rama: staging
+              commit: 0123456789abcdef0123456789abcdef01234567
 
   schemas:
     SobreEvento:
@@ -280,7 +329,63 @@ components:
           minimum: 0
           description: Cuántas operaciones, webhooks, canales o rpc trae el índice.
 
-# Eventos publicados: atlas.contratos.version_publicada (HU 3.2). Cada evento nuevo se agrega en el mismo PR que su
+    ContratosCanalActualizadoV1:
+      type: object
+      description: '`data` de atlas.contratos.canal_actualizado v1: qué versión corre ahora en el ambiente y desde qué despliegue.'
+      additionalProperties: false
+      required:
+        - contratoId
+        - versionId
+        - aplicativoId
+        - aplicativo
+        - contrato
+        - ambiente
+        - version
+        - versionAnterior
+        - repositorio
+        - rama
+        - commit
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+          description: Id del contrato en Atlas.
+        versionId:
+          type: string
+          format: uuid
+          description: Id de la versión que quedó en el canal.
+        aplicativoId:
+          type: string
+          format: uuid
+          description: Id del aplicativo del catálogo.
+        aplicativo:
+          type: string
+          description: Slug del aplicativo del catálogo.
+        contrato:
+          type: string
+          description: Código del contrato dentro del aplicativo.
+        ambiente:
+          type: string
+          description: Ambiente del canal (dev, qa, pdn).
+        version:
+          type: string
+          description: Versión semántica que corre ahora en el ambiente.
+        versionAnterior:
+          type:
+            - string
+            - 'null'
+          description: La que corría antes; null la primera vez.
+        repositorio:
+          type: string
+          description: Repositorio de GitHub (dueño/nombre) del token OIDC del CD.
+        rama:
+          type: string
+          description: Rama del token OIDC del CD.
+        commit:
+          type: string
+          description: Commit desplegado.
+
+# Eventos publicados: atlas.contratos.version_publicada (HU 3.2) y atlas.contratos.canal_actualizado (HU 3.4). Cada evento nuevo se agrega en el mismo PR que su
 # TipoEvento, así:
 #
 #   components:

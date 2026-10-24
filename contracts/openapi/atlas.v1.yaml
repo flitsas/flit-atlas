@@ -3520,6 +3520,192 @@ paths:
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
       security:
         - githubActions: [ ]
+  /api/v1/contratos/publicaciones/base:
+    get:
+      tags:
+        - Contratos
+      summary: Versión base para la CI (la de pdn)
+      description: 'Para el workflow reutilizable atlas-publicar (HU 3.3): la versión del contrato que corre hoy en el ambiente de referencia (pdn) o, si aún no tiene canal allí, la última estable publicada, con su spec completo. Es la base de «oasdiff breaking» y «oasdiff changelog». Solo con el token OIDC de GitHub Actions de un repo y rama de la lista blanca para ese aplicativo y tipo. 404 si el contrato no existe o no tiene ninguna versión estable.'
+      operationId: ObtenerBaseComparacionContrato
+      parameters:
+        - name: aplicativo
+          in: query
+          description: Slug del aplicativo.
+          schema:
+            type: string
+        - name: contrato
+          in: query
+          description: Código del contrato.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseComparacion'
+        '403':
+          description: 'El dueño del repo, el evento o el workflow reutilizable no están permitidos (sin cuerpo), o el repo, la rama, el workflow, el aplicativo o el tipo no están en la lista blanca (con el código).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+      security:
+        - githubActions: [ ]
+  '/api/v1/contratos/canales/{ambiente}':
+    put:
+      tags:
+        - Contratos
+      summary: Marcar la versión desplegada en un ambiente
+      description: 'Lo llama el CD de cada repo al desplegar (HU 3.4, plan 00 §8.2, regla 5), dentro del workflow reutilizable oficial. Solo con el token OIDC de GitHub Actions de un repo de la lista blanca para ese aplicativo y tipo, y desde una rama que despliega ese ambiente (Contratos:Canales:Ambientes; por defecto develop → dev, staging → qa, release → pdn). La versión debe estar publicada; pdn solo acepta estables. Guarda el historial y lo audita. 200 con cambio=false si el canal ya tenía esa versión.'
+      operationId: ActualizarCanalContrato
+      parameters:
+        - name: ambiente
+          in: path
+          description: 'dev, qa o pdn.'
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: El contrato y la versión desplegados.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCanal'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CanalActualizado'
+        '403':
+          description: 'El dueño del repo, el evento o el workflow reutilizable no están permitidos (sin cuerpo), o el repo, la rama, el workflow, el aplicativo o el tipo no están en la lista blanca (con el código).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+      security:
+        - githubActions: [ ]
+  '/api/v1/contratos/{id}/canales':
+    get:
+      tags:
+        - Contratos
+      summary: Versiones de un contrato por ambiente
+      description: 'Qué versión corre en cada ambiente (dev, qa, pdn) y el historial de cambios de los canales, con el CD que avisó. 404 si el contrato no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarCanalesContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CanalesContrato'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  /api/v1/contratos/consolidado:
+    get:
+      tags:
+        - Contratos
+      summary: Consolidado de contratos por ambiente
+      description: 'Por contrato, la versión de cada ambiente (dev, qa, pdn), los desfases entre ambientes vecinos y los breaking pendientes entre pdn y qa (del changelog guardado al publicar o calculados por atlas-render). Filtros por aplicativo, tipo, texto y solo con desfases. Máximo 500. Requiere atlas.contratos.ver_internos.'
+      operationId: ObtenerConsolidadoContratos
+      parameters:
+        - name: aplicativo
+          in: query
+          description: Slug del aplicativo.
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          description: 'openapi, asyncapi o proto.'
+          schema:
+            type: string
+        - name: texto
+          in: query
+          description: 'Texto a buscar en el nombre, el código o la descripción.'
+          schema:
+            type: string
+        - name: desfases
+          in: query
+          description: 'true: solo los contratos con algún desfase.'
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsolidadoContratos'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
   /api/v1/contratos:
     get:
       tags:
@@ -6989,6 +7175,38 @@ components:
           items:
             $ref: '#/components/schemas/NotificacionDto'
       description: 'Bandeja de la persona: total sin leer y las más recientes primero.'
+    BaseComparacion:
+      required:
+        - contratoId
+        - versionId
+        - version
+        - sha256
+        - origen
+        - ambiente
+        - spec
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        versionId:
+          type: string
+          format: uuid
+        version:
+          type: string
+        sha256:
+          type: string
+          description: SHA-256 del spec (hexadecimal).
+        origen:
+          type: string
+          description: 'canal: la versión que corre en el ambiente de referencia; ultima_estable: aún no hay canal en ese ambiente.'
+        ambiente:
+          type: string
+          description: Ambiente de referencia (pdn).
+        spec:
+          type: string
+          description: 'El spec completo, tal como se publicó.'
+      description: La versión base para comparar en la CI (oasdiff breaking y changelog).
     BloqueCodeownersDto:
       required:
         - repo
@@ -7008,6 +7226,34 @@ components:
             $ref: '#/components/schemas/LineaCodeownersDto'
           description: Sus líneas.
       description: Bloque CODEOWNERS sugerido para un repo.
+    BreakingPendientes:
+      required:
+        - desde
+        - hasta
+        - estado
+        - fuente
+        - cambios
+      type: object
+      properties:
+        desde:
+          type: string
+          description: Versión en pdn.
+        hasta:
+          type: string
+          description: Versión en qa.
+        estado:
+          type: string
+          description: 'sin_breaking, con_breaking, no_disponible (atlas-render no respondió o una spec no es válida) o no_soportado (AsyncAPI y proto sin changelog que sirva).'
+        fuente:
+          type:
+            - 'null'
+            - string
+          description: changelog (el que guardó la CI al publicar) o render (calculado ahora); vacío si no se pudo calcular.
+        cambios:
+          type: array
+          items:
+            $ref: '#/components/schemas/CambioBreaking'
+      description: 'Breaking pendientes: lo que rompería pdn si se promueve la versión de qa.'
     CalendarioDto:
       required:
         - desde
@@ -7042,6 +7288,28 @@ components:
             $ref: '#/components/schemas/FestivoDto'
           description: Festivos del rango.
       description: 'Turnos y festivos de un rango de fechas, para las vistas de lista, semana y mes.'
+    CambioBreaking:
+      required:
+        - regla
+        - texto
+        - metodo
+        - ruta
+      type: object
+      properties:
+        regla:
+          type: string
+          description: Id de la regla de oasdiff (api-removed-without-deprecation…).
+        texto:
+          type: string
+        metodo:
+          type:
+            - 'null'
+            - string
+        ruta:
+          type:
+            - 'null'
+            - string
+      description: Un cambio incompatible (nivel error de oasdiff) entre la versión de pdn y la de qa.
     CambioCompensacion:
       required:
         - fechaCompensada
@@ -7282,6 +7550,118 @@ components:
             type: string
           description: 'Campos que cambiaron (dedicacion, vigencia, orden).'
       description: Un cambio entre dos versiones.
+    CanalActualizado:
+      required:
+        - contratoId
+        - ambiente
+        - version
+        - versionAnterior
+        - desplegadoEn
+        - cambio
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        ambiente:
+          type: string
+          description: 'dev, qa o pdn (los de Contratos:Canales:Ambientes).'
+        version:
+          type: string
+        versionAnterior:
+          type:
+            - 'null'
+            - string
+          description: La que estaba antes; vacío la primera vez.
+        desplegadoEn:
+          type: string
+          format: date-time
+        cambio:
+          type: boolean
+          description: 'false si el canal ya tenía esa versión (idempotente, sin historial nuevo).'
+      description: El canal después del aviso del CD.
+    CanalConsolidado:
+      required:
+        - ambiente
+        - version
+        - esEstable
+        - desplegadoEn
+      type: object
+      properties:
+        ambiente:
+          type: string
+        version:
+          type:
+            - 'null'
+            - string
+        esEstable:
+          type:
+            - 'null'
+            - boolean
+        desplegadoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: Versión de un contrato en un ambiente; vacía si nunca se desplegó allí.
+    CanalDto:
+      required:
+        - ambiente
+        - versionId
+        - version
+        - esEstable
+        - desplegadoEn
+        - desplegadoPor
+        - commit
+        - ejecucion
+      type: object
+      properties:
+        ambiente:
+          type: string
+        versionId:
+          type: string
+          format: uuid
+        version:
+          type: string
+        esEstable:
+          type: boolean
+        desplegadoEn:
+          type: string
+          format: date-time
+        desplegadoPor:
+          type: string
+          description: github:dueño/repo@rama del CD que avisó.
+        commit:
+          type: string
+          description: Commit desplegado.
+        ejecucion:
+          type:
+            - 'null'
+            - string
+          description: run_id de GitHub Actions.
+      description: Versión de un contrato en un ambiente.
+    CanalesContrato:
+      required:
+        - ambientes
+        - canales
+        - historial
+      type: object
+      properties:
+        ambientes:
+          type: array
+          items:
+            type: string
+          description: Ambientes en orden de promoción.
+        canales:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanalDto'
+        historial:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistorialCanalDto'
+          description: Hasta 100 cambios.
+      description: 'Canales de un contrato: la versión actual por ambiente y el historial, del más reciente al más antiguo.'
     CanalesRecordatorioDto:
       required:
         - push
@@ -7684,6 +8064,85 @@ components:
             - string
           description: 'Huella de la vista previa: si algo cambió desde entonces, la confirmación se rechaza.'
       description: 'Confirmación de una vista previa: el mismo equipo, la misma ventana y la huella que devolvió.'
+    ConsolidadoContratos:
+      required:
+        - ambientes
+        - total
+        - conDesfases
+        - conBreaking
+        - elementos
+      type: object
+      properties:
+        ambientes:
+          type: array
+          items:
+            type: string
+          description: 'Ambientes en orden de promoción (dev, qa, pdn).'
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántos contratos devuelve (después de todos los filtros; a lo sumo 500).
+          format: int32
+        conDesfases:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Cuántos de los que cumplen aplicativo, tipo y texto tienen algún desfase.'
+          format: int32
+        conBreaking:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Cuántos de los que cumplen aplicativo, tipo y texto tienen breaking pendientes.'
+          format: int32
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContratoConsolidado'
+      description: El consolidado de contratos por ambiente.
+    ContratoConsolidado:
+      required:
+        - id
+        - codigo
+        - nombre
+        - tipo
+        - aplicativo
+        - canales
+        - desfases
+        - breakingPendientes
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        aplicativo:
+          $ref: '#/components/schemas/AplicativoDelContrato'
+        canales:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanalConsolidado'
+          description: 'Uno por ambiente, en el orden de «ambientes».'
+        desfases:
+          type: array
+          items:
+            $ref: '#/components/schemas/Desfase'
+        breakingPendientes:
+          oneOf:
+            - type: 'null'
+            - description: Vacío si qa o pdn no tienen versión o tienen la misma versión base (X.Y.Z).
+              $ref: '#/components/schemas/BreakingPendientes'
+      description: Un contrato con su versión por ambiente.
     ContratoResumen:
       required:
         - id
@@ -7847,6 +8306,26 @@ components:
             type: string
           description: 'Cada punto, sin cambiar una letra.'
       description: Definición de un rol tal como está en el §1 del documento de responsables.
+    Desfase:
+      required:
+        - ambiente
+        - respectoDe
+        - tipo
+        - mensaje
+      type: object
+      properties:
+        ambiente:
+          type: string
+          description: El ambiente al que se refiere el aviso.
+        respectoDe:
+          type: string
+          description: El ambiente con el que se compara.
+        tipo:
+          type: string
+          description: 'adelante (lleva una versión mayor), atrasado (una menor) o ausente (no tiene versión y el anterior sí).'
+        mensaje:
+          type: string
+      description: Diferencia entre dos ambientes vecinos en el orden de promoción (dev → qa → pdn).
     DiferenciaDto:
       required:
         - patron
@@ -8120,7 +8599,7 @@ components:
       properties:
         codigo:
           type: string
-          description: 'fuente_no_autorizada, aplicativo_no_autorizado, tipo_no_autorizado (403); spec_invalida, version_invalida, version_distinta_del_spec, version_no_permitida_en_rama (422); version_existente, tipo_distinto (409).'
+          description: 'fuente_no_autorizada, aplicativo_no_autorizado, tipo_no_autorizado, ambiente_no_permitido (403); sin_base, contrato_inexistente, version_inexistente, ambiente_inexistente (404); spec_invalida, version_invalida, version_distinta_del_spec, version_no_permitida_en_rama, version_no_estable (422); version_existente, tipo_distinto (409).'
         mensaje:
           type: string
         errores:
@@ -8810,6 +9289,43 @@ components:
           type: string
           format: date-time
       description: 'Fuente de la lista blanca: qué repo puede publicar qué tipos de fuente de un aplicativo desde la CI.'
+    HistorialCanalDto:
+      required:
+        - ambiente
+        - version
+        - versionAnterior
+        - desplegadoEn
+        - desplegadoPor
+        - repositorio
+        - rama
+        - commit
+        - ejecucion
+      type: object
+      properties:
+        ambiente:
+          type: string
+        version:
+          type: string
+        versionAnterior:
+          type:
+            - 'null'
+            - string
+        desplegadoEn:
+          type: string
+          format: date-time
+        desplegadoPor:
+          type: string
+        repositorio:
+          type: string
+        rama:
+          type: string
+        commit:
+          type: string
+        ejecucion:
+          type:
+            - 'null'
+            - string
+      description: Un cambio de canal.
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -11309,6 +11825,23 @@ components:
           type: string
           description: Por qué cambia (hasta 500).
       description: 'Cambio de un responsable (o alta de uno nuevo) con su nota: crea una versión.'
+    SolicitudCanal:
+      required:
+        - aplicativo
+        - contrato
+        - version
+      type: object
+      properties:
+        aplicativo:
+          type: string
+          description: Slug del aplicativo del catálogo.
+        contrato:
+          type: string
+          description: Código del contrato dentro del aplicativo.
+        version:
+          type: string
+          description: Versión ya publicada en Atlas (la que respondió POST /publicaciones).
+      description: Qué versión de un contrato quedó desplegada en el ambiente de la ruta.
     SolicitudCierreRevision:
       required:
         - nota
@@ -11670,6 +12203,16 @@ components:
             - 'null'
             - string
           description: 'Salida JSON de «oasdiff changelog» contra la versión de pdn (texto con un arreglo), hasta 1 MB; vacío si no hay base.'
+        prerelease:
+          type:
+            - 'null'
+            - string
+          description: 'Prerelease que agrega el workflow según la rama (dev.<sha7>, rc.<sha7>): la versión publicada es <version o info.version>-<prerelease>, y esa parte debe ser estable. Vacío: la versión tal cual.'
+        changelogBase:
+          type:
+            - 'null'
+            - string
+          description: 'Versión contra la que se calculó el changelog (la que Atlas entregó en GET /publicaciones/base), si la hubo. El Consolidado usa el changelog guardado cuando coincide con la versión que corre en pdn.'
       description: Una versión de contrato publicada desde la CI de su repo.
     SolicitudRenovacion:
       required:

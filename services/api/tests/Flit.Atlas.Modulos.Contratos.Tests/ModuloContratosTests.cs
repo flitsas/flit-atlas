@@ -24,7 +24,7 @@ public class ModuloContratosTests(Contenedores contenedores)
         Assert.True(modulo.ActivoPorDefecto);
         Assert.Equal(typeof(ContratosDbContext), modulo.ContextoDatos);
         Assert.Equal("__ef_migraciones_contratos", ContratosDbContext.TablaHistorial);
-        Assert.Equal([EventosContratos.VersionPublicada], modulo.EventosPublicados);
+        Assert.Equal([EventosContratos.VersionPublicada, EventosContratos.CanalActualizado], modulo.EventosPublicados);
         // Los mismos códigos y concesiones de la lista base del §7.4 (son contrato).
         Assert.Equal(
             ManifiestosNucleo.Contratos.Permisos.Select(p => (p.Codigo, string.Join(',', p.ConcedidoA))),
@@ -71,7 +71,7 @@ public class ModuloContratosTests(Contenedores contenedores)
         await contratos.Database.MigrateAsync(Ct);
 
         Assert.Empty(await contratos.Database.GetPendingMigrationsAsync(Ct));
-        Assert.Equal(["__ef_migraciones_contratos", "contratos_contrato", "contratos_operacion", "contratos_version"],
+        Assert.Equal(["__ef_migraciones_contratos", "contratos_canal", "contratos_canal_historial", "contratos_contrato", "contratos_operacion", "contratos_version"],
             (await Tablas(bd)).Except(delNucleo).Order(StringComparer.Ordinal));
     }
 
@@ -85,7 +85,7 @@ public class ModuloContratosTests(Contenedores contenedores)
         await Contenedores.EjecutarAsync(bd.Servicio,
             $"UPDATE atlas.contratos_version SET estado = 'deprecada', retiro_en = '2027-06-30', actualizado_en = now() WHERE id = '{version}'");
 
-        foreach (var cambio in new[] { "contenido = 'otro'", "sha256 = repeat('b', 64)", "version = '1.0.1'", "commit_sha = repeat('c', 40)", "changelog = '[{}]'::jsonb" })
+        foreach (var cambio in new[] { "contenido = 'otro'", "sha256 = repeat('b', 64)", "version = '1.0.1'", "commit_sha = repeat('c', 40)", "changelog = '[{}]'::jsonb", "changelog_base = '0.9.0'" })
         {
             var error = await Assert.ThrowsAsync<PostgresException>(() =>
                 Contenedores.EjecutarAsync(bd.Servicio, $"UPDATE atlas.contratos_version SET {cambio} WHERE id = '{version}'"));
@@ -100,6 +100,41 @@ public class ModuloContratosTests(Contenedores contenedores)
         contexto.Versiones.Add(Version(contrato, "1.0.0", new string('d', 64)));
         var repetida = await Assert.ThrowsAsync<DbUpdateException>(() => contexto.SaveChangesAsync(Ct));
         Assert.Equal(PostgresErrorCodes.UniqueViolation, (repetida.InnerException as PostgresException)?.SqlState);
+    }
+
+    [Fact]
+    public async Task El_canal_se_mueve_pero_su_historial_es_solo_insercion_y_hay_uno_por_contrato_y_ambiente()
+    {
+        var bd = await contenedores.CrearBaseAsync();
+        var (contrato, version) = await PublicarAsync(bd, "1.0.0");
+        await using var contexto = bd.Contratos();
+        var canal = new CanalContrato
+        {
+            ContratoId = contrato, Ambiente = "pdn", VersionId = version, DesplegadoEn = DateTimeOffset.UtcNow, DesplegadoPor = "github:flitsas-demo/api-demo@release",
+            CommitSha = new string('f', 40),
+        };
+        contexto.Canales.Add(canal);
+        contexto.HistorialCanales.Add(new HistorialCanal
+        {
+            ContratoId = contrato, Ambiente = "pdn", VersionId = version, DesplegadoEn = DateTimeOffset.UtcNow, DesplegadoPor = "github:flitsas-demo/api-demo@release",
+            Repositorio = "flitsas-demo/api-demo", Rama = "release", CommitSha = new string('f', 40),
+            WorkflowDelJob = "flitsas/flit-atlas/.github/workflows/atlas-publicar.yml@refs/tags/v1",
+        });
+        await contexto.SaveChangesAsync(Ct);
+
+        // El canal sí cambia (otro despliegue); el historial no.
+        await Contenedores.EjecutarAsync(bd.Servicio, $"UPDATE atlas.contratos_canal SET desplegado_en = now() WHERE id = '{canal.Id}'");
+        var historial = await Assert.ThrowsAsync<PostgresException>(() =>
+            Contenedores.EjecutarAsync(bd.Servicio, $"UPDATE atlas.contratos_canal_historial SET rama = 'otra' WHERE contrato_id = '{contrato}'"));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, historial.SqlState);
+
+        contexto.ChangeTracker.Clear();
+        contexto.Canales.Add(new CanalContrato
+        {
+            ContratoId = contrato, Ambiente = "pdn", VersionId = version, DesplegadoEn = DateTimeOffset.UtcNow, DesplegadoPor = "x", CommitSha = "x",
+        });
+        var repetido = await Assert.ThrowsAsync<DbUpdateException>(() => contexto.SaveChangesAsync(Ct));
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, (repetido.InnerException as PostgresException)?.SqlState);
     }
 
     [Fact]

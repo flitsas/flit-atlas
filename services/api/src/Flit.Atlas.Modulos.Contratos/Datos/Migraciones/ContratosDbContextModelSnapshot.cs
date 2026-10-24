@@ -24,6 +24,73 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.CanalContrato", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Ambiente")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ambiente");
+
+                    b.Property<string>("CommitSha")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("commit_sha");
+
+                    b.Property<Guid>("ContratoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contrato_id");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTimeOffset>("DesplegadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("desplegado_en");
+
+                    b.Property<string>("DesplegadoPor")
+                        .IsRequired()
+                        .HasMaxLength(310)
+                        .HasColumnType("character varying(310)")
+                        .HasColumnName("desplegado_por");
+
+                    b.Property<string>("Ejecucion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("ejecucion");
+
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_canal");
+
+                    b.HasIndex("VersionId")
+                        .HasDatabaseName("ix_contratos_canal_version_id");
+
+                    b.HasIndex("ContratoId", "Ambiente")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contratos_canal_contrato_id_ambiente");
+
+                    b.ToTable("contratos_canal", "atlas", t =>
+                        {
+                            t.HasComment("Versión de cada contrato que corre en cada ambiente (plan 00 §8.2, regla 5; HU 3.4).");
+
+                            t.HasCheckConstraint("ck_contratos_canal_ambiente", "ambiente ~ '^[a-z0-9]+(-[a-z0-9]+)*$'");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.Contrato", b =>
                 {
                     b.Property<Guid>("Id")
@@ -89,6 +156,95 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                             t.HasComment("Contratos de integración de cada aplicativo (plan 00 §8.4, ATLAS-ADR-0035).");
 
                             t.HasCheckConstraint("ck_contratos_contrato_codigo", "codigo ~ '^[a-z0-9]+(-[a-z0-9]+)*$'");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.HistorialCanal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Ambiente")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ambiente");
+
+                    b.Property<string>("CommitSha")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("commit_sha");
+
+                    b.Property<Guid>("ContratoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contrato_id");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTimeOffset>("DesplegadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("desplegado_en");
+
+                    b.Property<string>("DesplegadoPor")
+                        .IsRequired()
+                        .HasMaxLength(310)
+                        .HasColumnType("character varying(310)")
+                        .HasColumnName("desplegado_por");
+
+                    b.Property<string>("Ejecucion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("ejecucion");
+
+                    b.Property<string>("Rama")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("rama");
+
+                    b.Property<string>("Repositorio")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("repositorio");
+
+                    b.Property<Guid?>("VersionAnteriorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_anterior_id");
+
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_id");
+
+                    b.Property<string>("WorkflowDelJob")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("workflow_del_job");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_canal_historial");
+
+                    b.HasIndex("VersionAnteriorId")
+                        .HasDatabaseName("ix_contratos_canal_historial_version_anterior_id");
+
+                    b.HasIndex("VersionId")
+                        .HasDatabaseName("ix_contratos_canal_historial_version_id");
+
+                    b.HasIndex("ContratoId", "Ambiente", "DesplegadoEn")
+                        .HasDatabaseName("ix_contratos_canal_historial_contrato_id_ambiente_desplegado_en");
+
+                    b.ToTable("contratos_canal_historial", "atlas", t =>
+                        {
+                            t.HasComment("Historial de los canales por ambiente, solo inserción (HU 3.4).");
                         });
                 });
 
@@ -181,6 +337,11 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("changelog");
+
+                    b.Property<string>("ChangelogBase")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("changelog_base");
 
                     b.Property<string>("CommitSha")
                         .IsRequired()
@@ -315,6 +476,46 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
 
                             t.HasCheckConstraint("ck_contratos_version_sha256", "sha256 ~ '^[0-9a-f]{64}$'");
                         });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.CanalContrato", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.Contrato", null)
+                        .WithMany()
+                        .HasForeignKey("ContratoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_canal_contratos_contrato_contrato_id");
+
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", null)
+                        .WithMany()
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_canal_contratos_version_version_id");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.HistorialCanal", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.Contrato", null)
+                        .WithMany()
+                        .HasForeignKey("ContratoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_canal_historial_contratos_contrato_contrato_id");
+
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", null)
+                        .WithMany()
+                        .HasForeignKey("VersionAnteriorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_contratos_canal_historial_contratos_version_version_anterio");
+
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", null)
+                        .WithMany()
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_canal_historial_contratos_version_version_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.OperacionContrato", b =>

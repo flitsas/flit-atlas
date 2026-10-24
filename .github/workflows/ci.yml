@@ -94,19 +94,35 @@ jobs:
             vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi-compartible.yaml "$spec" || fallo=1
           done
           exit "$fallo"
-      - name: Cambios incompatibles frente a la rama base (solo advierte en F1)
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${BASE_REF}"
-          if ! git show "origin/${BASE_REF}:contracts/openapi/atlas.v1.yaml" > base.yaml 2>/dev/null; then
-            echo "La rama base aún no tiene contracts/openapi/atlas.v1.yaml; no hay contra qué comparar."
-            exit 0
-          fi
-          oasdiff breaking base.yaml contracts/openapi/atlas.v1.yaml --format githubactions | sed 's/^::error /::warning /'
-          oasdiff changelog base.yaml contracts/openapi/atlas.v1.yaml --format markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Prueba del workflow reutilizable atlas-publicar (decisión de breaking y MAJOR, rulesets embebidos)
+        # HU 3.3 (ATLAS-ADR-0035 §7): corre el bloque de decisión del workflow tal cual sobre specs ficticias.
+        run: bash scripts/atlas-publicar/probar.sh
+
+  atlas-publicar:
+    # HU 3.3: flit-atlas valida (en PR) y publica (en push a develop) sus propios contratos con el workflow reutilizable,
+    # llamado desde su propia rama (autopublicación, ATLAS-ADR-0035 §7). En los PR, un breaking frente a pdn (o, mientras
+    # Atlas no la tenga, frente a release o la rama base) sin subir la MAJOR falla (reemplaza el aviso de F1,
+    # ATLAS-ADR-0021). staging y release publican y marcan su canal desde cd.yml. Sin la variable ATLAS_URL, solo valida.
+    needs: contratos
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { contrato: atlas, tipo: openapi, ruta: contracts/openapi/atlas.v1.yaml, ruleset: contracts/vacuum/openapi.yaml, excepciones: contracts/vacuum/openapi-excepciones.yaml }
+          - { contrato: atlas-eventos, tipo: asyncapi, ruta: contracts/asyncapi/atlas-events.v1.yaml, ruleset: contracts/vacuum/asyncapi.yaml, excepciones: "" }
+    uses: ./.github/workflows/atlas-publicar.yml
+    with:
+      aplicativo: atlas-api
+      contrato: ${{ matrix.contrato }}
+      tipo: ${{ matrix.tipo }}
+      ruta: ${{ matrix.ruta }}
+      ruleset: ${{ matrix.ruleset }}
+      excepciones: ${{ matrix.excepciones }}
+      atlas_url: ${{ vars.ATLAS_URL }}
+      publicar: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
 
   go:
     runs-on: ubuntu-latest
