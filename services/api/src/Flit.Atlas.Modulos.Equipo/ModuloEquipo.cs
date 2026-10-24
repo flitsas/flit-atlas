@@ -63,6 +63,8 @@ public sealed class ModuloEquipo : IModuloAtlas
     {
         // Rol implícito por propiedad: reemplaza al vacío de la plataforma (§7.2).
         servicios.AddScoped<IProveedorRolesImplicitos, RolesImplicitosEquipo>();
+        // Responsables vigentes de un aplicativo para los demás módulos (avisos de deprecación, ATLAS-ADR-0046).
+        servicios.AddScoped<Plataforma.Modulos.ILectorResponsables, LectorResponsablesEquipo>();
 
         servicios.AddOptions<OpcionesGitHub>().BindConfiguration(OpcionesGitHub.Seccion);
         servicios.AddSingleton<CacheTokenGitHub>();

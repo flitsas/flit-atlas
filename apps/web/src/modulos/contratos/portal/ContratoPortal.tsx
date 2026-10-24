@@ -4,15 +4,19 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
 import { BotonCompartir } from '../../../app/ui/Compartir';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Operaciones } from '../componentes/Operaciones';
 import { Etiqueta, type Pestana, Pestanas, useEscritorio } from '../componentes/ui';
 import { VistaAsyncApi } from '../componentes/VistaAsyncApi';
+import { BotonFavorito } from '../favoritos/componentes';
+import { PERMISO_PORTAL, recurso, rutaSpecPodado } from '../favoritos/sinConexion';
 import { Cargando } from '../guias/componentes';
 import { documentoAsync } from '../spec/asyncapi';
 import { leerSpec } from '../spec/documento';
 import { operacionesOpenApi } from '../spec/openapi';
 import { useCambiosPortal, usePaquetePortal, useSpecPodado } from './api';
 import { AccionesPaquete, Avisos, ErrorPortal, InsigniasContrato, Volver } from './componentes';
+import { PanelSandbox, useSandboxDisponible } from './Sandbox';
 
 // Scalar en su iframe aislado (ATLAS-ADR-0039), solo en escritorio y en su propio chunk.
 const VisorScalar = lazy(() => import('../componentes/VisorScalar').then((m) => ({ default: m.VisorScalar })));
@@ -31,6 +35,7 @@ export default function ContratoPortal() {
   const spec = useSpecPodado(paqueteId, contratoId, tecnico);
   const cambios = useCambiosPortal(paqueteId, contratoId, tecnico && entrada?.contrato.tipo === 'openapi');
   const escritorio = useEscritorio();
+  const sandboxDisponible = useSandboxDisponible(detalle.data?.paquete);
   const [parametros, setParametros] = useSearchParams();
 
   const raiz = useMemo(() => (spec.data === undefined ? null : leerSpec(spec.data)), [spec.data]);
@@ -72,15 +77,18 @@ export default function ContratoPortal() {
         </p>
         <h1 className="text-2xl font-semibold break-words sm:text-3xl">{c.nombre}</h1>
         <InsigniasContrato contrato={c} />
+        {tecnico && <BotonFavorito objetivo={{ ambito: 'portal', tipo: 'contrato', paqueteId: p.id, contratoId: c.contratoId }} que="el contrato" />}
       </header>
+      <DatosGuardados recurso={recurso(rutaSpecPodado(p.id, c.contratoId), PERMISO_PORTAL).clave} sinTelefonos={false} />
       <Avisos avisos={avisos.filter((a) => a.contratoId === c.contratoId)} />
       {!tecnico ? (
         <ErrorPortal error={new ErrorApi(403, { codigo: 'solo_resumen' })} que="este contrato" />
       ) : (
         <>
-          <AccionesPaquete paquete={p} />
+          <AccionesPaquete paquete={p} disponibles={{ sandbox: sandboxDisponible }} />
           {/* HU 4.6: solo el enlace del portal, que el externo y sus colegas con acceso pueden abrir. */}
           <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(p.id)}/contratos/${encodeURIComponent(c.contratoId)}`} titulo={c.nombre} que="este contrato" />
+          {c.tipo === 'openapi' && <PanelSandbox paquete={p} contratoId={c.contratoId} />}
           <Pestanas etiqueta="Secciones del contrato" pestanas={pestanas} activa={activa} alElegir={(x) => cambiar({ pestana: x === 'operaciones' ? null : x, op: null })}>
             {spec.isPending && <Cargando etiqueta="Cargando el spec" alto="h-60" />}
             {spec.isError && <ErrorPortal error={spec.error} que="el spec de este contrato" />}

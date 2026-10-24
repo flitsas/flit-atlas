@@ -28,6 +28,7 @@ El panel de Aspire queda en `http://localhost:15031` (el enlace con el token sal
 | `render` (atlas-render) | 4033 | `/health/ready` |
 | `ia` (atlas-ia) | 4034 | `/health/ready`: Postgres con la extensión `vector` |
 | `docs` (atlas-docs) | 4035 | `/health/ready`: bucket `atlas` en el S3 local |
+| `microcks` (Microcks 1.15.0 «uber» nativa) | dinámico, solo para atlas-api | `/api/health`. Sandbox nivel 1 (HU 4.7, ATLAS-ADR-0045): guarda en memoria; el cliente lo usa por el proxy `https://localhost:4032/api/v1/contratos/sandbox/…` con su llave |
 | `correo` (Mailpit 1.31.4) | 4038 (interfaz y API); SMTP dinámico | `/livez`. Recibe los correos de invitación y recuperación (HU 1.5); puerto [por verificar con el líder] |
 | `postgres`, `redis`, `rabbitmq`, `s3` | dinámicos | Los asigna Aspire, para no chocar con el Postgres de FLIT 2.0 |
 

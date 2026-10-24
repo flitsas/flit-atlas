@@ -5,6 +5,7 @@ using Flit.Atlas.Modulos.Contratos.Comparticiones;
 using Flit.Atlas.Modulos.Contratos.Datos;
 using Flit.Atlas.Modulos.Contratos.Paquetes;
 using Flit.Atlas.Modulos.Contratos.Portal;
+using Flit.Atlas.Modulos.Contratos.Sandbox;
 using Flit.Atlas.Plataforma;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
@@ -124,6 +125,62 @@ public class PortalTests(Contenedores contenedores)
             """);
 
         Assert.Equal(["contratos_comparticion:true:true:organizacion_visible"], rls);
+    }
+
+    [Fact]
+    public async Task Los_sandboxes_tienen_RLS_forzada_y_un_externo_de_A_no_ve_ni_escribe_los_de_B()
+    {
+        // HU 4.7 (ATLAS-ADR-0045): contratos_sandbox, como contratos_comparticion.
+        var e = await EscenarioAsync();
+        Assert.Equal(["contratos_sandbox:true:true:organizacion_visible"], await Contenedores.ConsultarAsync(e.Bd.Admin, """
+            SELECT c.relname || ':' || c.relrowsecurity || ':' || c.relforcerowsecurity || ':' || p.polname
+            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'atlas'
+            JOIN pg_policy p ON p.polrelid = c.oid
+            WHERE c.relname = 'contratos_sandbox'
+            """));
+        await using (var sistema = e.Bd.Contratos())
+        {
+            foreach (var (org, paquete) in new[] { (e.OrgA, e.PaqueteA), (e.OrgB, e.PaqueteB) })
+            {
+                var comparticion = await sistema.Comparticiones.Where(c => c.PaqueteId == paquete).Select(c => c.Id).SingleAsync(Ct);
+                sistema.Sandboxes.Add(new SandboxPaquete
+                {
+                    OrganizacionId = org, PaqueteId = paquete, ComparticionId = comparticion, Ruta = ServicioSandbox.NuevaRuta(), Revision = 1, Contratos = "[]",
+                    Huella = new string('a', 64), LlaveHash = ServicioSandbox.Hash(ServicioSandbox.NuevaLlave()), LlaveCreadaEn = DateTimeOffset.UtcNow,
+                    ActivadoPor = Guid.NewGuid(), ActivadoEn = DateTimeOffset.UtcNow,
+                });
+            }
+            await sistema.SaveChangesAsync(Ct);
+        }
+        await using var externoA = e.Bd.Contratos(AlcanceDatos.DeOrganizaciones(e.OrgA));
+        Assert.Equal([e.PaqueteA], await externoA.Sandboxes.Select(s => s.PaqueteId).ToListAsync(Ct));
+        // Sin el predicado (un error en el código), RLS sigue ocultando los de B.
+        Assert.Equal([e.OrgA], await externoA.Sandboxes.IgnoreQueryFilters().Select(s => s.OrganizacionId).ToListAsync(Ct));
+        Assert.Empty(await Contenedores.ConsultarAsync(e.Bd.Servicio, "SELECT ruta FROM atlas.contratos_sandbox"));
+        var error = await Assert.ThrowsAsync<PostgresException>(() => Contenedores.EjecutarAsync(e.Bd.Servicio, $"""
+            SELECT set_config('atlas.alcance_total', 'off', false), set_config('atlas.organizaciones', '{e.OrgA}', false);
+            UPDATE atlas.contratos_sandbox SET organizacion_id = '{e.OrgB}' WHERE true;
+            """));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+    }
+
+    [Fact]
+    public void El_spec_para_Microcks_lleva_el_nombre_opaco_y_la_ruta_del_proxy_no_sale_del_servicio()
+    {
+        var json = ServicioSandbox.ParaMicrocks(Spec, "atlas-0123-api-demo", "r1-abc");
+        var raiz = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        Assert.Equal("atlas-0123-api-demo", raiz["info"]!["title"]!.GetValue<string>());
+        Assert.Equal("r1-abc", raiz["info"]!["version"]!.GetValue<string>());
+        Assert.NotNull(raiz["paths"]!["/tramites/{id}"]);
+
+        Assert.Equal("tramites/42", EndpointsSandbox.RutaSegura("tramites/42"));
+        Assert.Equal("tramites/%7Bid%7D/a%20b", EndpointsSandbox.RutaSegura("tramites/{id}/a b"));
+        Assert.Equal(string.Empty, EndpointsSandbox.RutaSegura(null));
+        Assert.Null(EndpointsSandbox.RutaSegura("../otro-servicio/r1/x"));
+        Assert.Null(EndpointsSandbox.RutaSegura("a/./b"));
+        Assert.Null(EndpointsSandbox.RutaSegura("a\\..\\b"));
+        Assert.StartsWith(ServicioSandbox.PrefijoLlave, ServicioSandbox.NuevaLlave(), StringComparison.Ordinal);
+        Assert.NotEqual(ServicioSandbox.NuevaRuta(), ServicioSandbox.NuevaRuta());
     }
 
     [Fact]

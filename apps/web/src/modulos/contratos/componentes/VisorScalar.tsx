@@ -10,7 +10,22 @@ import { servidoresPermitidos } from '../visor/servidores';
  * la única que permite estilos en línea. La pantalla le pasa el spec por `postMessage` con los servidores ya filtrados
  * (solo QA y sandbox, nunca pdn), así que «Probar» no puede apuntar a producción.
  */
-export function VisorScalar({ contenido, servidores, titulo }: { contenido: string; servidores: unknown; titulo: string }) {
+export function VisorScalar(props: { contenido: string; servidores: unknown; titulo: string }) {
+  // HU 4.9: el iframe del visor tiene origen opaco, así que el service worker no lo controla ni lo precarga: sin red no se
+  // puede abrir (si ya estaba abierto, sigue funcionando). Lo guardado de un favorito se ve en «Operaciones».
+  const [disponible] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  if (!disponible) {
+    return (
+      <p role="note" className="rounded-xl border border-border bg-card p-4 text-sm">
+        Sin conexión, la referencia interactiva no se puede abrir: corre aislada y necesita descargar el visor. El spec guardado
+        se ve completo en la pestaña «Operaciones».
+      </p>
+    );
+  }
+  return <VisorEnLinea {...props} />;
+}
+
+function VisorEnLinea({ contenido, servidores, titulo }: { contenido: string; servidores: unknown; titulo: string }) {
   const marco = useRef<HTMLIFrameElement>(null);
   const [estado, setEstado] = useState<'cargando' | 'listo' | 'error'>('cargando');
   const { efectivo } = useTema();

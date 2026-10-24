@@ -9,7 +9,7 @@ elementos: []
 reemplaza: []
 reemplazado_por: []
 alias: []
-fuentes: [prompt maestro §6.3, §7.3, §8.2, §10, §11 y §12, HU 2.12, ATLAS-ADR-0020, ATLAS-ADR-0029, ATLAS-ADR-0031, ATLAS-ADR-0032]
+fuentes: [prompt maestro §6.3, §7.3, §8.2, §10, §11 y §12, HU 2.12, HU 4.9, ATLAS-ADR-0039, ATLAS-ADR-0043, ATLAS-ADR-0020, ATLAS-ADR-0029, ATLAS-ADR-0031, ATLAS-ADR-0032]
 ---
 
 # ATLAS-ADR-0034 · Datos sin conexión
@@ -61,6 +61,35 @@ Opción 1 en las tres.
 - **Teléfonos**: todo campo `telefono` se deja vacío antes de guardar. Es lo más seguro: un teléfono de una persona del equipo en un dispositivo perdido es el dato más sensible de estas pantallas, y sin red tampoco se puede llamar por Teams; el correo y el nombre sí quedan (son los de la vista interna).
 - **Cuándo se borra**: al cerrar sesión (la base entera, como ya hacía ATLAS-ADR-0020); cuando `/yo` responde 401 (sesión vencida o cerrada en otro lado) o trae a **otra persona** (`plataforma.dueno` guarda de quién es lo guardado; si cambia, se borra la base, cola incluida, antes de guardar nada de la nueva); y, por recurso, cuando la persona **pierde el permiso** que lo exige (cada registro guarda su permiso y la sincronización borra los que ya no están en `/yo`). Lo vencido (TTL) se borra al leerlo.
 - **Bundle**: el inicial solo suma los manifiestos (clave, ruta y permiso) y el control del dueño; `sinConexion.ts`, `sincronizacion.ts` y el aviso van en chunks diferidos.
+
+### Ampliación de la HU 4.9 (24/10/2026): contratos y guías favoritos
+
+- **Favoritos en el servidor** (`contratos_favorito`, por persona, con `organizacion_id` y RLS): contratos internos
+  (`/api/v1/contratos/favoritos`, con `ver_internos`) y paquetes, contratos y guías compartidos
+  (`/api/v1/portal/favoritos/...`, con `portal.ver`; cada endpoint con su caso en `AislamientoPortalTests`). Marcar algo
+  fuera de la vista de la persona responde 404 (o 403 `solo_resumen`); el listado solo trae lo que hoy ve.
+- **Qué se guarda**: la respuesta de la API tal cual se la dio a la persona, por ruta (`contratos.fav:<ruta>`), con el
+  permiso que la exige y el mismo TTL de 72 horas. Contrato interno: el contrato, sus versiones, el spec y el índice de la
+  última versión. Paquete: su detalle y el spec **podado** (y los cambios) de cada contrato con detalle técnico. Contrato
+  compartido: el detalle, el spec podado y los cambios. Guía: el detalle del paquete y la guía. Las listas de favoritos
+  también, para verlas sin red.
+- **Topes**: 5 MiB por respuesta y 30 MiB en total (del favorito más reciente al más antiguo); lo que no cabe se ve solo en
+  línea y el botón no dice «Disponible sin conexión».
+- **Cuándo se guarda**: al marcar (en el momento) y al sincronizar (el shell carga el sincronizador del módulo con
+  `offline.cargarSincronizador`, en su chunk); al consultar una ruta ya guardada se refresca (`conRespaldoGuardado`). Una
+  consulta que no es de un favorito nunca se guarda.
+- **Cuándo se borra**: al cerrar sesión (la base entera); al quitar el favorito (lo suyo que ningún otro favorito usa); al
+  perder el permiso (`depurarSinPermiso`); al resincronizar, lo que el servidor ya no devuelve en la lista o lo que responde
+  403/404 (compartición revocada o vencida, fuera del alcance); y lo vencido por TTL al leerlo.
+- **Indicadores**: el banner del shell «Sin conexión», el aviso de la página «Sin conexión: datos del <fecha>» y, en el
+  botón y en «Tus favoritos», «Disponible sin conexión · sincronizado el <fecha>».
+- **Visor**: sin red, la pantalla del contrato (interna y del portal) funciona con el spec guardado: operaciones con sus
+  ejemplos, esquemas y matriz (OpenAPI), AsyncAPI y proto. Scalar (ATLAS-ADR-0039) no pide nada fuera del origen (lo
+  comprueba la prueba E2E), pero corre en un iframe con `sandbox="allow-scripts"` y origen opaco, que el service worker no
+  controla (se comprobó: ninguna respuesta del visor sale del service worker, ni con un manejador para `/visor/`) y
+  `openapi.html` va con `Cache-Control: no-cache`. Sin red, la pestaña «Referencia interactiva» lo dice y remite a
+  «Operaciones»; si el visor ya estaba abierto, sigue funcionando. Se descartó darle `allow-same-origin` al iframe (le daría
+  la cookie y la API) y servirlo como `blob:` o `srcdoc` (heredarían la CSP del shell, que bloquea los estilos de Scalar).
 
 ## Consecuencias
 

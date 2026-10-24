@@ -115,6 +115,16 @@ export interface OfflineModulo {
   /** Recursos que se guardan en IndexedDB si los permisos lo permiten (§11); sin teléfonos. */
   recursos: RecursoSinConexion[];
   ttlHoras: number;
+  /**
+   * Lo que no es una ruta fija (p. ej. los favoritos de la persona, HU 4.9): un sincronizador que el shell carga con
+   * `import()` (no pesa en el bundle inicial) y llama con el acceso de la persona después de los `recursos`.
+   */
+  cargarSincronizador?: () => Promise<{ sincronizar: (acceso: AccesoSincronizacion) => Promise<{ guardados: number; borrados: number }> }>;
+}
+
+/** Lo que recibe un sincronizador de módulo: los permisos que trajo `/yo` (sin ellos, no guarda nada). */
+export interface AccesoSincronizacion {
+  permisos?: readonly string[];
 }
 
 export interface ModuloAtlas {

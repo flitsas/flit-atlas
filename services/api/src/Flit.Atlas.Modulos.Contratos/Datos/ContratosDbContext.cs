@@ -383,6 +383,176 @@ public sealed class ComparticionPaquete : Entidad
     public Guid? RevocadoPor { get; set; }
 }
 
+/// <summary>Cuándo sale un aviso de deprecación (HU 4.8, ATLAS-ADR-0046).</summary>
+public enum MomentoAviso
+{
+    /// <summary>Al deprecar (o al llegar alguien nuevo a una versión ya deprecada).</summary>
+    Deprecacion,
+
+    /// <summary>N días antes del retiro (los de <c>Contratos:AvisosDeprecacion:DiasRecordatorio</c>).</summary>
+    Recordatorio,
+}
+
+/// <summary>Canal por el que sale un aviso de deprecación.</summary>
+public enum CanalAviso
+{
+    App,
+    Push,
+    Correo,
+}
+
+/// <summary>Estado del envío de un aviso por un canal.</summary>
+public enum EstadoAviso
+{
+    /// <summary>Reclamado antes de salir: si la corrida se corta aquí, no se repite (pudo haber salido).</summary>
+    EnCurso,
+
+    Enviado,
+
+    /// <summary>No salió; se reintenta en la corrida siguiente hasta el tope de intentos.</summary>
+    Fallido,
+}
+
+/// <summary>
+/// Un aviso de deprecación por persona y canal (HU 4.8, ATLAS-ADR-0046): la marca que lo hace idempotente. La clave
+/// (<c>version:retiro:momento[-dias]:persona:canal</c>) es única: repetir la corrida, deprecar otra vez con la misma fecha
+/// o tener la persona varios paquetes con la versión no lo manda dos veces. Lleva la organización de la persona (RLS).
+/// </summary>
+public sealed class AvisoDeprecacion : Entidad
+{
+    public required string Clave { get; init; }
+
+    public required Guid VersionId { get; init; }
+
+    /// <summary>La fecha de retiro del aviso: si cambia, el aviso es otro.</summary>
+    public required DateOnly RetiroEn { get; init; }
+
+    public required MomentoAviso Momento { get; init; }
+
+    /// <summary>Días antes del retiro de un recordatorio; vacío en el de la deprecación.</summary>
+    public int? Dias { get; init; }
+
+    public required Guid PersonaId { get; init; }
+
+    /// <summary>Organización de la persona (una externa, o FLIT para los responsables internos).</summary>
+    public required Guid OrganizacionId { get; init; }
+
+    public required CanalAviso Canal { get; init; }
+
+    public EstadoAviso Estado { get; set; } = EstadoAviso.EnCurso;
+
+    public int Intentos { get; set; }
+
+    public DateTimeOffset? EnviadoEn { get; set; }
+
+    /// <summary>Solo el tipo de la falla (nunca el destinatario ni el contenido).</summary>
+    public string? Error { get; set; }
+}
+
+/// <summary>Qué se marca como favorito (HU 4.9, ATLAS-ADR-0034).</summary>
+public enum TipoFavorito
+{
+    /// <summary>Un contrato interno (pantalla del contrato, con <c>ver_internos</c>).</summary>
+    Contrato,
+
+    /// <summary>Un paquete compartido en el portal.</summary>
+    Paquete,
+
+    /// <summary>Un contrato de un paquete compartido en el portal.</summary>
+    ContratoCompartido,
+
+    /// <summary>Una guía de un paquete compartido en el portal.</summary>
+    Guia,
+}
+
+/// <summary>
+/// Favorito de una persona (HU 4.9): lo que la PWA guarda en el dispositivo para verlo sin conexión, si la persona lo puede
+/// ver. Lleva la organización de la persona (predicado y RLS). Uno por persona y objeto.
+/// </summary>
+public sealed class FavoritoContrato : Entidad
+{
+    public required Guid PersonaId { get; init; }
+
+    public required Guid OrganizacionId { get; init; }
+
+    public required TipoFavorito Tipo { get; init; }
+
+    public Guid? PaqueteId { get; init; }
+
+    public Guid? ContratoId { get; init; }
+
+    public Guid? GuiaId { get; init; }
+}
+
+/// <summary>Estado de un sandbox (HU 4.7, ATLAS-ADR-0045).</summary>
+public enum EstadoSandbox
+{
+    /// <summary>Importado en Microcks: el proxy de atlas-api responde con su llave.</summary>
+    Activo,
+
+    /// <summary>Apagado (compartición revocada o vencida, sin sandbox, paquete archivado o sin contratos): la llave ya no sirve.</summary>
+    Apagado,
+}
+
+/// <summary>
+/// Sandbox nivel 1 de un paquete para una organización (plan 00 §8.4 y §8.8, HU 4.7, ATLAS-ADR-0045): el spec
+/// <b>podado</b> de cada contrato OpenAPI del paquete, importado en Microcks con un nombre opaco, y la llave con la que los
+/// sistemas de la organización llaman al proxy de atlas-api (se guarda solo su hash). Uno por paquete y organización, ligado
+/// a la compartición que lo permite; hereda su vigencia. Tiene <c>organizacion_id</c>: predicado obligatorio y RLS.
+/// </summary>
+public sealed class SandboxPaquete : Entidad
+{
+    public required Guid OrganizacionId { get; init; }
+
+    public required Guid PaqueteId { get; init; }
+
+    /// <summary>La compartición que lo permite (la misma fila aunque se haya revocado y vuelto a compartir).</summary>
+    public required Guid ComparticionId { get; set; }
+
+    /// <summary>1 = Microcks. El nivel 2 (QA real, P-07) no está en esta HU.</summary>
+    public int Nivel { get; init; } = 1;
+
+    /// <summary>Identificador opaco (128 bits aleatorios en hexadecimal) de la URL y de los servicios en Microcks; cambia al reactivar.</summary>
+    public required string Ruta { get; set; }
+
+    /// <summary>Revisión del paquete importada.</summary>
+    public int Revision { get; set; }
+
+    /// <summary>Contratos importados en JSON (<c>jsonb</c>): <c>[{contratoId, versionId, segmento, servicio, version, operaciones}]</c>.</summary>
+    public required string Contratos { get; set; }
+
+    /// <summary>SHA-256 de lo importado (revisión, contratos, versiones y operaciones): si cambia, se reimporta.</summary>
+    public required string Huella { get; set; }
+
+    public EstadoSandbox Estado { get; set; } = EstadoSandbox.Activo;
+
+    /// <summary>SHA-256 de la llave (la llave solo se muestra una vez).</summary>
+    public required byte[] LlaveHash { get; set; }
+
+    public required DateTimeOffset LlaveCreadaEn { get; set; }
+
+    /// <summary>Persona que lo activó (o regeneró la llave) por última vez.</summary>
+    public required Guid ActivadoPor { get; set; }
+
+    public required DateTimeOffset ActivadoEn { get; set; }
+
+    /// <summary>Hasta cuándo vale: la vigencia de la compartición; vacío = sin vencimiento.</summary>
+    public DateTimeOffset? ExpiraEn { get; set; }
+
+    public DateTimeOffset? ImportadoEn { get; set; }
+
+    public DateTimeOffset? ApagadoEn { get; set; }
+
+    /// <summary><c>revocada</c>, <c>vencida</c>, <c>sin_sandbox</c>, <c>paquete_no_disponible</c> o <c>sin_contratos</c>.</summary>
+    public string? MotivoApagado { get; set; }
+
+    /// <summary>Servicios de Microcks por borrar (<c>["nombre:version"]</c>, <c>jsonb</c>): los reintenta el trabajo periódico.</summary>
+    public string PorBorrar { get; set; } = "[]";
+
+    /// <summary>Último uso del proxy (a lo sumo una escritura por hora).</summary>
+    public DateTimeOffset? UltimoUsoEn { get; set; }
+}
+
 /// <summary>
 /// Qué versión de un contrato corre hoy en un ambiente (plan 00 §8.1 y §8.2, regla 5; HU 3.4 y ATLAS-ADR-0035 §8): una
 /// fila por contrato y ambiente, que mueve el CD con <c>PUT /api/v1/contratos/canales/{ambiente}</c>. Cada cambio deja
@@ -592,7 +762,16 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
 
     public DbSet<ComparticionPaquete> Comparticiones => Set<ComparticionPaquete>();
 
+    public DbSet<AvisoDeprecacion> AvisosDeprecacion => Set<AvisoDeprecacion>();
+
+    public DbSet<FavoritoContrato> Favoritos => Set<FavoritoContrato>();
+    public DbSet<SandboxPaquete> Sandboxes => Set<SandboxPaquete>();
+
     public const int LargoAmbiente = 20;
+
+    public const int LargoClaveAviso = 200;
+
+    public const int LargoErrorAviso = 100;
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion) =>
         ConfigurarOpciones(opciones, cadenaConexion, TablaHistorial);
@@ -827,11 +1006,77 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
             e.HasIndex(c => c.OrganizacionId);
         });
 
+        modelBuilder.Entity<AvisoDeprecacion>(e =>
+        {
+            e.ToTable(Prefijo + "aviso_deprecacion", t =>
+            {
+                t.HasComment("Avisos de deprecación enviados por persona y canal: la marca que los hace idempotentes (HU 4.8, ATLAS-ADR-0046).");
+                t.HasCheckConstraint("ck_contratos_aviso_deprecacion_dias", "(momento = 'recordatorio') = (dias IS NOT NULL)");
+            });
+            e.Property(a => a.Id).ValueGeneratedNever();
+            e.Property(a => a.Clave).HasMaxLength(LargoClaveAviso);
+            e.Property(a => a.Error).HasMaxLength(LargoErrorAviso);
+            Enum(e.Property(a => a.Momento), 20);
+            Enum(e.Property(a => a.Canal), 20);
+            Enum(e.Property(a => a.Estado), 20);
+            e.HasOne<VersionContrato>().WithMany().HasForeignKey(a => a.VersionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(a => a.Clave).IsUnique();
+            e.HasIndex(a => new { a.VersionId, a.RetiroEn });
+            e.HasIndex(a => a.OrganizacionId);
+        });
+
+        modelBuilder.Entity<FavoritoContrato>(e =>
+        {
+            e.ToTable(Prefijo + "favorito", t =>
+            {
+                t.HasComment("Contratos, paquetes y guías favoritos de cada persona, para verlos sin conexión (HU 4.9, ATLAS-ADR-0034).");
+                t.HasCheckConstraint("ck_contratos_favorito_tipo",
+                    "(tipo = 'contrato' AND contrato_id IS NOT NULL AND paquete_id IS NULL AND guia_id IS NULL) "
+                    + "OR (tipo = 'paquete' AND paquete_id IS NOT NULL AND contrato_id IS NULL AND guia_id IS NULL) "
+                    + "OR (tipo = 'contrato_compartido' AND paquete_id IS NOT NULL AND contrato_id IS NOT NULL AND guia_id IS NULL) "
+                    + "OR (tipo = 'guia' AND paquete_id IS NOT NULL AND guia_id IS NOT NULL AND contrato_id IS NULL)");
+            });
+            e.Property(f => f.Id).ValueGeneratedNever();
+            Enum(e.Property(f => f.Tipo), 30);
+            // Uno por persona y objeto (los vacíos cuentan como iguales).
+            e.HasIndex(f => new { f.PersonaId, f.Tipo, f.PaqueteId, f.ContratoId, f.GuiaId }).IsUnique().AreNullsDistinct(false);
+            e.HasIndex(f => f.OrganizacionId);
+        });
+
+        modelBuilder.Entity<SandboxPaquete>(e =>
+        {
+            e.ToTable(Prefijo + "sandbox", t =>
+            {
+                t.HasComment("Sandbox nivel 1 (Microcks) de un paquete por organización: spec podado importado y hash de la llave del proxy (HU 4.7, ATLAS-ADR-0045).");
+                t.HasCheckConstraint("ck_contratos_sandbox_nivel", "nivel = 1");
+                t.HasCheckConstraint("ck_contratos_sandbox_ruta", "ruta ~ '^[0-9a-f]{32}$'");
+                t.HasCheckConstraint("ck_contratos_sandbox_huella", "huella ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("ck_contratos_sandbox_llave", "octet_length(llave_hash) = 32");
+                t.HasCheckConstraint("ck_contratos_sandbox_contratos", "jsonb_typeof(contratos) = 'array' AND jsonb_typeof(por_borrar) = 'array'");
+                t.HasCheckConstraint("ck_contratos_sandbox_apagado", "(estado = 'apagado') = (apagado_en IS NOT NULL)");
+            });
+            e.Property(s => s.Id).ValueGeneratedNever();
+            e.Property(s => s.Ruta).HasMaxLength(32).IsFixedLength();
+            e.Property(s => s.Contratos).HasColumnType("jsonb");
+            e.Property(s => s.PorBorrar).HasColumnType("jsonb");
+            e.Property(s => s.Huella).HasMaxLength(64).IsFixedLength();
+            e.Property(s => s.MotivoApagado).HasMaxLength(40);
+            Enum(e.Property(s => s.Estado), 20);
+            e.HasOne<PaqueteContratos>().WithMany().HasForeignKey(s => s.PaqueteId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ComparticionPaquete>().WithMany().HasForeignKey(s => s.ComparticionId).OnDelete(DeleteBehavior.Restrict);
+            // Uno por paquete y organización: activar otra vez uno apagado lo reactiva con una ruta y una llave nuevas.
+            e.HasIndex(s => new { s.PaqueteId, s.OrganizacionId }).IsUnique();
+            // El proxy lo busca por la ruta opaca de la URL.
+            e.HasIndex(s => s.Ruta).IsUnique();
+            e.HasIndex(s => s.OrganizacionId);
+            e.HasIndex(s => s.Estado);
+        });
+
         // translate() y lower() para la búsqueda sin tildes, como en el catálogo.
         modelBuilder.HasDbFunction(typeof(FuncionesSql).GetMethod(nameof(FuncionesSql.Traducir))!).HasName("translate").IsBuiltIn();
         modelBuilder.HasDbFunction(typeof(FuncionesSql).GetMethod(nameof(FuncionesSql.Minusculas))!).HasName("lower").IsBuiltIn();
 
-        // Predicado obligatorio: contratos_comparticion (HU 4.3) solo devuelve filas de las organizaciones del alcance de la
+        // Predicado obligatorio: contratos_comparticion (HU 4.3) y contratos_sandbox (HU 4.7) solo devuelven filas de las organizaciones del alcance de la
         // petición. Los contratos, versiones, guías y paquetes son internos: el portal llega a ellos solo desde una
         // compartición de la organización de la sesión (ATLAS-ADR-0043). Las exportaciones de un externo llevan su organización
         // (HU 4.5): quedan filtradas aquí y por RLS.

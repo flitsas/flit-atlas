@@ -94,7 +94,7 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.contratos.ver_internos` | Ver los contratos internos (OpenAPI, AsyncAPI y proto) y su historial. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
-| `atlas.contratos.publicar_manual` | Publicar una versión de contrato a mano, por excepción. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.contratos.publicar_manual` | Publicar una versión de contrato a mano, por excepción, y deprecarla con su fecha de retiro. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.contratos.guias.editar` | Editar las guías de integración. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 
 ## Equipo y responsables (`equipo`)

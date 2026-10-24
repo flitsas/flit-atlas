@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Flit.Atlas.Identidad.Datos;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 using Flit.Atlas.Plataforma.Publicacion;
 using Flit.Atlas.Plataforma.Tests;
@@ -30,7 +31,8 @@ public sealed class EscenarioPortal : IAsyncDisposable
     private readonly GitHubActionsSimulado _github = new();
     private readonly ResponsablesDePrueba _responsables = new();
 
-    public EscenarioPortal(EntornoApi entorno, IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null)
+    public EscenarioPortal(
+        EntornoApi entorno, IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null, Action<IServiceCollection>? servicios = null)
     {
         _entorno = entorno;
         var claves = new Dictionary<string, string>
@@ -48,6 +50,9 @@ public sealed class EscenarioPortal : IAsyncDisposable
             s.AddPlataformaPublicacionDePruebaEnApi(_github);
             s.AddSingleton(_responsables);
             s.Replace(ServiceDescriptor.Scoped<IProveedorRolesImplicitos, ProveedorDePrueba>());
+            // HU 4.8: los responsables de un aplicativo que reciben los avisos de deprecación salen del mismo mapa.
+            s.Replace(ServiceDescriptor.Scoped<ILectorResponsables, LectorDePrueba>());
+            servicios?.Invoke(s);
         });
     }
 
@@ -70,6 +75,15 @@ public sealed class EscenarioPortal : IAsyncDisposable
             Task.FromResult<IReadOnlyList<RolImplicito>>(responsables.PorPersona.TryGetValue(personaId, out var aplicativo)
                 ? [new RolImplicito(RolesAtlas.Responsable, new AlcanceAsignacion(TiposAlcance.Aplicativo, aplicativo.ToString("D")))]
                 : []);
+    }
+
+    private sealed class LectorDePrueba(ResponsablesDePrueba responsables) : ILectorResponsables
+    {
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> DeAplicativosAsync(IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>>(responsables.PorPersona
+                .Where(p => aplicativos.Contains(p.Value))
+                .GroupBy(p => p.Value)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(p => p.Key)]));
     }
 
     public static async Task<JsonElement> Json(HttpResponseMessage respuesta)

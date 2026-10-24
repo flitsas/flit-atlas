@@ -64,6 +64,16 @@ public class AutorizacionTests(EntornoApi entorno)
         // Se autentica con el token de 256 bits de la URL (guardado como hash, revocable y regenerable); solo vale si la
         // persona que lo creó sigue activa y con atlas.soporte.ver; no trae correos ni teléfonos. Un token malo es 404.
         "GET /api/v1/soporte/ics/{token}.ics",
+        // HU 4.7 (ATLAS-ADR-0045): proxy del sandbox nivel 1 hacia Microcks, que llaman los sistemas del cliente sin la cookie.
+        // Se autentica con la llave del sandbox (256 bits, guardada como hash, que se regenera o se apaga con la compartición)
+        // en Authorization: Bearer; revisa la compartición en cada llamada; ruta desconocida o llave ajena = 404.
+        "GET /api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}",
+        "POST /api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}",
+        "PUT /api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}",
+        "PATCH /api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}",
+        "DELETE /api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}",
+        "HEAD /api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}",
+        "OPTIONS /api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}",
         // Protocolo OAuth/OIDC (HU 1.3c, ATLAS-ADR-0024): OpenIddict autentica al cliente (secreto, PKCE, código o
         // refresh) antes de dejar pasar la petición; authorize toma al usuario de la sesión del BFF si la hay.
         "GET /connect/authorize",

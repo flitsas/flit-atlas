@@ -113,6 +113,8 @@ public sealed class EntornoApi : IAsyncLifetime
             b.UseSetting("Soporte:Recordatorios:Habilitados", "false");
             // HU 4.5: sin abrir las colas que atlas-api consume (no hay broker); las pruebas de exportaciones lo encienden.
             b.UseSetting("Plataforma:Mensajeria:Consumo:Habilitado", "false");
+            // HU 4.8: lo mismo con los avisos de deprecación; las pruebas corren AvisosDeprecacion por versión.
+            b.UseSetting("Contratos:AvisosDeprecacion:Habilitados", "false");
             foreach (var (clave, valor) in configuracion ?? new Dictionary<string, string>())
             {
                 b.UseSetting(clave, valor);

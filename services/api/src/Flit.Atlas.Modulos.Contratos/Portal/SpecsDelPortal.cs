@@ -75,36 +75,48 @@ internal sealed class SpecsDelPortal(ContratosDbContext contexto, IOptions<Opcio
 {
     private static readonly TimeSpan Vigencia = TimeSpan.FromHours(6);
 
-    public async Task<ResultadoSpecPortal> PodarAsync(PaqueteDelPortal paquete, ContratoDelPortal contrato, string? ambiente, CancellationToken ct = default)
+    public Task<ResultadoSpecPortal> PodarAsync(PaqueteDelPortal paquete, ContratoDelPortal contrato, string? ambiente, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(paquete);
         ArgumentNullException.ThrowIfNull(contrato);
+        return PodarAsync(paquete.Paquete.Id, paquete.Revision, contrato.Contrato, contrato.Version.Id, contrato.Entrada.Operaciones, ambiente, ct);
+    }
+
+    /// <summary>
+    /// Lo mismo a partir de las piezas (el sandbox, HU 4.7, poda la revisión de una compartición fuera de una petición del
+    /// portal). Quien llama ya comprobó el acceso: aquí solo se poda.
+    /// </summary>
+    public async Task<ResultadoSpecPortal> PodarAsync(
+        Guid paqueteId, int revision, Contrato contrato, Guid versionId, IReadOnlyList<string> operaciones, string? ambiente, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(contrato);
+        ArgumentNullException.ThrowIfNull(operaciones);
         var destino = string.IsNullOrWhiteSpace(ambiente) ? opciones.Value.Ambiente : ambiente.Trim().ToLowerInvariant();
         if (!AmbientesPoda.Todos.Contains(destino))
         {
             return new(null, "ambiente_invalido", $"Ambientes válidos: {string.Join(", ", AmbientesPoda.Todos.Order(StringComparer.Ordinal))}.", false);
         }
-        if (Podadores.Para(contrato.Contrato.Tipo) is not { } podador)
+        if (Podadores.Para(contrato.Tipo) is not { } podador)
         {
             return new(null, "no_soportado", "Los contratos proto no se comparten podados todavía.", false);
         }
-        if (contrato.Entrada.Operaciones.Count == 0)
+        if (operaciones.Count == 0)
         {
             return new(null, "sin_operaciones", "El paquete no comparte operaciones de este contrato (solo sus guías).", false);
         }
-        var slug = (await lector.ListarAsync(ct).ConfigureAwait(false)).FirstOrDefault(a => a.Id == contrato.Contrato.AplicativoId)?.Slug ?? string.Empty;
-        var urls = opciones.Value.UrlsDe(slug, contrato.Contrato.Codigo, destino);
-        var clave = $"portal:spec:{paquete.Paquete.Id:N}:{paquete.Revision}:{contrato.Contrato.Id:N}:{contrato.Version.Id:N}:{destino}:{Huella(urls)}";
+        var slug = (await lector.ListarAsync(ct).ConfigureAwait(false)).FirstOrDefault(a => a.Id == contrato.AplicativoId)?.Slug ?? string.Empty;
+        var urls = opciones.Value.UrlsDe(slug, contrato.Codigo, destino);
+        var clave = $"portal:spec:{paqueteId:N}:{revision}:{contrato.Id:N}:{versionId:N}:{destino}:{Huella(urls)}";
         if (cache.Cache.TryGetValue(clave, out SpecPodado? guardado) && guardado is not null)
         {
             return new(guardado, null, null, true);
         }
-        var contenido = await contexto.Versiones.AsNoTracking().Where(v => v.Id == contrato.Version.Id).Select(v => v.Contenido).FirstAsync(ct).ConfigureAwait(false);
+        var contenido = await contexto.Versiones.AsNoTracking().Where(v => v.Id == versionId && v.ContratoId == contrato.Id).Select(v => v.Contenido).FirstAsync(ct).ConfigureAwait(false);
         try
         {
-            var podado = podador.Podar(new SolicitudPoda(contenido, contrato.Entrada.Operaciones, new DestinoPoda(destino, urls)));
+            var podado = podador.Podar(new SolicitudPoda(contenido, operaciones, new DestinoPoda(destino, urls)));
             // Defensa: el podador ya verifica el resultado; aquí se comprueba otra vez que no sobre ninguna operación.
-            if (podado.Resumen.Operaciones.Any(o => !contrato.Entrada.Operaciones.Contains(o, StringComparer.Ordinal)))
+            if (podado.Resumen.Operaciones.Any(o => !operaciones.Contains(o, StringComparer.Ordinal)))
             {
                 return new(null, "verificacion_fallida", "El spec podado traía operaciones fuera de la selección.", false);
             }
