@@ -4,6 +4,7 @@ using Flit.Atlas.Plataforma.Mensajeria;
 using Flit.Atlas.Plataforma.Microsoft365;
 using Flit.Atlas.Plataforma.Notificaciones;
 using Flit.Atlas.Plataforma.Permisos;
+using Flit.Atlas.Plataforma.Render;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -71,6 +72,9 @@ public static class ExtensionesPlataforma
         // Lecturas entre módulos (ATLAS-ADR-0031): por defecto vacías; el catálogo y el soporte registran las suyas.
         servicios.TryAddScoped<Modulos.ILectorAplicativos, Modulos.SinAplicativos>();
         servicios.TryAddScoped<Modulos.ISoporteDeTurno, Modulos.SinSoporteDeTurno>();
+
+        // Diff de contratos en atlas-render (HU 3.5, ATLAS-ADR-0036): cliente tipado IRenderDiff.
+        servicios.AgregarRender();
 
         // Roles y permisos (HU 1.4).
         servicios.AgregarPermisos();
