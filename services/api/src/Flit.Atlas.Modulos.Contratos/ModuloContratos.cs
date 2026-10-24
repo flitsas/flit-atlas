@@ -42,8 +42,9 @@ public static class EventosContratos
 /// <summary>
 /// Contratos de integración (F3, prompt maestro §8.4, plan 00 §8 y ATLAS-ADR-0035). En esta entrega (HU 3.1 y 3.2): la
 /// publicación desde la CI con el token OIDC de GitHub Actions y la lista blanca del catálogo, versiones inmutables
-/// (201, 200 idempotente, 409 y 422), el índice de operaciones y canales, y la lectura interna. Canales por ambiente,
-/// diff, guías, paquetes y portal llegan en las HU siguientes. Viene encendido (bandera <c>modulo.contratos</c>), como su
+/// (201, 200 idempotente, 409 y 422), el índice de operaciones y canales, y la lectura interna. HU 3.7: guías con
+/// revisiones inmutables, restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). Canales por ambiente,
+/// paquetes y portal llegan en las HU siguientes. Viene encendido (bandera <c>modulo.contratos</c>), como su
 /// entrada en la PWA.
 /// </summary>
 public sealed class ModuloContratos : IModuloAtlas
@@ -75,5 +76,6 @@ public sealed class ModuloContratos : IModuloAtlas
     {
         EndpointsPublicacion.Mapear(grupo);
         EndpointsContratos.Mapear(grupo);
+        Guias.EndpointsGuias.Mapear(grupo);
     }
 }

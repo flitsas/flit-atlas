@@ -3684,6 +3684,409 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.contratos.ver_internos
+  '/api/v1/contratos/{id}/guias':
+    get:
+      tags:
+        - Contratos
+      summary: Guías de un contrato
+      description: 'Las guías del contrato (sin los cuerpos), ordenadas por título, con lo que la persona puede hacer. Con version, solo las que aplican a esa versión. 404 si el contrato no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarGuiasContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: query
+          description: 'Versión del contrato: solo las guías que le aplican.'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoGuias'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+    post:
+      tags:
+        - Contratos
+      summary: Crear una guía
+      description: 'Crea la guía en borrador con su revisión 1, auditada en la misma transacción. Requiere atlas.contratos.guias.editar global o sobre el aplicativo del contrato (responsable principal o secundario); si no, 403. 404 si el contrato no existe.'
+      operationId: CrearGuiaContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La guía y su primera revisión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudGuia'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuiaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.guias.editar
+  '/api/v1/contratos/guias/{guiaId}':
+    get:
+      tags:
+        - Contratos
+      summary: Una guía con su última revisión
+      description: 'La guía, su última revisión con el cuerpo en Markdown y lo que la persona puede hacer. 404 si no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ObtenerGuiaContrato
+      parameters:
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuiaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+    put:
+      tags:
+        - Contratos
+      summary: Guardar una guía (revisión nueva)
+      description: 'Cada guardado crea una revisión inmutable con autor, fecha y nota, y deja la guía en borrador (la revisión publicada sigue siendo la misma hasta volver a publicar). 409 revision_desactualizada si revisionBase no es la última; 409 sin_cambios si es igual a la última. Requiere atlas.contratos.guias.editar sobre el aplicativo.'
+      operationId: GuardarGuiaContrato
+      parameters:
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudGuia'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuiaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.guias.editar
+  '/api/v1/contratos/guias/{guiaId}/revisiones':
+    get:
+      tags:
+        - Contratos
+      summary: Historial de revisiones de una guía
+      description: 'Todas las revisiones, de la más reciente a la más antigua, sin los cuerpos. 404 si la guía no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarRevisionesGuia
+      parameters:
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RevisionResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/guias/{guiaId}/revisiones/{numero}':
+    get:
+      tags:
+        - Contratos
+      summary: Una revisión con su cuerpo
+      description: 'La revisión tal como se guardó: la PWA compara dos revisiones línea a línea con estos cuerpos. 404 si no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ObtenerRevisionGuia
+      parameters:
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la revisión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/guias/{guiaId}/revisiones/{numero}/restauracion':
+    post:
+      tags:
+        - Contratos
+      summary: Restaurar una revisión
+      description: 'Crea una revisión nueva igual a la elegida (misma huella), sin reescribir la historia, y deja la guía en borrador. 409 revision_desactualizada si revisionBase no es la última; 409 sin_cambios si la última ya es igual. Requiere atlas.contratos.guias.editar sobre el aplicativo.'
+      operationId: RestaurarRevisionGuia
+      parameters:
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Revisión a restaurar.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      requestBody:
+        description: La nota y la última revisión que se vio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRestauracion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuiaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.guias.editar
+  '/api/v1/contratos/guias/{guiaId}/publicacion':
+    post:
+      tags:
+        - Contratos
+      summary: 'Publicar (y, si es compartible, aprobar) la última revisión'
+      description: 'Publica la última revisión. Una guía interna la publica quien puede editarla; una compartible solo el responsable principal o secundario del aplicativo (o de un ancestro): para los demás, 403 aprobacion_requerida. 409 revision_desactualizada si revision no es la última; 409 ya_publicada. Auditado en la misma transacción.'
+      operationId: PublicarGuiaContrato
+      parameters:
+        - name: guiaId
+          in: path
+          description: Id de la guía.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión a publicar.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPublicacionGuia'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuiaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGuia'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.guias.editar
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -8111,6 +8514,18 @@ components:
         mensaje:
           type: string
       description: Error de una operación de invitaciones o de cuentas externas.
+    ErrorGuia:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso, aprobacion_requerida (403); revision_desactualizada, sin_cambios, ya_publicada (409).'
+        mensaje:
+          type: string
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorPublicacion:
       required:
         - codigo
@@ -8810,6 +9225,105 @@ components:
           type: string
           format: date-time
       description: 'Fuente de la lista blanca: qué repo puede publicar qué tipos de fuente de un aplicativo desde la CI.'
+    GuiaDetalle:
+      required:
+        - guia
+        - revision
+        - puedeEditar
+        - puedeAprobar
+      type: object
+      properties:
+        guia:
+          $ref: '#/components/schemas/GuiaResumen'
+        revision:
+          description: 'La última revisión, con su cuerpo.'
+          $ref: '#/components/schemas/RevisionDetalle'
+        puedeEditar:
+          type: boolean
+        puedeAprobar:
+          type: boolean
+      description: Una guía con su última revisión y lo que la persona puede hacer.
+    GuiaResumen:
+      required:
+        - id
+        - contratoId
+        - titulo
+        - operacion
+        - aplicaDesde
+        - aplicaHasta
+        - visibilidad
+        - estado
+        - revisionActual
+        - revisionPublicada
+        - publicadaEn
+        - publicadaPor
+        - aprobadaPor
+        - actualizadaEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contratoId:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        operacion:
+          type:
+            - 'null'
+            - string
+          description: 'Clave del índice de operaciones (GET /tramites/{id}) si es de una operación; vacío si es del contrato.'
+        aplicaDesde:
+          type:
+            - 'null'
+            - string
+          description: Primera versión del contrato a la que aplica; vacío = desde la primera.
+        aplicaHasta:
+          type:
+            - 'null'
+            - string
+          description: 'Última versión a la que aplica; vacío = hasta la última. Sin las dos, aplica a todas.'
+        visibilidad:
+          type: string
+          description: 'interna o compartible (con clientes, por paquetes en F4).'
+        estado:
+          type: string
+          description: borrador (la última revisión no está publicada) o publicada.
+        revisionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de la última revisión.
+          format: int32
+        revisionPublicada:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Revisión publicada (la que verán los clientes si es compartible); vacío si nunca se publicó.
+          format: int32
+        publicadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        publicadaPor:
+          oneOf:
+            - type: 'null'
+            - description: Quién publicó la revisión publicada.
+              $ref: '#/components/schemas/PersonaRef'
+        aprobadaPor:
+          oneOf:
+            - type: 'null'
+            - description: 'Principal o secundario que aprobó la revisión publicada, si es compartible.'
+              $ref: '#/components/schemas/PersonaRef'
+        actualizadaEn:
+          type: string
+          format: date-time
+      description: Guía de integración con la foto de su última revisión.
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -9182,6 +9696,28 @@ components:
           items:
             $ref: '#/components/schemas/ContratoResumen'
       description: 'Contratos que cumplen el filtro, ordenados por aplicativo y código.'
+    ListadoGuias:
+      required:
+        - contratoId
+        - puedeEditar
+        - puedeAprobar
+        - elementos
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        puedeEditar:
+          type: boolean
+          description: 'Si puede crear, editar y restaurar guías de este contrato (y publicar las internas).'
+        puedeAprobar:
+          type: boolean
+          description: 'Si puede aprobar (publicar) las compartibles: solo el responsable principal o secundario del aplicativo.'
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuiaResumen'
+      description: Guías de un contrato y lo que la persona puede hacer con ellas.
     MapaCargaDto:
       required:
         - media
@@ -10060,6 +10596,19 @@ components:
           type: boolean
           description: Si quien importa ya confirmó crearla.
       description: 'Persona del Excel que no existe en Atlas: se propone crearla inactiva (no entra en la generación).'
+    PersonaRef:
+      required:
+        - id
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre; «Persona no disponible» si ya no está.
+      description: Persona de Atlas (autor o aprobador).
     PersonaRepartoDto:
       required:
         - persona
@@ -10816,6 +11365,72 @@ components:
           description: Casos ambiguos (filas marcadas para revisión).
           format: int32
       description: Conteos de la vista previa o de la importación.
+    RevisionDetalle:
+      required:
+        - numero
+        - origen
+        - restauradaDe
+        - titulo
+        - contenido
+        - operacion
+        - aplicaDesde
+        - aplicaHasta
+        - visibilidad
+        - nota
+        - autor
+        - guardadaEn
+        - huella
+        - publicada
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        origen:
+          type: string
+          description: 'creacion, edicion o restauracion.'
+        restauradaDe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+        titulo:
+          type: string
+        contenido:
+          type: string
+          description: 'Cuerpo en Markdown, tal como se guardó (la PWA lo muestra sanitizado, sin HTML).'
+        operacion:
+          type:
+            - 'null'
+            - string
+        aplicaDesde:
+          type:
+            - 'null'
+            - string
+        aplicaHasta:
+          type:
+            - 'null'
+            - string
+        visibilidad:
+          type: string
+          description: interna o compartible.
+        nota:
+          type: string
+        autor:
+          $ref: '#/components/schemas/PersonaRef'
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+        publicada:
+          type: boolean
+      description: Revisión inmutable de una guía con su cuerpo en Markdown.
     RevisionDto:
       required:
         - id
@@ -10886,6 +11501,57 @@ components:
           description: Cuántos días antes sale el recordatorio.
           format: int32
       description: 'Revisiones del reparto: la próxima y las hechas.'
+    RevisionResumen:
+      required:
+        - numero
+        - origen
+        - restauradaDe
+        - titulo
+        - visibilidad
+        - nota
+        - autor
+        - guardadaEn
+        - huella
+        - publicada
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        origen:
+          type: string
+          description: 'creacion, edicion o restauracion.'
+        restauradaDe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Si es una restauración, la revisión restaurada (esta es igual a aquella).'
+          format: int32
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: interna o compartible.
+        nota:
+          type: string
+          description: Mensaje del cambio.
+        autor:
+          $ref: '#/components/schemas/PersonaRef'
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+          description: 'SHA-256 de la foto (título, cuerpo, operación, versiones y visibilidad): igual huella, igual revisión.'
+        publicada:
+          type: boolean
+          description: Si es la revisión publicada.
+      description: 'Revisión inmutable de una guía, sin el cuerpo.'
     RolConPermisos:
       required:
         - codigo
@@ -11493,6 +12159,54 @@ components:
           description: 'Primer día de la ventana; vacío, mañana. Debe ser posterior a hoy.'
           format: date
       description: Ventana de la generación automática de un equipo.
+    SolicitudGuia:
+      required:
+        - titulo
+        - contenido
+        - operacion
+        - aplicaDesde
+        - aplicaHasta
+        - visibilidad
+        - nota
+        - revisionBase
+      type: object
+      properties:
+        titulo:
+          type: string
+          description: Hasta 200 caracteres.
+        contenido:
+          type: string
+          description: 'Cuerpo en Markdown, hasta 200 mil caracteres. El HTML no se interpreta.'
+        operacion:
+          type:
+            - 'null'
+            - string
+          description: Clave de una operación del índice de alguna versión del contrato; vacío si la guía es de todo el contrato.
+        aplicaDesde:
+          type:
+            - 'null'
+            - string
+          description: Versión semántica inicial; vacío = desde la primera.
+        aplicaHasta:
+          type:
+            - 'null'
+            - string
+          description: Versión semántica final; vacío = hasta la última.
+        visibilidad:
+          type: string
+          description: interna o compartible. Publicar una compartible exige la aprobación del principal o del secundario.
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        revisionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Al editar: la revisión sobre la que se trabajó (409 si ya hay otra más nueva). Al crear se ignora.'
+          format: int32
+      description: Lo que se guarda en una revisión nueva.
     SolicitudImportacion:
       required:
         - markdown
@@ -11671,6 +12385,19 @@ components:
             - string
           description: 'Salida JSON de «oasdiff changelog» contra la versión de pdn (texto con un arreglo), hasta 1 MB; vacío si no hay base.'
       description: Una versión de contrato publicada desde la CI de su repo.
+    SolicitudPublicacionGuia:
+      required:
+        - revision
+      type: object
+      properties:
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La revisión a publicar: debe ser la última (409 si no).'
+          format: int32
+      description: Publicar la última revisión de una guía.
     SolicitudRenovacion:
       required:
         - accesoVenceEn
@@ -11683,6 +12410,23 @@ components:
           description: 'Vencimiento nuevo; por defecto, el máximo configurado.'
           format: date-time
       description: 'Renovación: vencimiento nuevo del acceso. Si la invitación no se ha aceptado, también se envía un enlace nuevo.'
+    SolicitudRestauracion:
+      required:
+        - nota
+        - revisionBase
+      type: object
+      properties:
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        revisionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: La última revisión que vio la persona (409 si ya hay otra más nueva).
+          format: int32
+      description: 'Restaurar una revisión: crea otra igual a ella.'
     SolicitudSegundoFactor:
       required:
         - estado
