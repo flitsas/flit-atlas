@@ -3,6 +3,7 @@ import { lazy, type ReactNode, Suspense, useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
+import { BotonCompartir } from '../../../app/ui/Compartir';
 import { Operaciones } from '../componentes/Operaciones';
 import { Etiqueta, type Pestana, Pestanas, useEscritorio } from '../componentes/ui';
 import { VistaAsyncApi } from '../componentes/VistaAsyncApi';
@@ -78,6 +79,8 @@ export default function ContratoPortal() {
       ) : (
         <>
           <AccionesPaquete paquete={p} />
+          {/* HU 4.6: solo el enlace del portal, que el externo y sus colegas con acceso pueden abrir. */}
+          <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(p.id)}/contratos/${encodeURIComponent(c.contratoId)}`} titulo={c.nombre} que="este contrato" />
           <Pestanas etiqueta="Secciones del contrato" pestanas={pestanas} activa={activa} alElegir={(x) => cambiar({ pestana: x === 'operaciones' ? null : x, op: null })}>
             {spec.isPending && <Cargando etiqueta="Cargando el spec" alto="h-60" />}
             {spec.isError && <ErrorPortal error={spec.error} que="el spec de este contrato" />}

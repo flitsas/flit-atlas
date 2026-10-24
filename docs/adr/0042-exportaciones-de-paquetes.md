@@ -1,6 +1,6 @@
 ---
 id: ATLAS-ADR-0042
-titulo: Exportaciones de paquetes — generador puro en atlas-docs (Jinja2, WeasyPrint, python-docx, openpyxl, Postman propio) con salida determinista y hash del contenido; de punta a punta por la cola de RabbitMQ con la entrada en el S3, URL firmada de 15 minutos, retención de 7 días, auditoría y aviso
+titulo: Exportaciones de paquetes — generador puro en atlas-docs (Jinja2, WeasyPrint, python-docx, openpyxl, Postman propio) con salida determinista y hash del contenido; de punta a punta por la cola de RabbitMQ con la entrada en el S3, URL firmada de 15 minutos, retención de 7 días, auditoría y aviso; compartir desde el móvil con la hoja nativa y solo enlaces internos
 estado: propuesto
 fecha: 2026-10-24
 decisores: [Jorman Copete (líder técnico)]
@@ -9,7 +9,7 @@ elementos: []
 reemplaza: []
 reemplazado_por: []
 alias: []
-fuentes: [prompt maestro A-02, A-06, §5.1, §5.2, §6.3, §7.4, §8.4, §8.5 (exportación), §8.9, §11, §12 y §15, plan 00 §6.2, §6.3, §8.4, §8.7 y §12, HU 4.5, ATLAS-ADR-0003, ATLAS-ADR-0014, ATLAS-ADR-0018, ATLAS-ADR-0020, ATLAS-ADR-0022, ATLAS-ADR-0023, ATLAS-ADR-0024, ATLAS-ADR-0026, ATLAS-ADR-0037, ATLAS-ADR-0038, ATLAS-ADR-0039, ATLAS-ADR-0040, ATLAS-ADR-0041, ATLAS-ADR-0043, ATLAS-ADR-0044]
+fuentes: [prompt maestro A-02, A-06, §5.1, §5.2, §6.3, §7.4, §8.4, §8.5 (exportación), §8.9, §11, §12 y §15, plan 00 §6.2, §6.3, §8.4, §8.7 y §12, HU 4.5, HU 4.6, ATLAS-ADR-0003, ATLAS-ADR-0014, ATLAS-ADR-0018, ATLAS-ADR-0020, ATLAS-ADR-0022, ATLAS-ADR-0023, ATLAS-ADR-0024, ATLAS-ADR-0026, ATLAS-ADR-0037, ATLAS-ADR-0038, ATLAS-ADR-0039, ATLAS-ADR-0040, ATLAS-ADR-0041, ATLAS-ADR-0043, ATLAS-ADR-0044]
 ---
 
 # ATLAS-ADR-0042 · Exportaciones de paquetes
@@ -292,6 +292,63 @@ ambiente sin S3 no tumba el despliegue).
   `ConsumoTests`. El consumidor de atlas-docs y el CA de los siete formatos por la cola: `tests/exportes/test_cola.py`
   (con Pango en el CI y en `--target pruebas`).
 
+## Decisión — parte 3: compartir desde el móvil (HU 4.6)
+
+Hechos verificados al empezar la HU 4.6:
+
+- La descarga de la HU 4.5 abre la URL firmada en la misma pestaña (`descarga.ts`); la URL es de otro origen (el S3) y
+  responde con `Content-Disposition: attachment`.
+- La CSP de la PWA (`deploy/atlas-seguridad.conf`) tiene `connect-src 'self'`: un `fetch` a la URL firmada del S3 queda
+  bloqueado en la imagen nginx, y el bucket tampoco declara CORS.
+- La PWA no tiene telemetría de cliente; los módulos no pueden importarse entre sí (el servicio va en el shell).
+
+### Qué se comparte
+
+- **Un enlace interno**, nunca una URL firmada ni un enlace anónimo (prompt maestro §8.5). `src/pwa/compartir.ts`
+  (`enlaceInterno`) solo acepta rutas del propio origen; quien lo abre necesita sesión y permisos, y abrirlo es una vista
+  que el servidor ya filtra y audita. Un externo solo ve botones con rutas del portal (`/portal/…`).
+- **Un archivo exportado**, con la hoja nativa (`navigator.share({ files })`) si el dispositivo comparte ese tipo
+  (`canShare` con un `File` vacío del mismo nombre y tipo: Chrome en Android no comparte ZIP; el escritorio sin hoja,
+  nada). El archivo se baja de la URL firmada con `fetch` (sin credenciales ni referer) a memoria, con un tope de 50 MB.
+  No pasa por atlas-api ni hay endpoint nuevo: la descarga ya queda en `contratos.exportacion_descargada`.
+- **Dos toques** para el archivo («Preparar» y «Compartir»): Safari exige llamar `navigator.share` dentro del gesto, y
+  la descarga previa lo consumiría (`NotAllowedError`). Si aun así pasa, se pide volver a tocar.
+
+### Respaldo
+
+Sin hoja nativa (o si falla, salvo `AbortError`, que es cancelar y no se muestra), una hoja inferior con el enlace en un
+campo de solo lectura, «Copiar enlace» con aviso para lectores de pantalla, «Abrir en correo» (`mailto:` con asunto y
+el enlace; el cuerpo no lleva datos del contrato, la organización ni la persona) y, solo para empleados, «Abrir en Teams»
+(`teams.microsoft.com/share?href=…&preview=false`, para que Teams no intente leer una página que exige sesión).
+
+### Descargas en iOS
+
+Se mantiene `location.assign(url firmada)`. `window.open` (con o sin `blob:`) lo bloquea Safari tras un `await`;
+`<a download>` no aplica a otro origen y con `blob:` falla en algunas versiones de la PWA instalada. En Safari y en la
+PWA instalada, la URL fuera del `scope` se abre en la vista de Safari dentro de la app y descarga; en Android descarga
+sin salir. El detalle está en `apps/web/src/modulos/contratos/exportaciones/descarga.ts`. En iOS, compartir el archivo
+además ofrece «Guardar en Archivos».
+
+### Dónde está
+
+`BotonCompartir` (`src/app/ui/Compartir.tsx`) en el contrato interno, la guía y el paquete, y en el paquete, el
+contrato y la guía del portal; `CompartirExportacion` en el resultado de la exportación (interna y del portal). Objetivos de 44 px y hoja
+inferior en el móvil (`Hoja`).
+
+### Auditoría y telemetría
+
+No se registra «compartido». No hay telemetría de cliente, el destino (correo, Teams, WhatsApp…) no se conoce y no
+aporta a la trazabilidad: lo que sale del servidor ya está auditado (la vista del enlace al abrirlo y la descarga del
+archivo). Agregarla sería un endpoint nuevo sin un uso claro.
+
+### Pruebas
+
+Vitest con `navigator.share` y `canShare` simulados (`src/pwa/compartir.test.ts`, `src/app/ui/Compartir.test.tsx`,
+`exportaciones/compartir.test.tsx`): con y sin soporte de archivos, cancelación sin error, falta del gesto, CSP o CORS
+que impiden bajar el archivo, y que nunca se comparte una URL que no sea de Atlas. Playwright en escritorio, Pixel 7 e
+iPhone 14 (`tests/e2e/compartir.spec.ts` y el portal en `portal.spec.ts`): el botón aparece, el respaldo copia el
+enlace interno, el PDF llega a la hoja como `File`, axe sin errores críticos y sin scroll horizontal a 360 px.
+
 ## Consecuencias
 
 ### Positivas
@@ -346,6 +403,12 @@ ambiente sin S3 no tumba el despliegue).
 - [por verificar] Con el líder: `ext.integrador` no tiene `atlas.exportaciones.solicitar` en la matriz (§7.3 dice que
   exporta si la compartición lo permite); hoy exporta solo con el extra `exportar` de su invitación (ATLAS-ADR-0043). No
   se cambió la matriz.
+- [por verificar] Con el líder (HU 4.6): para compartir el **archivo** en qa y pdn hace falta agregar el host público
+  del S3 a `connect-src` de la CSP de la PWA y declarar CORS (`GET` desde el origen de Atlas) en el bucket. Sin eso,
+  «Preparar» responde «No pudimos preparar el archivo» y se ofrece descargar o compartir el enlace. No se cambió la CSP:
+  ampliarla es una decisión de seguridad.
+- [por verificar] Probar en un iPhone real (Safari y la PWA instalada, iOS 17 y 18) y en un Android de gama media la
+  descarga en la misma pestaña y la hoja con archivos; Playwright emula WebKit, no iOS.
 - [por verificar] Las URL públicas por ambiente y contrato para los `servers` del spec podado
   (`Contratos:Portal:Servidores`); sin ellas, el spec exportado sale sin `servers` y Postman con `{{baseUrl}}`
   vacío.

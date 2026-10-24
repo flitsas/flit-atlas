@@ -204,7 +204,8 @@ test.describe('portal de clientes (HU 4.4)', () => {
     await page.getByRole('list', { name: /Paquetes de Trámites Demo/ }).getByRole('link', { name: /Paquete Integradores/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: PAQUETE.nombre })).toBeVisible();
     const acciones = page.getByRole('group', { name: 'Acciones del paquete' });
-    await expect(acciones.getByRole('button', { name: /Exportar/ })).toBeDisabled();
+    // HU 4.5 conectó «Exportar» (la compartición lo permite: `puedeExportar`); el sandbox llega con la HU 4.7.
+    await expect(acciones.getByRole('button', { name: /Exportar/ })).toBeEnabled();
     await expect(acciones.getByRole('button', { name: /Sandbox/ })).toBeDisabled();
     if (movil) await sinScrollHorizontal(page, 'paquete a 360 px');
     await sinErroresCriticosDeAxe(page, 'paquete del portal');
@@ -231,6 +232,25 @@ test.describe('portal de clientes (HU 4.4)', () => {
     await page.goto('/portal/paquetes/otro');
     await expect(page.getByText('No tienes este paquete compartido.')).toBeVisible();
     expect(violaciones).toEqual([]);
+  });
+
+  test('Compartir (HU 4.6): el contrato compartido solo ofrece el enlace del portal, sin Teams; a 360 px y accesible', async ({ page, baseURL }, info) => {
+    await page.addInitScript(() => {
+      Reflect.deleteProperty(Navigator.prototype, 'share');
+      Reflect.deleteProperty(Navigator.prototype, 'canShare');
+    });
+    await simularPortal(page);
+    const movil = esMovil(info);
+    if (movil) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/portal/paquetes/p1/contratos/c1');
+    await expect(page.getByRole('heading', { level: 1, name: CONTRATO.nombre })).toBeVisible();
+    await page.getByRole('button', { name: 'Compartir', exact: true }).click();
+    const hoja = page.getByRole('dialog', { name: 'Compartir' });
+    await expect(hoja.getByRole('textbox', { name: 'Enlace' })).toHaveValue(`${new URL(baseURL!).origin}/portal/paquetes/p1/contratos/c1`);
+    await expect(hoja.getByRole('link', { name: 'Abrir en correo' })).toBeVisible();
+    await expect(hoja.getByRole('link', { name: 'Abrir en Teams' })).toHaveCount(0);
+    if (movil) await sinScrollHorizontal(page, 'Compartir del portal a 360 px');
+    await sinErroresCriticosDeAxe(page, 'Compartir del portal');
   });
 
   test('en escritorio, la referencia interactiva usa Scalar en su iframe aislado con el spec podado', async ({ page }, info) => {
