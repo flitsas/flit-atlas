@@ -55,26 +55,34 @@ public class ConsumoTests(Contenedores contenedores)
         });
         var consumidor = new ConsumidorEventos(servicios, [manejador], opciones, TimeProvider.System, NullLogger<ConsumidorEventos>.Instance);
         await consumidor.StartAsync(Ct);
-        // La topología queda declarada cuando la cola existe.
-        return await EsperarColaAsync(consumidor, conexion, manejador);
+        return await EsperarConsumoAsync(consumidor, conexion, manejador);
     }
 
-    private static async Task<(ConsumidorEventos, IConnection)> EsperarColaAsync(ConsumidorEventos consumidor, IConnection conexion, ManejadorDePrueba manejador)
+    /// <summary>
+    /// Espera a que el consumidor esté suscrito a su cola. No basta con que la cola exista: el consumidor la declara
+    /// primero y después enlaza las llaves de ruteo y declara reintentos y errores, así que una prueba que publique o
+    /// consulte errores en ese hueco pierde el mensaje o recibe <c>NOT_FOUND</c>. La suscripción va después de toda la
+    /// topología, de modo que un consumidor en la cola garantiza que todo está declarado.
+    /// </summary>
+    private static async Task<(ConsumidorEventos, IConnection)> EsperarConsumoAsync(ConsumidorEventos consumidor, IConnection conexion, ManejadorDePrueba manejador)
     {
-        for (var i = 0; i < 50; i++)
+        for (var i = 0; i < 100; i++)
         {
             await using var canal = await conexion.CreateChannelAsync(cancellationToken: Ct);
             try
             {
-                await canal.QueueDeclarePassiveAsync(manejador.Cola, Ct);
-                return (consumidor, conexion);
+                if ((await canal.QueueDeclarePassiveAsync(manejador.Cola, Ct)).ConsumerCount > 0)
+                {
+                    return (consumidor, conexion);
+                }
             }
             catch (RabbitMQ.Client.Exceptions.OperationInterruptedException)
             {
-                await Task.Delay(100, Ct);
+                // La cola todavía no existe: el canal se cierra con NOT_FOUND y se vuelve a preguntar con otro.
             }
+            await Task.Delay(100, Ct);
         }
-        throw new TimeoutException("El consumidor no declaró su cola.");
+        throw new TimeoutException("El consumidor no quedó suscrito a su cola.");
     }
 
     private static async Task PublicarAsync(IConnection conexion, string exchange, string tipo, byte[] cuerpo)
