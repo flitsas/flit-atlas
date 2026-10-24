@@ -6,7 +6,10 @@ using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
+using Flit.Atlas.Plataforma.Notificaciones;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Atlas.Modulos.Contratos;
 
@@ -60,6 +63,21 @@ public static class EventosContratos
     /// consumirá arquitectura para relacionar el despliegue con la versión del contrato (plan 00 §12).
     /// </summary>
     public static readonly TipoEvento CanalActualizado = new("atlas.contratos.canal_actualizado", 1);
+
+    /// <summary>
+    /// Alguien pidió una exportación (HU 4.5, ATLAS-ADR-0042): la entrada ya está en el S3. Lo consume atlas-docs (cola
+    /// <c>atlas.docs.exportaciones</c>), que la genera.
+    /// </summary>
+    public static readonly TipoEvento ExportacionSolicitada = new("atlas.contratos.exportacion_solicitada", 1);
+
+    /// <summary>atlas-docs tomó la exportación (lo publica atlas-docs en <c>flit.atlas.docs</c>; lo consume atlas-api).</summary>
+    public static readonly TipoEvento ExportacionIniciada = new("atlas.contratos.exportacion_iniciada", 1);
+
+    /// <summary>Los archivos quedaron en el S3 (lo publica atlas-docs en <c>flit.atlas.docs</c>; lo consume atlas-api).</summary>
+    public static readonly TipoEvento ExportacionLista = new("atlas.contratos.exportacion_lista", 1);
+
+    /// <summary>La exportación no se pudo generar (lo publica atlas-docs en <c>flit.atlas.docs</c>; lo consume atlas-api).</summary>
+    public static readonly TipoEvento ExportacionFallida = new("atlas.contratos.exportacion_fallida", 1);
 }
 
 /// <summary>
@@ -89,7 +107,21 @@ public sealed class ModuloContratos : IModuloAtlas
 
     public Type? ContextoDatos => typeof(ContratosDbContext);
 
-    public IReadOnlyList<TipoEvento> EventosPublicados => [EventosContratos.VersionPublicada, EventosContratos.CanalActualizado];
+    public IReadOnlyList<TipoEvento> EventosPublicados => [EventosContratos.VersionPublicada, EventosContratos.CanalActualizado, EventosContratos.ExportacionSolicitada];
+
+    /// <summary>Los resultados de atlas-docs (HU 4.5): no son de otro módulo, sino del servicio que genera los exportes.</summary>
+    public IReadOnlyList<TipoEvento> EventosConsumidos =>
+        [EventosContratos.ExportacionIniciada, EventosContratos.ExportacionLista, EventosContratos.ExportacionFallida];
+
+    public IReadOnlyList<TipoNotificacion> TiposNotificacion => [Exportaciones.ManejadorResultadosExportacion.Notificacion];
+
+    /// <summary>
+    /// Para el token de servicio con audiencia <c>atlas-docs</c> (ATLAS-ADR-0044): quien llame a <c>POST /exportes</c> de
+    /// atlas-docs lo pide con <c>client_credentials</c>.
+    /// </summary>
+    public IReadOnlyList<ScopeModulo> Scopes => [new(ScopeExportar, "Generar exportaciones en atlas-docs (servicio a servicio).")];
+
+    public const string ScopeExportar = "atlas.contratos.exportar";
 
     public void RegistrarDatos(IServiceCollection servicios, string cadenaConexion) =>
         servicios.AddDbContext<ContratosDbContext>(o => ContratosDbContext.Configurar(o, cadenaConexion));
@@ -98,6 +130,11 @@ public sealed class ModuloContratos : IModuloAtlas
     {
         servicios.AgregarProveedorBusqueda<BusquedaContratos>();
         servicios.AddOptions<OpcionesCanales>().BindConfiguration(OpcionesCanales.Seccion).PostConfigure(o => o.Normalizar());
+        // Exportaciones (HU 4.5, ATLAS-ADR-0042): la cola de resultados de atlas-docs, la retención y la consulta del portal.
+        servicios.AddOptions<Exportaciones.OpcionesExportaciones>().BindConfiguration(Exportaciones.OpcionesExportaciones.Seccion).ValidateOnStart();
+        servicios.AddSingleton<IValidateOptions<Exportaciones.OpcionesExportaciones>, Exportaciones.ValidadorOpcionesExportaciones>();
+        servicios.AgregarManejadorEventos<Exportaciones.ManejadorResultadosExportacion>();
+        servicios.AddHostedService<Exportaciones.VencedorExportaciones>();
         // Portal de clientes (HU 4.3 y 4.4, ATLAS-ADR-0043): el acceso se calcula por petición; la caché de specs podados
         // es del proceso y tiene tope de tamaño.
         servicios.AddOptions<Portal.OpcionesPortal>().BindConfiguration(Portal.OpcionesPortal.Seccion);
@@ -116,7 +153,12 @@ public sealed class ModuloContratos : IModuloAtlas
         EndpointsVistaContrato.Mapear(grupo);
         Paquetes.EndpointsPaquetes.Mapear(grupo);
         Comparticiones.EndpointsComparticiones.Mapear(grupo);
+        Exportaciones.EndpointsExportaciones.Mapear(grupo);
     }
 
-    public void MapearEndpointsPortal(RouteGroupBuilder portal) => Portal.EndpointsPortal.Mapear(portal);
+    public void MapearEndpointsPortal(RouteGroupBuilder portal)
+    {
+        Portal.EndpointsPortal.Mapear(portal);
+        Exportaciones.EndpointsExportaciones.MapearPortal(portal);
+    }
 }

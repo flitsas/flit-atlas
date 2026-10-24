@@ -10,6 +10,7 @@ import { Buscador, Etiqueta } from '../componentes/ui';
 import { Cargando, VistaMarkdown } from '../guias/componentes';
 import { type PaqueteCompartido, useBusquedaPortal, useGuiaPortal, useInicioPortal, usePaquetePortal } from './api';
 import { AccionesPaquete, Avisos, ErrorPortal, fechaCorta, InsigniasContrato, Volver } from './componentes';
+import { ExportacionDelPortal } from './ExportacionDelPortal';
 
 // La pantalla del contrato lleva el lector de YAML y el visor: va en su propio chunk.
 const ContratoPortal = lazy(() => import('./ContratoPortal'));
@@ -32,6 +33,8 @@ export default function Portal() {
           <Route path="*" element={<NoEncontrada />} />
         </Routes>
       </Suspense>
+      {/* HU 4.5: conecta el botón «Exportar» de los paquetes con la exportación del portal. */}
+      <ExportacionDelPortal />
     </div>
   );
 }

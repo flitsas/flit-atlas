@@ -1,3 +1,4 @@
+using Flit.Atlas.Plataforma.Almacenamiento;
 using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Mensajeria;
@@ -34,6 +35,10 @@ public static class ExtensionesPlataforma
         servicios.TryAddSingleton(TimeProvider.System);
         servicios.TryAddSingleton<ICanalEventos, CanalRabbitMq>();
         servicios.AddHostedService<PublicadorOutbox>();
+        // Colas que atlas-api consume de los otros servicios de Atlas (p. ej. los resultados de atlas-docs, HU 4.5).
+        servicios.AgregarConsumo();
+        // Objetos privados en S3 (exportaciones, HU 4.5, ATLAS-ADR-0042).
+        servicios.AgregarAlmacenamiento();
 
         // Centro de notificaciones y Web Push (HU 1.6).
         servicios.TryAddSingleton(sp => LlavesVapid.Resolver(

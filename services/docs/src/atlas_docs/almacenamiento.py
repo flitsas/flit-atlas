@@ -6,6 +6,7 @@ from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 from atlas_docs.config import Configuracion
+from atlas_docs.exportes.exportar import ResultadoExportacion, tipo_mime
 
 
 def crear_cliente(config: Configuracion) -> BaseClient:
@@ -38,3 +39,41 @@ def asegurar_bucket(cliente: BaseClient, bucket: str) -> None:
 def subir(cliente: BaseClient, bucket: str, clave: str, datos: bytes, tipo: str, sha256: str) -> None:
     """Sube un archivo de una exportación. El SHA-256 va en los metadatos para verificarlo al descargar."""
     cliente.put_object(Bucket=bucket, Key=clave, Body=datos, ContentType=tipo, Metadata={"sha256": sha256})
+
+
+def leer(cliente: BaseClient, bucket: str, clave: str) -> bytes | None:
+    """Lee un objeto; `None` si no existe. Cualquier otro error (S3 caído, credenciales) se propaga."""
+    try:
+        respuesta = cliente.get_object(Bucket=bucket, Key=clave)
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") in {"404", "NoSuchKey"}:
+            return None
+        raise
+    return respuesta["Body"].read()
+
+
+def subir_resultado(
+    cliente: BaseClient, bucket: str, exportacion_id: str, resultado: ResultadoExportacion
+) -> list[dict]:
+    """Sube cada archivo a `exportaciones/<exportacionId>/<ruta>` y devuelve su descripción.
+
+    Es lo que va en `atlas.contratos.exportacion_lista`.
+
+    La salida es determinista: subir otra vez la misma exportación deja los mismos bytes en las mismas claves.
+    """
+    objetos = []
+    for a in resultado.archivos:
+        clave = f"exportaciones/{exportacion_id}/{a.ruta}"
+        tipo = tipo_mime(a.ruta)
+        subir(cliente, bucket, clave, a.datos, tipo, a.sha256)
+        objetos.append(
+            {
+                "clave": clave,
+                "ruta": a.ruta,
+                "formato": a.formato.value,
+                "bytes": len(a.datos),
+                "sha256": a.sha256,
+                "tipo": tipo,
+            }
+        )
+    return objetos

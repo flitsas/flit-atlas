@@ -66,7 +66,20 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
             ["GET /api/v1/portal/paquetes/{paqueteId:guid}/guias/{guiaId:guid}"] =
                 p => Combinar(p, (paquete, _, guia) => $"/api/v1/portal/paquetes/{paquete}/guias/{guia}"),
             ["GET /api/v1/portal/buscar"] = _ => Terminos.Select(t => new Llamada($"/api/v1/portal/buscar?q={Uri.EscapeDataString(t)}", Esperado.Lista)),
+            // HU 4.5: una exportación solo la ve y la descarga quien la pidió, dentro de su organización. Aquí ningún id de otro
+            // recurso ni uno al azar sirve como exportación; el caso con exportaciones reales de A y B (B nunca ve ni descarga
+            // la de A, 404 sin revelar que existe) está en Exportaciones.ExportacionesTests. El POST lo prueba esa misma clase.
+            ["POST /api/v1/portal/exportaciones"] = _ => [],
+            ["GET /api/v1/portal/exportaciones/{exportacionId:guid}"] = p => Ajenos(p, id => $"/api/v1/portal/exportaciones/{id}"),
+            ["GET /api/v1/portal/exportaciones/{exportacionId:guid}/descarga"] = p => Ajenos(p, id => $"/api/v1/portal/exportaciones/{id}/descarga"),
         };
+
+    /// <summary>Cualquier id (de un paquete, contrato o guía, propio o ajeno, o al azar) usado como otro recurso: siempre negado.</summary>
+    private static IEnumerable<Llamada> Ajenos(Perspectiva p, Func<Guid, string> url) =>
+        p.Ajenos.Concat(p.Propio is { } propio ? [propio] : [])
+            .SelectMany(r => new[] { r.Paquete, r.Contrato, r.Guia })
+            .Append(Guid.NewGuid())
+            .Select(id => new Llamada(url(id), Esperado.Ajeno));
 
     private static IEnumerable<Llamada> Combinar(Perspectiva p, Func<Guid, Guid, Guid, string> url, bool conMezclas = true)
     {

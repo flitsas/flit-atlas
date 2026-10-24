@@ -278,7 +278,7 @@ paths:
         '401':
           description: 'Falta el token Bearer de Atlas, venció, fue revocado o es para otra audiencia (la cookie de la PWA no sirve aquí).'
         '403':
-          description: 'El token no tiene ninguno de los scopes que exige la operación (atlas.mcp, atlas.publicar, atlas.widget).'
+          description: 'El token no tiene ninguno de los scopes que exige la operación (atlas.contratos.exportar, atlas.mcp, atlas.publicar, atlas.widget).'
         '429':
           description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
           headers:
@@ -308,6 +308,7 @@ paths:
                 description: Problem Details (RFC 9457) con el código que interpreta la PWA.
       security:
         - tokenAtlas:
+            - atlas.contratos.exportar
             - atlas.mcp
             - atlas.publicar
             - atlas.widget
@@ -5089,6 +5090,195 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.paquetes.gestionar
+  /api/v1/contratos/exportaciones:
+    post:
+      tags:
+        - Contratos
+      summary: Solicitar una exportación
+      description: 'Arma el paquete a exportar (specs de la revisión podados a su selección, guías y changelog; o, para una versión, el spec completo), lo deja en el S3 y encola la generación: responde 202 sin esperarla. El estado se consulta en GET /exportaciones/{id} y al terminar llega un aviso. 409 no_exportable si la poda falla o el contrato no se exporta (proto). Requiere atlas.exportaciones.solicitar, atlas.contratos.ver_internos y un ingreso reciente.'
+      operationId: SolicitarExportacionContratos
+      requestBody:
+        description: Qué exportar y en qué formatos.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudExportacion'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.exportaciones.solicitar
+    get:
+      tags:
+        - Contratos
+      summary: Mis exportaciones
+      description: 'Las últimas 20 exportaciones internas de la persona, de la más reciente a la más antigua; con paquete o version, solo las de ese origen. Requiere atlas.exportaciones.solicitar.'
+      operationId: ListarExportacionesContratos
+      parameters:
+        - name: paquete
+          in: query
+          description: Solo las de este paquete.
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: query
+          description: Solo las de esta versión.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoExportaciones'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.exportaciones.solicitar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.exportaciones.solicitar
+  '/api/v1/contratos/exportaciones/{exportacionId}':
+    get:
+      tags:
+        - Contratos
+      summary: Estado de una exportación
+      description: 'pendiente, procesando, lista (con sus archivos), fallida (con el error) o vencida. Solo la ve quien la pidió (404 para los demás). Requiere atlas.exportaciones.solicitar.'
+      operationId: ObtenerExportacionContratos
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.exportaciones.solicitar.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.exportaciones.solicitar
+  '/api/v1/contratos/exportaciones/{exportacionId}/descarga':
+    get:
+      tags:
+        - Contratos
+      summary: URL firmada de descarga
+      description: 'Una URL del S3 firmada por 15 minutos para el ZIP o, con archivo, para uno de sus archivos. Pasado ese tiempo la URL deja de servir: se pide otra. 409 no_lista; 410 vencida (pasó la retención). Auditado. Requiere atlas.exportaciones.solicitar.'
+      operationId: DescargarExportacionContratos
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: archivo
+          in: query
+          description: Ruta de un archivo de la exportación; vacío = el ZIP.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescargaExportacion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.exportaciones.solicitar.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.exportaciones.solicitar
   /api/v1/portal/inicio:
     get:
       tags:
@@ -5338,6 +5528,163 @@ paths:
           description: La sesión no tiene el permiso atlas.portal.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  /api/v1/portal/exportaciones:
+    post:
+      tags:
+        - Portal de clientes
+      summary: Solicitar una exportación desde el portal
+      description: 'Exporta un paquete compartido con la organización de la persona, en la revisión que ella ve, con sus specs podados: responde 202 y la generación sigue en la cola. 403 si la compartición no está vigente o no permite exportar. Requiere atlas.portal.ver, la compartición con puede_exportar y un ingreso reciente.'
+      operationId: SolicitarExportacionPortal
+      requestBody:
+        description: El paquete compartido y los formatos.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudExportacionPortal'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDto'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/exportaciones/{exportacionId}':
+    get:
+      tags:
+        - Portal de clientes
+      summary: Estado de una exportación del portal
+      description: 'Solo la ve quien la pidió, dentro de su organización (404 para los demás). Requiere atlas.portal.ver.'
+      operationId: ObtenerExportacionPortal
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.portal.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.portal.ver
+  '/api/v1/portal/exportaciones/{exportacionId}/descarga':
+    get:
+      tags:
+        - Portal de clientes
+      summary: URL firmada de descarga desde el portal
+      description: 'Como la interna, y además revisa que la compartición siga vigente y permita exportar (403 si no). URL firmada de 15 minutos; auditada. Requiere atlas.portal.ver.'
+      operationId: DescargarExportacionPortal
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: archivo
+          in: query
+          description: Ruta de un archivo de la exportación; vacío = el ZIP.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescargaExportacion'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacion'
+        '401':
+          description: No hay una sesión activa o venció.
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8578,6 +8925,30 @@ components:
           type: boolean
           description: Si la persona ve teléfonos (atlas.equipo.ver_contacto).
       description: '«¿A quién llamo?»: soporte de turno si hoy es sábado, y el principal y el secundario del aplicativo.'
+    ArchivoExportacionDto:
+      required:
+        - ruta
+        - nombre
+        - formato
+        - bytes
+      type: object
+      properties:
+        ruta:
+          type: string
+          description: Ruta dentro de la exportación; es el valor de archivo en la descarga.
+        nombre:
+          type: string
+          description: Nombre con que se descarga.
+        formato:
+          type: string
+          description: 'openapi, postman, html, pdf, word, excel o zip.'
+        bytes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int64
+      description: Un archivo generado.
     AsignacionVista:
       required:
         - id
@@ -10161,6 +10532,31 @@ components:
             type: string
           description: 'Cada punto, sin cambiar una letra.'
       description: Definición de un rol tal como está en el §1 del documento de responsables.
+    DescargaExportacion:
+      required:
+        - url
+        - nombre
+        - bytes
+        - venceEn
+      type: object
+      properties:
+        url:
+          type: string
+          description: 'URL del almacenamiento S3, firmada y de un solo archivo; deja de servir al vencer.'
+          format: uri
+        nombre:
+          type: string
+        bytes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int64
+        venceEn:
+          type: string
+          description: Cuándo vence la URL (15 minutos).
+          format: date-time
+      description: URL firmada para descargar un archivo de una exportación.
     Desfase:
       required:
         - ambiente
@@ -10636,6 +11032,38 @@ components:
           type: string
           description: 'Qué pasó, en español.'
       description: Error del módulo de equipo con un código estable.
+    ErrorExportacion:
+      required:
+        - codigo
+        - mensaje
+        - detalles
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso (403); no_exportable, no_lista (409); vencida (410); almacenamiento_no_disponible (503).'
+        mensaje:
+          type: string
+        detalles:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Con no_exportable: qué impide exportar.'
+      description: 'Por qué no se hizo, con un código estable.'
+    ErrorExportacionDto:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'spec_invalido, pdf_no_disponible, entrada_invalida, tiempo_agotado o interno.'
+        mensaje:
+          type: string
+      description: Por qué falló una exportación.
     ErrorExternos:
       required:
         - error
@@ -11010,6 +11438,72 @@ components:
           description: 'Cuándo lo hizo la persona en su dispositivo, si lo hizo sin conexión.'
           format: date-time
       description: Paso del historial de una solicitud de cambio.
+    ExportacionDto:
+      required:
+        - id
+        - estado
+        - origen
+        - nombre
+        - formatos
+        - solicitadaEn
+        - iniciadaEn
+        - listaEn
+        - venceEn
+        - hashContenido
+        - archivos
+        - error
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          description: 'pendiente, procesando, lista, fallida o vencida.'
+        origen:
+          $ref: '#/components/schemas/OrigenExportacionDto'
+        nombre:
+          type: string
+          description: 'Para mostrar: el paquete y su revisión, o el contrato y su versión.'
+        formatos:
+          type: array
+          items:
+            type: string
+        solicitadaEn:
+          type: string
+          format: date-time
+        iniciadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        listaEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo quedó lista o fallida.
+          format: date-time
+        venceEn:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo se puede descargar; después se borran los archivos.
+          format: date-time
+        hashContenido:
+          type:
+            - 'null'
+            - string
+          description: SHA-256 del contenido exportado (va en la portada de cada formato).
+        archivos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArchivoExportacionDto'
+          description: 'Los archivos, cuando está lista.'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ErrorExportacionDto'
+      description: Una exportación y su estado.
     FeedIcsCreadoDto:
       required:
         - id
@@ -12087,6 +12581,16 @@ components:
           items:
             $ref: '#/components/schemas/ContratoElegible'
       description: Lo que la persona puede poner en un paquete (pasos 1 y 3 del asistente).
+    ListadoExportaciones:
+      required:
+        - elementos
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportacionDto'
+      description: 'Las exportaciones de la persona, de la más reciente a la más antigua.'
     ListadoGuias:
       required:
         - contratoId
@@ -12780,6 +13284,36 @@ components:
           type: string
           format: date-time
       description: 'Organización de Atlas: FLIT (interna), un cliente o un proveedor.'
+    OrigenExportacionDto:
+      required:
+        - tipo
+        - paqueteId
+        - revision
+        - versionId
+      type: object
+      properties:
+        tipo:
+          type: string
+          description: paquete o version.
+        paqueteId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Revisión del paquete exportada.
+          format: int32
+        versionId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+      description: De dónde sale la exportación.
     PaqueteCompartido:
       required:
         - id
@@ -14961,6 +15495,60 @@ components:
         enlace:
           type: string
       description: Enlace de activación de la cuenta de emergencia (el fragmento de la URL que imprime el comando).
+    SolicitudExportacion:
+      required:
+        - paqueteId
+        - revision
+        - versionId
+        - formatos
+      type: object
+      properties:
+        paqueteId:
+          type:
+            - 'null'
+            - string
+          description: 'Paquete a exportar (specs podados a su selección, guías y changelog). Va solo, sin versionId.'
+          format: uuid
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Revisión del paquete; vacío = la vigente o, si nunca se publicó, la última.'
+          format: int32
+        versionId:
+          type:
+            - 'null'
+            - string
+          description: 'Versión de un contrato a exportar completa (solo internos). Va sola, sin paqueteId.'
+          format: uuid
+        formatos:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'openapi, postman, html, pdf, word, excel o zip; el ZIP con todo siempre se agrega.'
+      description: 'Qué exportar: un paquete (en una revisión) o una versión de un contrato, y en qué formatos.'
+    SolicitudExportacionPortal:
+      required:
+        - paqueteId
+        - formatos
+      type: object
+      properties:
+        paqueteId:
+          type: string
+          description: Paquete compartido con la organización y con exportación permitida.
+          format: uuid
+        formatos:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'openapi, postman, html, pdf, word, excel o zip; el ZIP con todo siempre se agrega.'
+      description: 'Qué exportar desde el portal: un paquete compartido con tu organización, en la revisión que ella ve.'
     SolicitudFactor:
       required:
         - metodo
@@ -16281,6 +16869,7 @@ components:
         clientCredentials:
           tokenUrl: /connect/token
           scopes:
+            atlas.contratos.exportar: Generar exportaciones en atlas-docs (servicio a servicio).
             atlas.mcp: Usar el servidor MCP de Atlas con los permisos de la persona.
             atlas.publicar: 'Publicar contratos, documentación y modelos en Atlas.'
             atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.
@@ -16289,6 +16878,7 @@ components:
           tokenUrl: /connect/token
           refreshUrl: /connect/token
           scopes:
+            atlas.contratos.exportar: Generar exportaciones en atlas-docs (servicio a servicio).
             atlas.mcp: Usar el servidor MCP de Atlas con los permisos de la persona.
             atlas.publicar: 'Publicar contratos, documentación y modelos en Atlas.'
             atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.

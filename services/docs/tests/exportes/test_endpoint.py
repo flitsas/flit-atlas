@@ -4,6 +4,7 @@ import io
 import zipfile
 
 from apoyo_exportes import ICT, paquete
+from apoyo_tokens import cabecera, validador
 from fastapi.testclient import TestClient
 
 from atlas_docs.config import Configuracion
@@ -32,9 +33,9 @@ def _cuerpo() -> dict:
 
 
 def test_responde_el_zip_con_el_hash() -> None:
-    cliente = TestClient(crear_app(CONFIG, [], S3Falso()))  # type: ignore[arg-type]
+    cliente = TestClient(crear_app(CONFIG, [], S3Falso(), validador(), consumidor=False))  # type: ignore[arg-type]
 
-    respuesta = cliente.post("/exportes", params={"formatos": ["html", "excel"]}, json=_cuerpo())
+    respuesta = cliente.post("/exportes", params={"formatos": ["html", "excel"]}, json=_cuerpo(), headers=cabecera())
 
     assert respuesta.status_code == 200
     assert respuesta.headers["content-type"] == "application/zip"
@@ -47,10 +48,13 @@ def test_responde_el_zip_con_el_hash() -> None:
 
 def test_con_exportacion_id_deja_los_archivos_en_el_s3() -> None:
     s3 = S3Falso()
-    cliente = TestClient(crear_app(CONFIG, [], s3))  # type: ignore[arg-type]
+    cliente = TestClient(crear_app(CONFIG, [], s3, validador(), consumidor=False))  # type: ignore[arg-type]
 
     respuesta = cliente.post(
-        "/exportes", params={"formatos": ["openapi", "postman"], "exportacionId": EXPORTACION}, json=_cuerpo()
+        "/exportes",
+        params={"formatos": ["openapi", "postman"], "exportacionId": EXPORTACION},
+        json=_cuerpo(),
+        headers=cabecera(),
     )
 
     assert respuesta.status_code == 201
@@ -64,19 +68,19 @@ def test_con_exportacion_id_deja_los_archivos_en_el_s3() -> None:
 
 
 def test_spec_invalido_responde_422() -> None:
-    cliente = TestClient(crear_app(CONFIG, [], S3Falso()))  # type: ignore[arg-type]
+    cliente = TestClient(crear_app(CONFIG, [], S3Falso(), validador(), consumidor=False))  # type: ignore[arg-type]
     cuerpo = _cuerpo()
     cuerpo["specs"][0]["contenido"] = "esto: no es un contrato"
 
-    respuesta = cliente.post("/exportes", params={"formatos": ["html"]}, json=cuerpo)
+    respuesta = cliente.post("/exportes", params={"formatos": ["html"]}, json=cuerpo, headers=cabecera())
 
     assert respuesta.status_code == 422
     assert respuesta.json()["codigo"] == "spec_invalido"
 
 
 def test_exportacion_id_que_no_es_uuid_responde_422() -> None:
-    cliente = TestClient(crear_app(CONFIG, [], S3Falso()))  # type: ignore[arg-type]
+    cliente = TestClient(crear_app(CONFIG, [], S3Falso(), validador(), consumidor=False))  # type: ignore[arg-type]
 
-    respuesta = cliente.post("/exportes", params={"exportacionId": "../../otro"}, json=_cuerpo())
+    respuesta = cliente.post("/exportes", params={"exportacionId": "../../otro"}, json=_cuerpo(), headers=cabecera())
 
     assert respuesta.status_code == 422
