@@ -214,7 +214,10 @@ public static class EndpointsIdentidad
             if (cambia && peticion.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
                 && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase)
                 && !peticion.Path.Equals(EndpointsReportesCsp.Ruta, StringComparison.OrdinalIgnoreCase)
-                && !peticion.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                // La exención del Bearer no vale si también viene la cookie del BFF (revisión F4, F4-SEC-33): esa petición
+                // se puede autenticar con la cookie y debe pasar la antifalsificación como cualquier otra.
+                && !(peticion.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    && !peticion.Cookies.ContainsKey(ClaimsAtlas.NombreCookie)))
             {
                 var origen = peticion.Headers.Origin.ToString();
                 var mismoOrigen = string.IsNullOrEmpty(origen)

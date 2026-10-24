@@ -21,7 +21,7 @@ namespace Flit.Atlas.Api.Tests;
 /// no sirve; una cuenta externa sin MFA no entra; todo queda en la auditoría; el administrador de la organización A no
 /// ve ni invita en B.
 /// </summary>
-public class CuentasExternasTests(EntornoApi entorno)
+public partial class CuentasExternasTests(EntornoApi entorno)
 {
     /// <summary>Contraseña de prueba: larga, propia y no filtrada (la revisión de HIBP está apagada en las pruebas).</summary>
     private const string Contrasena = "Rio Magdalena al amanecer 2026";
