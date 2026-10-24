@@ -1,0 +1,122 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — eventos de Trámites
+  version: 1.0.0
+  description: |
+    Eventos que publica Trámites (core-api) en el exchange `flit.tramites` (ADR-0064).
+    Hoy existen como outbox en core-api (`tramites.procedure_state_change_outbox`,
+    `tramites.identity_validation_outbox`) y se entregan en proceso; HU #13350 los publica al broker sin
+    cambiar su forma. Mensajes en JSON con el sobre común (comun/sobre.v1.yaml).
+    El webhook saliente al OT se documenta aparte en domain-events.v1.yaml.
+defaultContentType: application/json
+
+channels:
+  tramites.procedure.state_changed:
+    description: |
+      Un trámite cambió de estado. Se emite una vez por transición confirmada (outbox en la misma
+      transacción): una transición que hace rollback no notifica. Lo consumen Notificaciones (correo a los
+      destinatarios del estado y webhook al OT) y los reportes consolidados.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: procedureStateChanged
+      message:
+        $ref: '#/components/messages/ProcedureStateChanged'
+  tramites.identity_validation.requested:
+    description: Se pidió una validación de identidad al proveedor (captura iniciada).
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: identityValidationRequested
+      message:
+        $ref: '#/components/messages/IdentityValidationRequested'
+  tramites.identity_validation.completed:
+    description: El proveedor resolvió una validación de identidad (aprobado o rechazado).
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: identityValidationCompleted
+      message:
+        $ref: '#/components/messages/IdentityValidationCompleted'
+
+components:
+  schemas:
+    TramiteEstado:
+      type: string
+      description: Estado de negocio del trámite (ADR-0022).
+      enum: [borrador, anulado, preparado, entregado, aprobado, rechazado]
+    IdentityValidationBase:
+      type: object
+      required: [validationId, provider]
+      properties:
+        procedureInstanceId:
+          type: [string, 'null']
+          format: uuid
+          description: Null en prevalidaciones sin trámite (HU #10865).
+        validationId: { type: string, format: uuid }
+        provider: { type: string, description: "'mock' | 'kyverum'" }
+        parte: { type: [string, 'null'], description: "comprador | vendedor | null" }
+
+  messages:
+    ProcedureStateChanged:
+      name: tramites.procedure.state_changed
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [procedureInstanceId, toStatus]
+                properties:
+                  procedureInstanceId: { type: string, format: uuid }
+                  fromStatus:
+                    oneOf:
+                      - $ref: '#/components/schemas/TramiteEstado'
+                      - type: 'null'
+                    description: Null solo en la creación de la instancia.
+                  toStatus:
+                    $ref: '#/components/schemas/TramiteEstado'
+                  reason:
+                    type: [string, 'null']
+                    maxLength: 500
+                    description: Obligatorio de negocio para anulado y rechazado.
+                  changedByUserId: { type: [string, 'null'], format: uuid }
+    IdentityValidationRequested:
+      name: tramites.identity_validation.requested
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/IdentityValidationBase'
+                  - type: object
+                    properties:
+                      providerVerificationId:
+                        type: [string, 'null']
+                        description: Id de la verificación en el proveedor (correlación con su aviso).
+    IdentityValidationCompleted:
+      name: tramites.identity_validation.completed
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/IdentityValidationBase'
+                  - type: object
+                    required: [estado]
+                    properties:
+                      estado: { type: string, enum: [aprobado, rechazado] }
+                      providerStatus: { type: [string, 'null'] }
+                      score: { type: [integer, 'null'] }

@@ -422,28 +422,45 @@ public static partial class AnalizadorSpec
     /// <summary>Claves únicas y que caben en la columna: una repetida (dos operaciones send al mismo canal) lleva su id.</summary>
     private static List<OperacionIndexada> Unicas(List<OperacionIndexada> operaciones)
     {
-        var vistas = new HashSet<string>(StringComparer.Ordinal);
-        var resultado = new List<OperacionIndexada>(operaciones.Count);
-        foreach (var o in operaciones)
+        var claves = ClavesUnicas(operaciones.Select(o => (o.Clave, o.OperationId)));
+        return [.. operaciones.Select((o, i) => o with
         {
-            var clave = Limitar(o.Clave);
+            Clave = claves[i],
+            Ruta = o.Ruta is { Length: > ContratosDbContext.LargoRuta } r ? r[..ContratosDbContext.LargoRuta] : o.Ruta,
+        })];
+    }
+
+    /// <summary>
+    /// La clave de <c>contratos_operacion</c> de cada operación, en el orden del spec: la clave base recortada a la columna
+    /// y, si se repite, <see cref="ClaveConId"/> o <c>clave #n</c>. La poda (ATLAS-ADR-0038) usa la misma regla.
+    /// </summary>
+    /// <param name="operaciones">Clave base (<c>GET /ruta</c>, <c>send canal</c>) y <c>operationId</c> ya recortado con <see cref="Corto"/>.</param>
+    internal static List<string> ClavesUnicas(IEnumerable<(string Clave, string? OperationId)> operaciones)
+    {
+        var vistas = new HashSet<string>(StringComparer.Ordinal);
+        var resultado = new List<string>();
+        foreach (var (claveBase, operationId) in operaciones)
+        {
+            var clave = Limitar(claveBase);
             if (!vistas.Add(clave))
             {
-                var alterna = Limitar($"{o.Clave} ({o.OperationId})");
+                var alterna = ClaveConId(claveBase, operationId);
                 for (var n = 2; !vistas.Add(alterna); n++)
                 {
-                    alterna = Limitar(string.Create(CultureInfo.InvariantCulture, $"{o.Clave} #{n}"));
+                    alterna = Limitar(string.Create(CultureInfo.InvariantCulture, $"{claveBase} #{n}"));
                 }
                 clave = alterna;
             }
-            resultado.Add(o with
-            {
-                Clave = clave,
-                Ruta = o.Ruta is { Length: > ContratosDbContext.LargoRuta } r ? r[..ContratosDbContext.LargoRuta] : o.Ruta,
-            });
+            resultado.Add(clave);
         }
         return resultado;
     }
+
+    /// <summary>La clave de una operación repetida: <c>send canal (operationId)</c>.</summary>
+    internal static string ClaveConId(string claveBase, string? operationId) => Limitar($"{claveBase} ({operationId})");
+
+    /// <summary><c>operationId</c> (o resumen) como lo guarda el índice: sin espacios a los lados y recortado.</summary>
+    internal static string? Recortado(string? texto) => Corto(texto, ContratosDbContext.LargoResumen);
 
     private static string Limitar(string texto) => texto.Length <= ContratosDbContext.LargoClave ? texto : texto[..ContratosDbContext.LargoClave];
 
