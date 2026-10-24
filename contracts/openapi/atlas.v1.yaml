@@ -3684,6 +3684,92 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.contratos.ver_internos
+  '/api/v1/contratos/{id}':
+    get:
+      tags:
+        - Contratos
+      summary: Un contrato
+      description: 'El contrato con su aplicativo, su última versión y su última estable (lo mismo que una fila del listado). 404 si no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ObtenerContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContratoResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/{id}/diff':
+    get:
+      tags:
+        - Contratos
+      summary: Diff entre dos versiones
+      description: 'Cambios y changelog entre la versión desde (base) y la versión hasta, calculados por atlas-render con oasdiff (la misma configuración de la CLI del CI) y cacheados allá por el SHA-256 de las dos specs. Los cambios que rompen compatibilidad van primero, del nivel error al info. 400 si falta una versión; 404 si el contrato o una versión no existe; 422 si el tipo no tiene diff (AsyncAPI y proto, por ahora), si una spec no es válida o si atlas-render la rechaza; 503 si atlas-render no responde. Requiere atlas.contratos.ver_internos.'
+      operationId: DiffContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: desde
+          in: query
+          description: Versión base (la anterior).
+          schema:
+            type: string
+        - name: hasta
+          in: query
+          description: Versión a comparar (la nueva).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiffContrato'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiff'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiff'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -7118,6 +7204,53 @@ components:
             - string
           description: 'Hora (HH:mm, Bogotá) del trabajo diario de recordatorios; vacío, 07:00.'
       description: 'Configuración global nueva: reemplaza toda la anterior.'
+    CambioDiff:
+      required:
+        - regla
+        - nivel
+        - breaking
+        - texto
+        - comentario
+        - metodo
+        - ruta
+        - operationId
+        - seccion
+      type: object
+      properties:
+        regla:
+          type: string
+          description: Id de la regla de oasdiff (api-path-removed-without-deprecation…).
+        nivel:
+          type: string
+          description: 'error, warning o info. error y warning rompen compatibilidad.'
+        breaking:
+          type: boolean
+          description: Si rompe compatibilidad (está en oasdiff breaking).
+        texto:
+          type: string
+          description: 'Texto del cambio, en español cuando oasdiff lo trae traducido.'
+        comentario:
+          type:
+            - 'null'
+            - string
+        metodo:
+          type:
+            - 'null'
+            - string
+        ruta:
+          type:
+            - 'null'
+            - string
+        operationId:
+          type:
+            - 'null'
+            - string
+        seccion:
+          type:
+            - 'null'
+            - string
+          description: 'paths, components, webhooks…'
+      description: 'Un cambio entre dos versiones, como lo reporta oasdiff.'
     CambioEquipo:
       required:
         - nombre
@@ -7903,6 +8036,47 @@ components:
             $ref: '#/components/schemas/DiferenciaDto'
           description: Diferencias por patrón.
       description: Diferencias entre el CODEOWNERS sugerido y el real de un repo (lectura de la API de GitHub).
+    DiffContrato:
+      required:
+        - contratoId
+        - desde
+        - hasta
+        - motor
+        - sinDiferencias
+        - resumen
+        - cambios
+        - changelog
+        - desdeCache
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        desde:
+          type: string
+          description: Versión base.
+        hasta:
+          type: string
+          description: Versión que se compara contra la base.
+        motor:
+          type: string
+          description: 'Motor y versión, p. ej. oasdiff v1.33.0.'
+        sinDiferencias:
+          type: boolean
+          description: oasdiff no encontró diferencias estructurales.
+        resumen:
+          $ref: '#/components/schemas/ResumenDiff'
+        cambios:
+          type: array
+          items:
+            $ref: '#/components/schemas/CambioDiff'
+        changelog:
+          type: string
+          description: Changelog legible en Markdown.
+        desdeCache:
+          type: boolean
+          description: La respuesta salió de la caché de atlas-render.
+      description: 'Diff entre dos versiones de un contrato: primero los cambios que rompen compatibilidad, del más grave al menos.'
     DocumentoVigente:
       required:
         - documento
@@ -8086,6 +8260,18 @@ components:
         referencia:
           type: string
       description: 'Reporte recibido: la referencia con la que quedó en el log.'
+    ErrorDiff:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'diff_no_soportado, spec_invalida, diff_rechazado (422); render_no_disponible (503).'
+        mensaje:
+          type: string
+      description: 'Por qué no se pudo calcular el diff, con un código estable.'
     ErrorEquipo:
       required:
         - codigo
@@ -10723,6 +10909,48 @@ components:
           type: boolean
           description: false si el correo con el enlace no salió.
       description: Resultado del restablecimiento forzado.
+    ResumenDiff:
+      required:
+        - total
+        - errores
+        - advertencias
+        - informativos
+        - breaking
+        - hayBreaking
+      type: object
+      properties:
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        errores:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        advertencias:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        informativos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        breaking:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        hayBreaking:
+          type: boolean
     ResumenImportacionDto:
       required:
         - filas

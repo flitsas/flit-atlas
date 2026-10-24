@@ -67,6 +67,97 @@ export function useContratos(filtro: FiltroContratos = {}) {
   return useQuery({ queryKey: ['contratos', 'listado', filtro], queryFn: () => listarContratos(filtro), staleTime: 60_000 });
 }
 
+// --- Pantalla del contrato (HU 3.6) ---
+
+/** Operación, webhook, canal o rpc del índice de una versión (`/versiones/{v}/operaciones`). */
+export interface OperacionIndice {
+  clave: string;
+  clase: string;
+  metodo: string | null;
+  ruta: string | null;
+  operationId: string | null;
+  resumen: string | null;
+  etiquetas: string[];
+  publica: boolean;
+}
+
+export interface ResumenDiff {
+  total: number;
+  errores: number;
+  advertencias: number;
+  informativos: number;
+  breaking: number;
+  hayBreaking: boolean;
+}
+
+export interface CambioDiff {
+  regla: string;
+  nivel: string;
+  breaking: boolean;
+  texto: string;
+  comentario: string | null;
+  metodo: string | null;
+  ruta: string | null;
+  operationId: string | null;
+  seccion: string | null;
+}
+
+/** `GET /contratos/{id}/diff`: los cambios que rompen compatibilidad vienen primero (ATLAS-ADR-0036). */
+export interface DiffContrato {
+  contratoId: string;
+  desde: string;
+  hasta: string;
+  motor: string;
+  sinDiferencias: boolean;
+  resumen: ResumenDiff;
+  cambios: CambioDiff[];
+  changelog: string;
+  desdeCache: boolean;
+}
+
+const rutaContrato = (id: string) => `/api/v1/contratos/${encodeURIComponent(id)}`;
+
+export function useContrato(id: string) {
+  return useQuery({
+    queryKey: ['contratos', 'contrato', id],
+    queryFn: async () => (await (await pedir(rutaContrato(id))).json()) as ContratoResumen,
+    staleTime: 60_000,
+  });
+}
+
+/** El spec tal como se publicó (texto); es inmutable por versión, así que no se vuelve a pedir. */
+export function useSpec(id: string, version: string | undefined) {
+  return useQuery({
+    queryKey: ['contratos', 'spec', id, version],
+    queryFn: async () => (await pedir(`${rutaContrato(id)}/versiones/${encodeURIComponent(version!)}/spec`)).text(),
+    enabled: !!version,
+    staleTime: Infinity,
+    gcTime: 10 * 60_000,
+  });
+}
+
+export function useOperaciones(id: string, version: string | undefined) {
+  return useQuery({
+    queryKey: ['contratos', 'operaciones', id, version],
+    queryFn: async () =>
+      (await (await pedir(`${rutaContrato(id)}/versiones/${encodeURIComponent(version!)}/operaciones`)).json()) as OperacionIndice[],
+    enabled: !!version,
+    staleTime: Infinity,
+  });
+}
+
+/** Diff entre dos versiones; el mismo par siempre da lo mismo (versiones inmutables). */
+export function useDiff(id: string, desde: string | undefined, hasta: string | undefined) {
+  return useQuery({
+    queryKey: ['contratos', 'diff', id, desde, hasta],
+    queryFn: async () =>
+      (await (await pedir(`${rutaContrato(id)}/diff?desde=${encodeURIComponent(desde!)}&hasta=${encodeURIComponent(hasta!)}`)).json()) as DiffContrato,
+    enabled: !!desde && !!hasta && desde !== hasta,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 /** Las versiones de un contrato; se piden solo cuando la persona abre el contrato. */
 export function useVersiones(contratoId: string, habilitado: boolean) {
   return useQuery({

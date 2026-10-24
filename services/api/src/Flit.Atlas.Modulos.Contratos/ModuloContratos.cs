@@ -75,5 +75,6 @@ public sealed class ModuloContratos : IModuloAtlas
     {
         EndpointsPublicacion.Mapear(grupo);
         EndpointsContratos.Mapear(grupo);
+        EndpointsVistaContrato.Mapear(grupo);
     }
 }

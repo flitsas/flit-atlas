@@ -17,7 +17,8 @@ cleanupOutdatedCaches();
 // Navegaciones de la SPA: index.html precargado. Las rutas del BFF siempre van a la red.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), {
-    denylist: [/^\/api\//, /^\/hubs\//, /^\/connect\//, /^\/\.well-known\//, /^\/health/],
+    // /visor/: el visor de contratos (ATLAS-ADR-0039) es otra página, con su propia CSP, y no se precarga.
+    denylist: [/^\/api\//, /^\/hubs\//, /^\/connect\//, /^\/\.well-known\//, /^\/health/, /^\/visor\//],
   }),
 );
 
