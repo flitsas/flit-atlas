@@ -1,4 +1,5 @@
 import type { ModuloAtlas } from '../../app/modulos/contrato';
+import { RECURSOS_SIN_CONEXION, TTL_HORAS } from './recursos';
 
 /**
  * Soporte de los sábados (prompt maestro §8.3, HU 2.6 a 2.9, ATLAS-ADR-0029 y ATLAS-ADR-0032): calendario en lista, semana
@@ -46,8 +47,8 @@ export const moduloSoporte: ModuloAtlas = {
     },
   ],
   busqueda: { proveedor: 'soporte', tipos: ['turno', 'persona'] },
-  // HU 2.12: se guarda sin conexión (aún no lo usa el shell).
-  offline: { recursos: ['/api/v1/soporte/turnos'], ttlHoras: 24 },
+  // HU 2.12: el calendario de tres meses, este sábado y los equipos, sin conexión (ATLAS-ADR-0034).
+  offline: { recursos: RECURSOS_SIN_CONEXION, ttlHoras: TTL_HORAS },
   bandera: 'modulo.soporte',
   banderaPorDefecto: true,
 };

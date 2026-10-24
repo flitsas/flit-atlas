@@ -48,6 +48,8 @@ public static class ExtensionesPlataforma
         // el envío no duplica el aviso: el service worker usa el id de la notificación como tag.
         servicios.AddHttpClient<EnviadorPush>();
         servicios.AddScoped<ServicioNotificaciones>();
+        // Tipos del núcleo y de los módulos registrados, para las preferencias (HU 2.11).
+        servicios.TryAddSingleton<CatalogoNotificaciones>();
 
         // Correo (HU 1.5, ATLAS-ADR-0025): SMTP si el ambiente lo configura; Graph lo registra la identidad (usa la
         // credencial de Entra). Sin proveedor, no se envía nada.

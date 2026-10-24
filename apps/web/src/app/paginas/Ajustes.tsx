@@ -204,7 +204,7 @@ function Preferencias() {
                     onChange={(e) => guardar.mutate({ tipo: tipo.tipo, canal: canal.canal, activa: e.target.checked })}
                   />
                   {NOMBRES_CANAL[canal.canal]}
-                  {!canal.disponible && <span className="text-xs text-atlas-texto-suave">(pronto)</span>}
+                  {!canal.disponible && <span className="text-xs text-atlas-texto-suave">(no disponible)</span>}
                 </label>
               ))}
             </div>

@@ -47,6 +47,21 @@ export interface OpcionesApi {
   permisos: string[];
   roles?: string[];
   banderas?: Record<string, boolean>;
+  /**
+   * HU 2.12: agrega FLITO al catálogo y al reparto, y un turno de la persona en sesión (p1) el primer sábado del rango,
+   * con teléfonos (como si tuviera `atlas.equipo.ver_contacto`) para comprobar que no se guardan en el dispositivo.
+   */
+  sinConexion?: boolean;
+}
+
+/** Teléfono ficticio que la prueba sin conexión busca en IndexedDB (no debe estar). */
+export const TELEFONO_FICTICIO = '3000000000';
+
+/** El primer sábado desde `dia` (aaaa-mm-dd), en UTC como la PWA. */
+function sabadoDesde(dia: string): string {
+  const fecha = new Date(`${dia}T12:00:00Z`);
+  fecha.setUTCDate(fecha.getUTCDate() + ((6 - fecha.getUTCDay() + 7) % 7));
+  return fecha.toISOString().slice(0, 10);
 }
 
 const json = (route: Route, cuerpo: unknown, status = 200) =>
@@ -84,7 +99,7 @@ const PERSONA_LARGA = {
   correo: 'persona.demo.con.un.correo.bastante.largo@ejemplo.com',
   cargo: 'Desarrolladora',
   foto: null,
-  telefono: null,
+  telefono: null as string | null,
   usuarioGitHub: null,
   activa: true,
 };
@@ -139,16 +154,37 @@ const REPARTO_SIMULADO = {
   puedeGestionar: false,
 };
 
+/** FLITO en el catálogo y su reparto (HU 2.12), con un teléfono ficticio en el principal. */
+const FLITO = {
+  id: 'a6', slug: 'flito', nombre: 'FLITO', tipo: 'producto', grupo: 'flito', estado: 'activo', criticidad: 'alta',
+  manejaDatosPersonales: true, padreId: null, descripcion: 'Producto FLITO (datos ficticios de prueba).', tecnologias: ['.NET 10'],
+  etiquetas: [], ancestros: [], hijos: 0,
+};
+const REF_FLITO = { id: 'a6', slug: 'flito', nombre: 'FLITO', tipo: 'producto' };
+const PRINCIPAL_FLITO = responsableSimulado('r5', 'principal', { ...PERSONA_CORTA, id: 'p9', nombre: 'Principal De Flito Demo', telefono: TELEFONO_FICTICIO });
+const SECUNDARIO_FLITO = responsableSimulado('r6', 'secundario', { ...PERSONA_CORTA, id: 'p10', nombre: 'Secundaria De Flito Demo' });
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
   const saludos = [{ id: 's1', texto: 'Hola desde Organismo Demo', organizacionId: 'o1', creadoEn: new Date().toISOString() }];
+  const aplicativos = opciones.sinConexion ? [...APLICATIVOS, FLITO] : APLICATIVOS;
+  const reparto = opciones.sinConexion
+    ? { ...REPARTO_SIMULADO, productos: [...REPARTO_SIMULADO.productos, { aplicativo: REF_FLITO, principal: PRINCIPAL_FLITO, secundario: SECUNDARIO_FLITO }] }
+    : REPARTO_SIMULADO;
+  let sesionCerrada = false;
 
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const metodo = route.request().method();
     switch (url.pathname) {
+      case '/api/v1/identidad/salir':
+        sesionCerrada = true;
+        return route.fulfill({ status: 204 });
+      case '/api/v1/identidad/proveedores':
+        return json(route, { microsoft: false, simulado: true });
       case '/api/v1/plataforma/yo':
+        if (sesionCerrada) return route.fulfill({ status: 401 });
         return json(route, {
           sub: 'u1',
           personaId: 'p1',
@@ -181,13 +217,13 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
       case '/api/v1/catalogo/aplicativos': {
         if (!opciones.permisos.includes('atlas.catalogo.ver')) return route.fulfill({ status: 403 });
         const grupo = url.searchParams.get('grupo');
-        const elementos = APLICATIVOS.filter((a) => !grupo || a.grupo === grupo);
+        const elementos = aplicativos.filter((a) => !grupo || a.grupo === grupo);
         return json(route, { total: elementos.length, elementos });
       }
       // Responsables (HU 2.3 a 2.5).
       case '/api/v1/equipo/responsabilidades':
         if (!opciones.permisos.includes('atlas.equipo.ver')) return route.fulfill({ status: 403 });
-        return json(route, { ...REPARTO_SIMULADO, puedeGestionar: opciones.permisos.includes('atlas.equipo.gestionar') });
+        return json(route, { ...reparto, puedeGestionar: opciones.permisos.includes('atlas.equipo.gestionar') });
       case '/api/v1/equipo/revisiones':
         return json(route, {
           proxima: { id: 'v1', fecha: '2027-01-20', estado: 'pendiente', recordatorioEnviadoEn: null, hechaEn: null, hechaPor: null, nota: null },
@@ -280,6 +316,24 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
               observacion: null,
               requiereRevision: false,
             },
+            ...(opciones.sinConexion
+              ? [
+                  {
+                    id: 't-p1',
+                    equipo: { id: 'e1', nombre: 'Desarrollo TI' },
+                    fecha: sabadoDesde(url.searchParams.get('desde') ?? '2026-10-24'),
+                    persona: { id: 'p1', nombre: 'Empleada Demo', correo: 'empleada.demo@ejemplo.com', cargo: 'Desarrolladora', telefono: TELEFONO_FICTICIO },
+                    horaInicio: '08:00',
+                    horaFin: '12:00',
+                    estado: 'programado',
+                    origen: 'generado',
+                    turnoReemplazadoId: null,
+                    festivo: null,
+                    observacion: null,
+                    requiereRevision: false,
+                  },
+                ]
+              : []),
           ],
           festivos: [],
         });
@@ -288,9 +342,23 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
           horaInicioPorDefecto: '08:00',
           horaFinPorDefecto: '12:00',
           reglaFestivos: 'sin_turno',
-          diasAnticipacionRecordatorio: null,
+          diasAnticipacionRecordatorio: 2,
           canalExterno: null,
           actualizadoEn: null,
+          horaRecordatorios: '07:00',
+        });
+      // Recordatorios de turno (HU 2.11): una corrida con un fallo que se reintenta.
+      case '/api/v1/soporte/recordatorios':
+        if (!opciones.permisos.includes('atlas.soporte.gestionar')) return route.fulfill({ status: 403 });
+        return json(route, {
+          programados: true,
+          hora: '07:00',
+          diasAnticipacion: 2,
+          canales: { push: true, correo: true, teams: false },
+          enCurso: false,
+          corridas: [
+            { fecha: '2026-10-22', disparo: 'programada', iniciadaEn: '2026-10-22T12:00:00Z', terminadaEn: '2026-10-22T12:00:05Z', enviados: 6, fallidos: 1, omitidos: 2 },
+          ],
         });
       case '/api/v1/soporte/equipos/e1/participantes':
       case '/api/v1/soporte/equipos/e2/participantes':
@@ -392,14 +460,14 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         return json(route, [{ id: 'f0', tipo: 'equipo', equipo: { id: 'e2', nombre: 'Operaciones' }, creadoEn: '2026-10-22T15:00:00Z', ultimoUsoEn: '2026-10-23T10:00:00Z' }]);
       default: {
         const ficha = /^\/api\/v1\/catalogo\/aplicativos\/([a-z0-9-]+)$/.exec(url.pathname);
-        const aplicativo = ficha && APLICATIVOS.find((a) => a.slug === ficha[1]);
+        const aplicativo = ficha && aplicativos.find((a) => a.slug === ficha[1]);
         if (aplicativo) {
           return json(route, {
             ...aplicativo,
             repo: 'flitsas/flit',
             rutaEnRepo: 'services/core-notificaciones',
             ambientes: ['dev', 'qa', 'pdn'],
-            hijos: APLICATIVOS.filter((a) => a.padreId === aplicativo.id),
+            hijos: aplicativos.filter((a) => a.padreId === aplicativo.id),
             permisos: { editar: opciones.permisos.includes('atlas.catalogo.editar'), gestionar: opciones.permisos.includes('atlas.catalogo.gestionar') },
             creadoEn: '2026-10-23T12:00:00Z',
             actualizadoEn: '2026-10-23T12:00:00Z',

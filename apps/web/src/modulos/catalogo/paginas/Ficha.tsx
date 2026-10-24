@@ -7,6 +7,7 @@ import type { AplicativoDeFicha, CargadorPestana } from '../../../app/modulos/co
 import { type PestanaResuelta, resolverPestanasFicha } from '../../../app/modulos/resolver';
 import { NoEncontrada } from '../../../app/paginas/Estados';
 import { useSesion } from '../../../app/sesion';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { formatearFecha } from '../../../app/ui/formato';
 import { Hoja } from '../../../app/ui/Hoja';
 import { Boton, cn, Tarjeta } from '../../../app/ui/Tarjeta';
@@ -14,6 +15,7 @@ import { type FichaAplicativo, useCambiosCatalogo, useFicha } from '../api';
 import { type Aviso, avisoDeError, Insignias, MostrarAviso, TextoConMarca } from '../componentes';
 import { ESPACIOS_FICHA, type EspacioFicha, ID_RESUMEN } from '../espacios';
 import { type Edicion, FormularioAplicativo, tiposHijo } from '../Formulario';
+import { RECURSO_APLICATIVOS } from '../recursos';
 import { GRUPOS, TIPOS } from '../textos';
 
 /** Un `React.lazy` por cargador de pestaña, creado una sola vez (como `diferido` del shell para páginas y widgets). */
@@ -50,7 +52,14 @@ export default function Ficha() {
       </p>
     );
   }
-  return <Contenido ficha={ficha.data} />;
+  return (
+    <>
+      <div className="mx-auto mb-3 max-w-5xl empty:hidden">
+        <DatosGuardados recurso={RECURSO_APLICATIVOS.clave} />
+      </div>
+      <Contenido ficha={ficha.data} />
+    </>
+  );
 }
 
 function Contenido({ ficha }: { ficha: FichaAplicativo }) {

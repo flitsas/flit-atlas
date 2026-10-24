@@ -13,6 +13,19 @@ public sealed class ServicioNotificaciones(PlataformaDbContext contexto, Enviado
     public async Task<(Notificacion Notificacion, int Dispositivos)> NotificarAsync(
         Guid personaId, TipoNotificacion tipo, string titulo, string cuerpo, string? enlace, CancellationToken ct)
     {
+        var notificacion = await RegistrarEnBandejaAsync(personaId, tipo, titulo, cuerpo, enlace, ct);
+        // En línea: lo dispara la persona (notificación de prueba) o un trabajo en segundo plano (recordatorios de soporte,
+        // HU 2.11), nunca una petición de otra persona.
+        var dispositivos = await CanalActivoAsync(personaId, tipo, CanalNotificacion.Push, ct)
+            ? await EnviarPushAsync(personaId, new CargaPush(notificacion.Id, tipo.Codigo, titulo, cuerpo, enlace), ct)
+            : 0;
+        return (notificacion, dispositivos);
+    }
+
+    /// <summary>Solo la bandeja de la app (canal <c>app</c>, que no se puede apagar).</summary>
+    public async Task<Notificacion> RegistrarEnBandejaAsync(
+        Guid personaId, TipoNotificacion tipo, string titulo, string cuerpo, string? enlace, CancellationToken ct)
+    {
         ArgumentNullException.ThrowIfNull(tipo);
         var notificacion = new Notificacion
         {
@@ -24,14 +37,11 @@ public sealed class ServicioNotificaciones(PlataformaDbContext contexto, Enviado
         };
         contexto.Notificaciones.Add(notificacion);
         await contexto.SaveChangesAsync(ct);
-
-        // [pendiente] Con los recordatorios de soporte (F2) el envío pasa a un consumidor de la outbox; hoy es en línea
-        // y solo lo dispara la persona (notificación de prueba).
-        var dispositivos = await CanalActivoAsync(personaId, tipo, CanalNotificacion.Push, ct)
-            ? await push.EnviarAsync(contexto, personaId, new CargaPush(notificacion.Id, tipo.Codigo, titulo, cuerpo, enlace), ct)
-            : 0;
-        return (notificacion, dispositivos);
+        return notificacion;
     }
+
+    /// <summary>Solo push, sin mirar la preferencia (quien llama ya la revisó); devuelve a cuántos dispositivos llegó.</summary>
+    public Task<int> EnviarPushAsync(Guid personaId, CargaPush carga, CancellationToken ct) => push.EnviarAsync(contexto, personaId, carga, ct);
 
     public async Task<bool> CanalActivoAsync(Guid personaId, TipoNotificacion tipo, CanalNotificacion canal, CancellationToken ct)
     {

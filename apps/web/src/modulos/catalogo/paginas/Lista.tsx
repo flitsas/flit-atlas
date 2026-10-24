@@ -3,12 +3,14 @@ import { useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { useSesion } from '../../../app/sesion';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Icono } from '../../../app/ui/Icono';
 import { Boton } from '../../../app/ui/Tarjeta';
 import { type AplicativoResumen, type Criticidad, type Estado, type FiltroCatalogo, type Grupo, type Tipo, useAplicativos, useCambiosCatalogo } from '../api';
 import { type Aviso, Insignias, MostrarAviso, Opciones } from '../componentes';
 import { FormularioAplicativo } from '../Formulario';
 import { moduloCatalogo } from '../modulo';
+import { RECURSO_APLICATIVOS } from '../recursos';
 import { CRITICIDADES, ESTADOS, GRUPOS, opciones, TIPOS } from '../textos';
 
 const FILTROS = ['grupo', 'estado', 'criticidad', 'tipo'] as const;
@@ -118,6 +120,7 @@ export default function Lista() {
         </div>
       </details>
 
+      <DatosGuardados recurso={RECURSO_APLICATIVOS.clave} />
       {lista.isPending && <div role="status" aria-label="Cargando el catálogo" className="h-40 animate-pulse rounded-2xl bg-atlas-activo" />}
       {lista.isError && (
         <p role="alert" className="rounded-xl border border-border bg-card p-4 text-sm">

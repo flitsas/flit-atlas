@@ -1,4 +1,5 @@
 import type { ModuloAtlas } from '../../app/modulos/contrato';
+import { RECURSOS_SIN_CONEXION, TTL_HORAS } from './recursos';
 
 /**
  * Catálogo de aplicativos (prompt maestro §8.1, HU 2.1, ATLAS-ADR-0028): listado con búsqueda y filtros y la ficha de
@@ -24,7 +25,8 @@ export const moduloCatalogo: ModuloAtlas = {
   ],
   // El proveedor `catalogo` del servidor (BusquedaCatalogo) entrega estos tipos.
   busqueda: { proveedor: 'catalogo', tipos: ['producto', 'modulo', 'servicio'] },
-  offline: { recursos: ['/api/v1/catalogo/aplicativos'], ttlHoras: 24 },
+  // HU 2.12: el listado completo, sin conexión (ATLAS-ADR-0034).
+  offline: { recursos: RECURSOS_SIN_CONEXION, ttlHoras: TTL_HORAS },
   bandera: 'modulo.catalogo',
   banderaPorDefecto: true,
 };

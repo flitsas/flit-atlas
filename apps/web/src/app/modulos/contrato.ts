@@ -92,9 +92,19 @@ export interface PestanaFicha {
   cargar: CargadorPestana;
 }
 
+/** Un recurso de la API que el shell guarda en el dispositivo para verlo sin conexión (HU 2.12, ATLAS-ADR-0034). */
+export interface RecursoSinConexion {
+  /** Clave en IndexedDB (`soporte.turnos`): la misma con la que el cliente del módulo lo lee sin red. */
+  clave: string;
+  /** Ruta de la API; se calcula al sincronizar (p. ej. con la fecha de hoy). */
+  ruta: () => string;
+  /** Solo se guarda si la persona lo tiene; si lo pierde, se borra. */
+  permiso: string;
+}
+
 export interface OfflineModulo {
-  /** Recursos de la API que se guardan en IndexedDB si los permisos lo permiten (§11). */
-  recursos: string[];
+  /** Recursos que se guardan en IndexedDB si los permisos lo permiten (§11); sin teléfonos. */
+  recursos: RecursoSinConexion[];
   ttlHoras: number;
 }
 

@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { enviarJson, pedir } from '../../app/api';
+import { conRespaldo, conRespaldoDerivado } from '../../pwa/sinConexion';
 import type { Dia } from './fechas';
+import { RECURSO_EQUIPOS, RECURSO_ESTE_SABADO, RECURSO_TURNOS, tresMeses } from './recursos';
 
 /** Contrato de `/api/v1/soporte` (contracts/openapi/atlas.v1.yaml, etiqueta «Soporte»). Horas HH:mm de Bogotá. */
 export type EstadoTurno = 'programado' | 'confirmado' | 'aplicado' | 'reemplazado' | 'cancelado';
@@ -103,6 +105,8 @@ export interface Configuracion {
   diasAnticipacionRecordatorio: number | null;
   canalExterno: string | null;
   actualizadoEn: string | null;
+  /** HH:mm de Bogotá a la que corre cada día el trabajo de recordatorios (HU 2.11). */
+  horaRecordatorios: string;
 }
 
 export interface CambioConfiguracion {
@@ -111,6 +115,27 @@ export interface CambioConfiguracion {
   reglaFestivos: ReglaFestivos;
   diasAnticipacionRecordatorio: number | null;
   canalExterno: string | null;
+  horaRecordatorios: string | null;
+}
+
+/** Estado de los recordatorios de turno (HU 2.11): solo para quien gestiona el soporte. */
+export interface CorridaRecordatorios {
+  fecha: Dia;
+  disparo: 'programada' | 'manual';
+  iniciadaEn: string;
+  terminadaEn: string | null;
+  enviados: number;
+  fallidos: number;
+  omitidos: number;
+}
+
+export interface EstadoRecordatorios {
+  programados: boolean;
+  hora: string;
+  diasAnticipacion: number | null;
+  canales: { push: boolean; correo: boolean; teams: boolean };
+  enCurso: boolean;
+  corridas: CorridaRecordatorios[];
 }
 
 export interface Participante {
@@ -301,14 +326,44 @@ const conEquipo = (equipo: string | null | undefined) => (equipo ? `&equipo=${en
 
 export const CLAVE = ['soporte'] as const;
 
+/**
+ * Sin conexión (HU 2.12) cualquier rango sale de los tres meses guardados (todos los equipos), recortado al rango y al
+ * equipo pedidos. En línea, la consulta de los tres meses de todos los equipos refresca lo guardado.
+ */
 export const obtenerCalendario = (desde: Dia, hasta: Dia, equipo?: string | null) =>
-  json<Calendario>(pedir(`${BASE}/turnos?desde=${desde}&hasta=${hasta}${conEquipo(equipo)}`));
-export const obtenerEsteSabado = () => json<EsteSabado>(pedir(`${BASE}/este-sabado`));
+  conRespaldoDerivado<Calendario, Calendario>(
+    RECURSO_TURNOS,
+    () => json<Calendario>(pedir(`${BASE}/turnos?desde=${desde}&hasta=${hasta}${conEquipo(equipo)}`)),
+    (guardado) => recortarCalendario(guardado, desde, hasta, equipo ?? null),
+    (datos) => {
+      const rango = tresMeses();
+      return !equipo && desde === rango.desde && hasta === rango.hasta ? datos : null;
+    },
+  );
+
+/** Lo guardado entre `desde` y `hasta` (y del equipo, si se pide); `null` si no toca el rango guardado. */
+export function recortarCalendario(guardado: Calendario, desde: Dia, hasta: Dia, equipo: string | null): Calendario | null {
+  if (hasta < guardado.desde || desde > guardado.hasta) return null;
+  const enRango = (fecha: Dia) => fecha >= desde && fecha <= hasta;
+  return {
+    desde,
+    hasta,
+    equipoId: equipo,
+    turnos: guardado.turnos.filter((t) => enRango(t.fecha) && (!equipo || t.equipo.id === equipo)),
+    festivos: guardado.festivos.filter((f) => enRango(f.fecha)),
+  };
+}
+
+export const obtenerEsteSabado = () => conRespaldo(RECURSO_ESTE_SABADO, () => json<EsteSabado>(pedir(`${BASE}/este-sabado`)));
 export const obtenerCanal = () => json<CanalSoporte>(pedir(`${BASE}/canal`));
 export const obtenerConfiguracion = () => json<Configuracion>(pedir(`${BASE}/configuracion`));
 export const guardarConfiguracion = (cambio: CambioConfiguracion) =>
   json<Configuracion>(enviarJson(`${BASE}/configuracion`, 'PUT', cambio));
-export const listarEquipos = () => json<Equipo[]>(pedir(`${BASE}/equipos`));
+export const obtenerRecordatorios = () => json<EstadoRecordatorios>(pedir(`${BASE}/recordatorios`));
+export const enviarRecordatoriosAhora = async () => {
+  await enviarJson(`${BASE}/recordatorios/ejecucion`, 'POST');
+};
+export const listarEquipos = () => conRespaldo(RECURSO_EQUIPOS, () => json<Equipo[]>(pedir(`${BASE}/equipos`)));
 export const crearEquipo = (cambio: CambioEquipo) => json<Equipo>(enviarJson(`${BASE}/equipos`, 'POST', cambio));
 export const cambiarEquipo = (id: string, cambio: CambioEquipo) =>
   json<Equipo>(enviarJson(`${BASE}/equipos/${encodeURIComponent(id)}`, 'PUT', cambio));
