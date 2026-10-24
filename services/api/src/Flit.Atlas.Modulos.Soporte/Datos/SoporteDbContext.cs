@@ -1,4 +1,5 @@
 using Flit.Atlas.Modulos.Soporte.Dominio;
+using Flit.Atlas.Modulos.Soporte.Dominio.Microsoft365;
 using Flit.Atlas.Plataforma.Datos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -14,6 +15,7 @@ public sealed class ConfiguracionSoporte : Entidad
 {
     public static readonly TimeOnly InicioPorDefecto = new(8, 0);
     public static readonly TimeOnly FinPorDefecto = new(12, 0);
+    public static readonly TimeOnly HoraRecordatoriosPorDefecto = new(7, 0);
     public const ReglaFestivos ReglaPorDefecto = Dominio.ReglaFestivos.SinTurno;
 
     /// <summary>Siempre <c>true</c>: con el índice único garantiza una sola fila.</summary>
@@ -27,8 +29,17 @@ public sealed class ConfiguracionSoporte : Entidad
     /// <summary>Qué hace la generación con un sábado festivo de Colombia.</summary>
     public ReglaFestivos ReglaFestivos { get; set; } = ReglaPorDefecto;
 
-    /// <summary>Días antes del turno en que salen los recordatorios (HU 2.11); vacío mientras no se defina.</summary>
+    /// <summary>
+    /// Días antes del turno en que sale el recordatorio a la persona (HU 2.11); vacío mientras no se defina (solo sale el
+    /// del mismo sábado).
+    /// </summary>
     public int? DiasAnticipacionRecordatorio { get; set; }
+
+    /// <summary>
+    /// Hora de Bogotá a la que corre el trabajo diario de los recordatorios (HU 2.11). Por defecto 07:00
+    /// [por verificar con el líder].
+    /// </summary>
+    public TimeOnly HoraRecordatorios { get; set; } = HoraRecordatoriosPorDefecto;
 
     /// <summary>
     /// Canal de soporte del sábado que ven los externos (un correo, un número o un canal, sin nombres de personas).
@@ -144,8 +155,9 @@ public sealed class FestivoAdicional : Entidad
 }
 
 /// <summary>
-/// Día compensado por un turno (prompt maestro §8.3). Solo el modelo: el registro, la aprobación y el reporte llegan
-/// con la HU 2.9.
+/// Día compensado por un turno (prompt maestro §8.3): a quién, qué día, quién la aprobó y si ya la tomó. La registra quien
+/// tiene <c>atlas.soporte.aprobar</c> sobre el equipo del turno (HU 2.9) o el importador del Excel (HU 2.7). A lo sumo
+/// una por turno y persona.
 /// </summary>
 public sealed class Compensacion : Entidad
 {
@@ -165,6 +177,203 @@ public sealed class Compensacion : Entidad
 }
 
 /// <summary>
+/// Solicitud de cambio de turno (HU 2.9, prompt maestro §8.3): la persona de turno la pide y propone un reemplazo del
+/// mismo equipo → el reemplazo acepta (o rechaza) → alguien con <c>atlas.soporte.aprobar</c> sobre el equipo aprueba (o
+/// rechaza). Al aprobar, el turno original queda <c>reemplazado</c> y se crea el del reemplazo. Cada paso queda en
+/// <see cref="EventoSolicitudCambio"/>.
+/// </summary>
+public sealed class SolicitudCambio : Entidad
+{
+    public required Guid TurnoId { get; init; }
+
+    /// <summary>Equipo del turno (copiado para filtrar por alcance sin unir con los turnos).</summary>
+    public required Guid EquipoId { get; init; }
+
+    public required DateOnly Fecha { get; init; }
+
+    /// <summary>Persona de turno que pide el cambio (<c>plataforma_persona</c>).</summary>
+    public required Guid SolicitantePersonaId { get; init; }
+
+    /// <summary>Persona del mismo equipo que tomaría el turno.</summary>
+    public required Guid ReemplazoPersonaId { get; init; }
+
+    public EstadoSolicitud Estado { get; set; } = EstadoSolicitud.PendienteReemplazo;
+
+    /// <summary>Motivo que escribe quien solicita: puede traer datos personales.</summary>
+    public string? Motivo { get; init; }
+
+    /// <summary>Turno creado para el reemplazo al aprobar.</summary>
+    public Guid? TurnoNuevoId { get; set; }
+
+    /// <summary>Quien aprobó o rechazó (con <c>atlas.soporte.aprobar</c>).</summary>
+    public Guid? ResueltaPorPersonaId { get; set; }
+
+    public DateTimeOffset? ResueltaEn { get; set; }
+}
+
+/// <summary>
+/// Un paso de una solicitud de cambio (historial completo: quién, cuándo, qué y su nota). La llave de idempotencia la
+/// manda el cliente con cada acción: si una acción hecha sin conexión se reenvía, el servidor la reconoce y no la repite
+/// (ATLAS-ADR-0032).
+/// </summary>
+public sealed class EventoSolicitudCambio : Entidad
+{
+    public required Guid SolicitudId { get; init; }
+
+    public required AccionSolicitud Accion { get; init; }
+
+    public required Guid PersonaId { get; init; }
+
+    /// <summary>Nota de quien actúa: puede traer datos personales.</summary>
+    public string? Nota { get; init; }
+
+    /// <summary>Única: la acción con esta llave ya se hizo.</summary>
+    public required Guid LlaveIdempotencia { get; init; }
+
+    /// <summary>Cuándo la hizo la persona en su dispositivo (puede ser antes de enviarla, si estaba sin conexión).</summary>
+    public DateTimeOffset? HechaEn { get; init; }
+}
+
+/// <summary>
+/// Evento de Outlook de un turno en el calendario compartido «Soporte TI sábados» (HU 2.10, ATLAS-ADR-0033). Es a la vez
+/// el id del evento en Graph y la marca de que hay algo por sincronizar: cada cambio de un turno la deja
+/// <see cref="Pendiente"/> en la misma transacción (<see cref="SoporteDbContext"/>) y el trabajo de Microsoft 365 la
+/// atiende con reintentos. No tiene llave foránea al turno: un turno borrado por la generación o el importador debe
+/// cancelar su evento.
+/// </summary>
+public sealed class EventoCalendario : Entidad
+{
+    public required Guid TurnoId { get; init; }
+
+    /// <summary>Id del evento en el buzón compartido (Graph); vacío si no hay evento (aún no se creó o se canceló).</summary>
+    public string? EventoGraphId { get; set; }
+
+    /// <summary>Persona que está como asistente del evento en Graph.</summary>
+    public Guid? PersonaSincronizadaId { get; set; }
+
+    public bool Pendiente { get; set; } = true;
+
+    /// <summary>Sube con cada cambio del turno: el trabajo solo cierra lo pendiente si nadie lo cambió mientras llamaba a Graph.</summary>
+    public int Version { get; set; }
+
+    /// <summary>Intentos fallidos seguidos (vuelve a 0 con cada cambio o al sincronizar).</summary>
+    public int Intentos { get; set; }
+
+    public DateTimeOffset ProximoIntentoEn { get; set; }
+
+    /// <summary>Último error (código HTTP o tipo de excepción; nunca datos personales).</summary>
+    public string? UltimoError { get; set; }
+
+    public DateTimeOffset? SincronizadoEn { get; set; }
+}
+
+/// <summary>
+/// Aviso por publicar en un canal de Teams (HU 2.10 y 2.11): se encola en la transacción de la acción que lo origina y
+/// lo publica el trabajo de Microsoft 365 con reintentos (ATLAS-ADR-0033).
+/// </summary>
+public sealed class AvisoTeams : Entidad
+{
+    public required TipoAvisoTeams Tipo { get; init; }
+
+    /// <summary>Nombre del canal en <c>Plataforma:Teams:Canales</c>.</summary>
+    public required string Canal { get; init; }
+
+    /// <summary>El <c>MensajeTeams</c> en JSON: lleva nombres de empleados.</summary>
+    public required string Contenido { get; init; }
+
+    public bool Pendiente { get; set; } = true;
+
+    public int Intentos { get; set; }
+
+    public DateTimeOffset ProximoIntentoEn { get; set; }
+
+    public DateTimeOffset? EnviadoEn { get; set; }
+
+    public string? UltimoError { get; set; }
+}
+
+/// <summary>
+/// Feed .ics de una persona (sus turnos) o de un equipo (HU 2.10): el token va en la URL y aquí solo se guarda su
+/// SHA-256. Regenerarlo revoca el anterior. Lo creó y lo usa la persona; deja de servir si la revoca, si la persona
+/// queda inactiva o si pierde <c>atlas.soporte.ver</c>.
+/// </summary>
+public sealed class FeedIcs : Entidad
+{
+    public required Guid PersonaId { get; init; }
+
+    public required TipoFeedIcs Tipo { get; init; }
+
+    /// <summary>Equipo del feed de equipo; vacío en el personal.</summary>
+    public Guid? EquipoId { get; init; }
+
+    /// <summary>SHA-256 del token en hexadecimal (64).</summary>
+    public required string TokenHash { get; init; }
+
+    public DateTimeOffset? RevocadoEn { get; set; }
+
+    public DateTimeOffset? UltimoUsoEn { get; set; }
+}
+
+/// <summary>
+/// Un recordatorio de turno por un canal (HU 2.11): la marca que impide mandarlo dos veces. Se crea <c>en_curso</c> antes
+/// de enviar y pasa a <c>enviado</c> o <c>fallido</c>; uno que quedó <c>en_curso</c> (la réplica se cayó a mitad) no se
+/// repite: mejor un aviso de menos que uno doble. Los fallidos se reintentan en las corridas siguientes, hasta
+/// <see cref="Recordatorios.RecordatoriosSoporte.TopeIntentos"/> veces, mientras el turno no haya pasado.
+/// </summary>
+public sealed class RecordatorioEnviado : Entidad
+{
+    /// <summary>Única: <c>momento:turno:canal</c> o, para el aviso al canal de Teams del equipo, <c>momento:equipo:fecha:canal</c>.</summary>
+    public required string Clave { get; init; }
+
+    public required MomentoRecordatorio Momento { get; init; }
+
+    public required CanalRecordatorio Canal { get; init; }
+
+    public required Guid EquipoId { get; init; }
+
+    public required DateOnly Fecha { get; init; }
+
+    /// <summary>Turno recordado; vacío en el aviso al canal de Teams del equipo.</summary>
+    public Guid? TurnoId { get; init; }
+
+    /// <summary>Destinatario (<c>plataforma_persona</c>); vacío en el aviso al canal de Teams del equipo.</summary>
+    public Guid? PersonaId { get; init; }
+
+    public EstadoRecordatorio Estado { get; set; } = EstadoRecordatorio.EnCurso;
+
+    public int Intentos { get; set; }
+
+    /// <summary>Tipo de la última falla (p. ej. <c>CorreoNoEnviadoException</c>), sin datos personales.</summary>
+    public string? Error { get; set; }
+
+    public DateTimeOffset? EnviadoEn { get; set; }
+}
+
+/// <summary>
+/// Una corrida del trabajo de recordatorios (HU 2.11). Solo una programada por día (índice único parcial): si dos réplicas
+/// llegan a la vez, el candado de PostgreSQL deja correr una y la otra ve la corrida del día hecha.
+/// </summary>
+public sealed class CorridaRecordatorios : Entidad
+{
+    /// <summary>Día de Bogotá de la corrida.</summary>
+    public required DateOnly Fecha { get; init; }
+
+    public required DisparoRecordatorios Disparo { get; init; }
+
+    /// <summary>Quien la pidió con «Enviar ahora» (corrida manual).</summary>
+    public Guid? PedidaPorPersonaId { get; init; }
+
+    public DateTimeOffset? TerminadaEn { get; set; }
+
+    public int Enviados { get; set; }
+
+    public int Fallidos { get; set; }
+
+    /// <summary>Canales que no se intentaron: preferencia apagada, sin dispositivos o canal sin configurar.</summary>
+    public int Omitidos { get; set; }
+}
+
+/// <summary>
 /// Tablas <c>soporte_*</c> del módulo Soporte de los sábados, con su historial <c>__ef_migraciones_soporte</c>
 /// (ATLAS-ADR-0026 y ATLAS-ADR-0029). Solo mapea sus tablas: las personas se leen de <c>PlataformaDbContext</c> y las
 /// llaves foráneas hacia <c>plataforma_persona</c> se crean a mano en la migración.
@@ -175,9 +384,13 @@ public sealed class Compensacion : Entidad
 /// </summary>
 /// <param name="alcance">Alcance de datos de la petición (lo registra la identidad); sin él, el del sistema.</param>
 /// <param name="reloj">Reloj de la aplicación para <c>creado_en</c> y <c>actualizado_en</c>.</param>
-public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones, IAlcanceDatos? alcance = null, TimeProvider? reloj = null)
+/// <param name="despertador">Despierta el trabajo de Microsoft 365 cuando un guardado deja eventos o avisos pendientes.</param>
+public sealed class SoporteDbContext(
+    DbContextOptions<SoporteDbContext> opciones, IAlcanceDatos? alcance = null, TimeProvider? reloj = null, DespertadorM365? despertador = null)
     : ContextoAtlas(opciones, alcance)
 {
+    private bool _pendientesM365;
+
     public const string Prefijo = ModuloSoporte.IdModulo + "_";
     public static readonly string TablaHistorial = Plataforma.Modulos.ExtensionesModulos.TablaHistorial(ModuloSoporte.IdModulo);
 
@@ -186,6 +399,8 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
     public const int LargoCanal = 200;
     public const int LargoNombreEquipo = 100;
     public const int PersonasMaximasPorTurno = 10;
+    public const int LargoClaveRecordatorio = 120;
+    public const int LargoErrorRecordatorio = 100;
 
     /// <summary>Equipos que crea la migración inicial con lo que dijo el líder (se pueden renombrar o desactivar).</summary>
     public static readonly Guid EquipoDesarrolloTi = new("0199a0c0-0000-7000-8000-000000000001");
@@ -201,6 +416,18 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
     public DbSet<Ausencia> Ausencias => Set<Ausencia>();
     public DbSet<FestivoAdicional> FestivosAdicionales => Set<FestivoAdicional>();
     public DbSet<Compensacion> Compensaciones => Set<Compensacion>();
+    public DbSet<SolicitudCambio> SolicitudesCambio => Set<SolicitudCambio>();
+    public DbSet<EventoSolicitudCambio> EventosSolicitud => Set<EventoSolicitudCambio>();
+    public DbSet<EventoCalendario> EventosCalendario => Set<EventoCalendario>();
+    public DbSet<AvisoTeams> AvisosTeams => Set<AvisoTeams>();
+    public DbSet<FeedIcs> FeedsIcs => Set<FeedIcs>();
+
+    public const int LargoEventoGraph = 512;
+    public const int LargoError = 300;
+    public const int LargoCanalTeams = 50;
+    public const int LargoContenidoAviso = 4000;
+    public DbSet<RecordatorioEnviado> Recordatorios => Set<RecordatorioEnviado>();
+    public DbSet<CorridaRecordatorios> CorridasRecordatorios => Set<CorridaRecordatorios>();
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion) =>
         ConfigurarOpciones(opciones, cadenaConexion, TablaHistorial);
@@ -297,17 +524,206 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
 
         modelBuilder.Entity<Compensacion>(e =>
         {
-            e.ToTable(Prefijo + "compensacion", t => t.HasComment("Días compensados por turnos; el flujo llega en la HU 2.9."));
+            e.ToTable(Prefijo + "compensacion", t =>
+            {
+                t.HasComment("Días compensados por turnos: a quién, qué día, quién aprobó y si ya se tomó (HU 2.9).");
+                t.HasCheckConstraint("ck_soporte_compensacion_tomada", "estado <> 'tomada' OR fecha_compensada IS NOT NULL");
+            });
             e.Property(c => c.Id).ValueGeneratedNever();
             Enum(e.Property(c => c.Estado));
             e.Property(c => c.Nota).HasMaxLength(LargoObservacion).HasComment(Pii);
             e.HasOne<Turno>().WithMany().HasForeignKey(c => c.TurnoId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(c => new { c.PersonaId, c.Estado });
+            // Una compensación por turno y persona: reimportar el Excel o repetir la acción no la duplica.
+            e.HasIndex(c => new { c.TurnoId, c.PersonaId }).IsUnique();
+        });
+
+        modelBuilder.Entity<SolicitudCambio>(e =>
+        {
+            e.ToTable(Prefijo + "solicitud_cambio", t =>
+            {
+                t.HasComment("Solicitudes de cambio de turno: solicitud, aceptación del reemplazo y aprobación (HU 2.9).");
+                t.HasCheckConstraint("ck_soporte_solicitud_cambio_personas", "solicitante_persona_id <> reemplazo_persona_id");
+            });
+            e.Property(s => s.Id).ValueGeneratedNever();
+            Enum(e.Property(s => s.Estado));
+            e.Property(s => s.Motivo).HasMaxLength(LargoObservacion).HasComment(Pii);
+            e.HasOne<Turno>().WithMany().HasForeignKey(s => s.TurnoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Turno>().WithMany().HasForeignKey(s => s.TurnoNuevoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<EquipoSoporte>().WithMany().HasForeignKey(s => s.EquipoId).OnDelete(DeleteBehavior.Restrict);
+            // A lo sumo una solicitud abierta por turno.
+            e.HasIndex(s => s.TurnoId).IsUnique().HasFilter("estado IN ('pendiente_reemplazo', 'pendiente_aprobacion')")
+                .HasDatabaseName("ux_soporte_solicitud_cambio_abierta");
+            e.HasIndex(s => new { s.EquipoId, s.Estado });
+            e.HasIndex(s => s.SolicitantePersonaId);
+            e.HasIndex(s => s.ReemplazoPersonaId);
+        });
+
+        modelBuilder.Entity<EventoSolicitudCambio>(e =>
+        {
+            e.ToTable(Prefijo + "solicitud_evento", t => t.HasComment("Historial de cada solicitud de cambio, con la llave de idempotencia de cada acción."));
+            e.Property(v => v.Id).ValueGeneratedNever();
+            Enum(e.Property(v => v.Accion));
+            e.Property(v => v.Nota).HasMaxLength(LargoObservacion).HasComment(Pii);
+            e.HasOne<SolicitudCambio>().WithMany().HasForeignKey(v => v.SolicitudId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(v => v.LlaveIdempotencia).IsUnique().HasDatabaseName("ux_soporte_solicitud_evento_llave");
+            e.HasIndex(v => v.SolicitudId);
+        });
+
+        modelBuilder.Entity<EventoCalendario>(e =>
+        {
+            e.ToTable(Prefijo + "evento_calendario", t => t.HasComment(
+                "Evento de Outlook de cada turno en el calendario compartido (id de Graph) y su sincronización pendiente (HU 2.10)."));
+            e.Property(v => v.Id).ValueGeneratedNever();
+            e.Property(v => v.EventoGraphId).HasMaxLength(LargoEventoGraph);
+            e.Property(v => v.UltimoError).HasMaxLength(LargoError);
+            e.HasIndex(v => v.TurnoId).IsUnique();
+            e.HasIndex(v => v.ProximoIntentoEn).HasFilter("pendiente").HasDatabaseName("ix_soporte_evento_calendario_pendientes");
+        });
+
+        modelBuilder.Entity<AvisoTeams>(e =>
+        {
+            e.ToTable(Prefijo + "aviso_teams", t => t.HasComment("Avisos por publicar en un canal de Teams, con reintentos (HU 2.10 y 2.11)."));
+            e.Property(a => a.Id).ValueGeneratedNever();
+            Enum(e.Property(a => a.Tipo));
+            e.Property(a => a.Canal).HasMaxLength(LargoCanalTeams);
+            e.Property(a => a.Contenido).HasMaxLength(LargoContenidoAviso).HasComment(Pii);
+            e.Property(a => a.UltimoError).HasMaxLength(LargoError);
+            e.HasIndex(a => a.ProximoIntentoEn).HasFilter("pendiente").HasDatabaseName("ix_soporte_aviso_teams_pendientes");
+        });
+
+        modelBuilder.Entity<FeedIcs>(e =>
+        {
+            e.ToTable(Prefijo + "feed_ics", t =>
+            {
+                t.HasComment("Feeds .ics personales y de equipo; el token solo se guarda como hash SHA-256 (HU 2.10).");
+                t.HasCheckConstraint("ck_soporte_feed_ics_equipo", "(tipo = 'equipo') = (equipo_id IS NOT NULL)");
+            });
+            e.Property(f => f.Id).ValueGeneratedNever();
+            Enum(e.Property(f => f.Tipo));
+            e.Property(f => f.TokenHash).HasMaxLength(64).IsFixedLength();
+            e.HasIndex(f => f.TokenHash).IsUnique();
+            // Un feed vigente por persona, tipo y equipo: regenerar revoca el anterior.
+            e.HasIndex(f => new { f.PersonaId, f.Tipo, f.EquipoId }).IsUnique().AreNullsDistinct(false).HasFilter("revocado_en IS NULL")
+                .HasDatabaseName("ux_soporte_feed_ics_vigente");
+            e.HasOne<EquipoSoporte>().WithMany().HasForeignKey(f => f.EquipoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RecordatorioEnviado>(e =>
+        {
+            e.ToTable(Prefijo + "recordatorio", t => t.HasComment("Recordatorios de turno enviados por canal (HU 2.11): impiden mandar dos veces el mismo."));
+            e.Property(r => r.Id).ValueGeneratedNever();
+            e.Property(r => r.Clave).HasMaxLength(LargoClaveRecordatorio);
+            Enum(e.Property(r => r.Momento));
+            Enum(e.Property(r => r.Canal));
+            Enum(e.Property(r => r.Estado));
+            e.Property(r => r.Error).HasMaxLength(LargoErrorRecordatorio);
+            e.HasIndex(r => r.Clave).IsUnique().HasDatabaseName("ux_soporte_recordatorio_clave");
+            e.HasIndex(r => new { r.Fecha, r.Estado });
+            e.HasOne<Turno>().WithMany().HasForeignKey(r => r.TurnoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<EquipoSoporte>().WithMany().HasForeignKey(r => r.EquipoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CorridaRecordatorios>(e =>
+        {
+            e.ToTable(Prefijo + "recordatorio_corrida", t => t.HasComment("Corridas del trabajo diario de recordatorios (HU 2.11), con sus conteos."));
+            e.Property(c => c.Id).ValueGeneratedNever();
+            Enum(e.Property(c => c.Disparo));
+            // Una corrida programada por día, aunque haya varias réplicas.
+            e.HasIndex(c => c.Fecha).IsUnique().HasFilter("disparo = 'programada'").HasDatabaseName("ux_soporte_recordatorio_corrida_programada");
         });
 
         // Ninguna entidad tiene OrganizacionId: el predicado no agrega filtros, pero se llama como en todo módulo para que
         // una tabla futura con organización quede filtrada sin acordarse.
         AplicarPredicadoDeOrganizacion(modelBuilder);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        MarcarCalendario(PorSincronizar(), CargarEventos);
+        var filas = base.SaveChanges(acceptAllChangesOnSuccess);
+        DespertarSiConfirmado();
+        return filas;
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var turnos = PorSincronizar();
+        if (turnos.Count > 0)
+        {
+            var existentes = await EventosCalendario.Where(e => turnos.Contains(e.TurnoId)).ToListAsync(cancellationToken);
+            MarcarCalendario(turnos, _ => existentes);
+        }
+        var filas = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        DespertarSiConfirmado();
+        return filas;
+    }
+
+    /// <summary>
+    /// Despierta el trabajo de Microsoft 365 si lo guardado dejó algo pendiente. Dentro de una transacción explícita espera
+    /// a que quien la abrió la confirme y llame aquí (<c>Comunes.GuardarAsync</c>); antes, el trabajo aún no lo vería.
+    /// </summary>
+    internal void DespertarSiConfirmado()
+    {
+        if (_pendientesM365 && Database.CurrentTransaction is null)
+        {
+            _pendientesM365 = false;
+            despertador?.Despertar();
+        }
+    }
+
+    /// <summary>
+    /// Turnos de este guardado que cambian su evento de Outlook (ATLAS-ADR-0033): nuevos, borrados o con otra persona,
+    /// otro horario u otro estado. La observación y la marca de revisión no tocan el evento.
+    /// </summary>
+    private List<Guid> PorSincronizar()
+    {
+        _pendientesM365 |= ChangeTracker.Entries<AvisoTeams>().Any(a => a.State == EntityState.Added);
+        return
+        [
+            .. ChangeTracker.Entries<Turno>()
+                .Where(t => t.State is EntityState.Added or EntityState.Deleted
+                    || (t.State == EntityState.Modified && (t.Property(x => x.PersonaId).IsModified || t.Property(x => x.HoraInicio).IsModified
+                        || t.Property(x => x.HoraFin).IsModified || t.Property(x => x.Estado).IsModified)))
+                .Select(t => t.Entity.Id)
+                .Distinct(),
+        ];
+    }
+
+    private List<EventoCalendario> CargarEventos(List<Guid> turnos) => [.. EventosCalendario.Where(e => turnos.Contains(e.TurnoId))];
+
+    /// <summary>
+    /// Deja pendiente el evento de cada turno en la misma transacción que el cambio: el trabajo de Microsoft 365 lo
+    /// sincroniza después (el mismo patrón de la outbox, ATLAS-ADR-0018). Funciona aunque el ambiente no tenga Microsoft
+    /// 365: si se configura después, los turnos futuros se sincronizan.
+    /// </summary>
+    private void MarcarCalendario(List<Guid> turnos, Func<List<Guid>, List<EventoCalendario>> existentes)
+    {
+        if (turnos.Count == 0)
+        {
+            return;
+        }
+        _pendientesM365 = true;
+        var ahora = Reloj.GetUtcNow();
+        var porTurno = existentes(turnos).ToDictionary(e => e.TurnoId);
+        foreach (var local in ChangeTracker.Entries<EventoCalendario>().Where(e => e.State == EntityState.Added))
+        {
+            porTurno.TryAdd(local.Entity.TurnoId, local.Entity);
+        }
+        foreach (var turno in turnos)
+        {
+            if (!porTurno.TryGetValue(turno, out var evento))
+            {
+                evento = new EventoCalendario { TurnoId = turno };
+                EventosCalendario.Add(evento);
+                porTurno[turno] = evento;
+            }
+            evento.Pendiente = true;
+            evento.Version++;
+            evento.Intentos = 0;
+            evento.ProximoIntentoEn = ahora;
+            evento.UltimoError = null;
+        }
     }
 
     private static readonly DateTimeOffset Semilla = new(2026, 10, 23, 0, 0, 0, TimeSpan.Zero);

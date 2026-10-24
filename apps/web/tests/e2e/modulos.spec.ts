@@ -183,8 +183,10 @@ test.describe('catálogo de aplicativos (HU 2.1)', () => {
     await page.goto('/catalogo/flit2');
     await expect(page.getByRole('heading', { level: 1, name: 'FLIT 2.0' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Resumen' })).toHaveAttribute('aria-selected', 'true');
-    await page.getByRole('tab', { name: /Responsables/ }).click();
-    await expect(page.getByText(/Llega con el módulo Equipo y responsables/)).toBeVisible();
+    // «Responsables» ya lo llena el módulo de equipo (HU 2.3): sin atlas.equipo.ver no aparece; los demás espacios siguen.
+    await expect(page.getByRole('tab', { name: /Responsables/ })).toHaveCount(0);
+    await page.getByRole('tab', { name: /Contratos/ }).click();
+    await expect(page.getByText(/Llega con el módulo Contratos de integración/)).toBeVisible();
     if (esMovil(info)) await sinScrollHorizontal(page, '/catalogo/flit2 a 360 px');
     await sinErroresCriticosDeAxe(page, '/catalogo/flit2');
 
@@ -221,8 +223,103 @@ test.describe('soporte de los sábados', () => {
     await page.goto('/soporte/gestion');
     await expect(page.getByRole('heading', { level: 1, name: 'Gestionar el soporte' })).toBeVisible();
     await expect(page.getByRole('form', { name: 'Configuración del soporte' })).toBeVisible();
+    await expect(page.getByLabel('Hora de envío')).toHaveValue('07:00');
+    // HU 2.11: el estado de los recordatorios con sus canales y la última corrida.
+    await expect(page.getByRole('list', { name: 'Canales de los recordatorios' })).toContainText('Teams: sin configurar');
+    await expect(page.getByRole('list', { name: 'Últimas corridas' })).toContainText('6 enviados, 1 fallidos, 2 omitidos');
+    await expect(page.getByRole('button', { name: 'Enviar ahora' })).toBeEnabled();
     await sinScrollHorizontal(page, '/soporte/gestion');
     await sinErroresCriticosDeAxe(page, '/soporte/gestion');
+    expect(violaciones).toEqual([]);
+  });
+
+  test('importador del Excel: vista previa con el informe, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, {
+      permisos: ['atlas.lector', 'atlas.soporte.ver', 'atlas.soporte.gestionar', 'atlas.soporte.aprobar'],
+      roles: ['atlas.lider_tecnico'],
+    });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte/importar');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Importar el Excel de la rotación' })).toBeVisible();
+    await page.getByLabel(/Archivo .xlsx/).setInputFiles({
+      name: 'rotacion-ficticia.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: Buffer.from('PK ficticio'),
+    });
+    await page.getByRole('button', { name: 'Ver vista previa' }).click();
+    const previa = page.getByRole('region', { name: 'Vista previa de la importación' });
+    await expect(previa.getByText('Fecha serial de Excel 46200 → 27/06/2026.')).toBeVisible();
+    await expect(previa.getByRole('checkbox', { name: /Crear a Persona Ficticia como persona inactiva/ })).toBeVisible();
+    await expect(previa.getByRole('button', { name: 'Importar 1 fila' })).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte/importar');
+    await sinErroresCriticosDeAxe(page, '/soporte/importar');
+    expect(violaciones).toEqual([]);
+  });
+
+  test('cambios de turno y compensaciones: por aprobar, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, {
+      permisos: ['atlas.lector', 'atlas.soporte.ver', 'atlas.soporte.solicitar_cambio', 'atlas.soporte.aprobar'],
+      roles: ['atlas.lider_tecnico'],
+    });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte/cambios');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Cambios de turno y compensaciones' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Aprobar el cambio' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Historial' })).toContainText('Aceptó el reemplazo');
+    await expect(page.getByRole('button', { name: 'Marcar tomada' })).toBeVisible();
+    await sinScrollHorizontal(page, '/soporte/cambios');
+    await sinErroresCriticosDeAxe(page, '/soporte/cambios');
+    expect(violaciones).toEqual([]);
+  });
+
+  test('Outlook, Teams y feeds .ics: apagado con su motivo, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.soporte.ver'], roles: ['atlas.desarrollador'] });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte/microsoft-365');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Outlook, Teams y calendarios' })).toBeVisible();
+    await expect(page.getByRole('region', { name: /Calendario compartido de Outlook/ })).toContainText('Apagado en este ambiente');
+    await expect(page.getByRole('list', { name: 'Mis feeds' })).toContainText('Equipo Operaciones');
+    await page.getByRole('button', { name: 'Feed de mis turnos' }).click();
+    await expect(page.getByLabel('Dirección del feed')).toHaveValue(/\/api\/v1\/soporte\/ics\/.+\.ics$/);
+    await sinScrollHorizontal(page, '/soporte/microsoft-365');
+    await sinErroresCriticosDeAxe(page, '/soporte/microsoft-365');
+    expect(violaciones).toEqual([]);
+  });
+});
+
+test.describe('responsables (HU 2.3 a 2.5)', () => {
+  test('reparto, mapa de carga y «¿A quién llamo?» en la ficha: accesibles, sin scroll horizontal a 360 px y sin violar la CSP', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.catalogo.ver', 'atlas.equipo.ver'] });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/');
+    await abrirDesdeNavegacion(page, esMovil(info), 'Responsables');
+    await expect(page).toHaveURL(/\/equipo\/responsables$/);
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Responsables' })).toBeVisible();
+    await expect(page.getByText('Revisa (o delega la revisión de) todo PR que toque su módulo.')).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Productos' }).getByText('Persona Demo Con Un Nombre Bastante Largo Para El Móvil')).toBeVisible();
+    await expect(page.getByText('20/01/2027')).toBeVisible();
+    await sinScrollHorizontal(page, '/equipo/responsables');
+    await sinErroresCriticosDeAxe(page, '/equipo/responsables');
+
+    await page.getByRole('link', { name: 'Mapa de carga' }).click();
+    await expect(page.getByRole('list', { name: 'Carga por persona' })).toBeVisible();
+    await sinScrollHorizontal(page, '/equipo/responsables?vista=carga');
+    await sinErroresCriticosDeAxe(page, 'mapa de carga');
+
+    await page.goto('/catalogo/flit2?pestana=responsables');
+    await expect(page.getByRole('tab', { name: 'Responsables' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('button', { name: /¿A quién llamo\?/ }).click();
+    await expect(page.getByRole('list', { name: 'Soporte de turno por equipo' }).getByText(/Desarrollo TI/)).toBeVisible();
+    await sinScrollHorizontal(page, '¿A quién llamo? a 360 px');
+    await sinErroresCriticosDeAxe(page, '¿A quién llamo?');
     expect(violaciones).toEqual([]);
   });
 });

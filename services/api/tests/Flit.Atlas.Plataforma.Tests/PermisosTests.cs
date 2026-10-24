@@ -46,9 +46,9 @@ public class PermisosTests(Contenedores contenedores)
             p => p.StartsWith("atlas.auditoria", StringComparison.Ordinal) || p.StartsWith("atlas.gia", StringComparison.Ordinal)
                 || p.StartsWith("atlas.equipo", StringComparison.Ordinal) || p.StartsWith("atlas.soporte", StringComparison.Ordinal)
                 || p.StartsWith("atlas.arquitectura.ver_despliegue", StringComparison.Ordinal)));
-        // La lista base del §7.4 (más atlas.roles.ver de la HU 1.4), sin el catálogo ni los 4 de soporte: los publican
-        // sus módulos (ATLAS-ADR-0028 y HU 2.6).
-        Assert.Equal(28, catalogo.Permisos.Count);
+        // La lista base del §7.4 (más atlas.roles.ver de la HU 1.4), sin el catálogo, los 4 de soporte ni los 3 de equipo:
+        // los publican sus módulos (ATLAS-ADR-0028, HU 2.6 y ATLAS-ADR-0031).
+        Assert.Equal(25, catalogo.Permisos.Count);
         Assert.Contains(PermisosPlataforma.RolesVer, catalogo.PermisosDe(RolesAtlas.Auditor));
     }
 

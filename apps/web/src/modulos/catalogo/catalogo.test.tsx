@@ -174,9 +174,9 @@ describe('ficha del aplicativo', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Sentinel' })).toBeInTheDocument();
     expect(screen.getByText('[por verificar]', { selector: 'mark' })).toBeInTheDocument();
     const pestanas = screen.getByRole('tablist', { name: 'Secciones de la ficha' });
+    // «Responsables» ya lo llena el módulo de equipo (HU 2.3): sin atlas.equipo.ver, su espacio no se muestra.
     expect(within(pestanas).getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Resumen',
-      'Responsables',
       'Soporte de turno',
       'Contratos',
       'Versión por ambiente',
@@ -221,7 +221,8 @@ describe('ficha del aplicativo', () => {
     };
     window.history.pushState({}, '', '/catalogo/flit2?pestana=responsables');
 
-    render(<App modulos={[...MODULOS_REGISTRADOS, equipoFalso]} />);
+    // Sin el módulo de equipo real, que ya ocupa ese espacio (HU 2.3).
+    render(<App modulos={[...MODULOS_REGISTRADOS.filter((m) => m.id !== 'equipo'), equipoFalso]} />);
 
     expect(await screen.findByText('Responsables de FLIT 2.0')).toBeInTheDocument();
     expect(recibido[0]).toEqual({ id: 'p1', slug: 'flit2', nombre: 'FLIT 2.0', tipo: 'producto', grupo: 'flit2' });

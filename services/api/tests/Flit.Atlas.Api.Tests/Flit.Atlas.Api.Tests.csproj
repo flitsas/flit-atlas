@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Testcontainers.Redis" />
     <PackageReference Include="xunit.v3" />
@@ -15,6 +16,16 @@
     <ProjectReference Include="..\..\src\Flit.Atlas.Api\Flit.Atlas.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- El generador del .xlsx ficticio de la rotación (HU 2.7) es el mismo de las pruebas del módulo. -->
+    <Compile Include="..\Flit.Atlas.Modulos.Soporte.Tests\ExcelFicticio.cs" Link="Soporte\ExcelFicticio.cs" />
+    <!-- Graph (calendario) y el flujo de Teams simulados de la HU 2.10, los mismos de las pruebas del módulo. -->
+    <Compile Include="..\Flit.Atlas.Modulos.Soporte.Tests\M365Simulado.cs" Link="Soporte\M365Simulado.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Documento de responsables ficticio (personas «Persona Demo»), el mismo de las pruebas del módulo. -->
+    <None Include="..\Flit.Atlas.Modulos.Equipo.Tests\Datos\responsables-ficticio.md" Link="Datos\responsables-ficticio.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

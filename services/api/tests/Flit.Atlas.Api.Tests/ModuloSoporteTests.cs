@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -7,6 +7,7 @@ using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Atlas.Api.Tests;
 
@@ -354,5 +355,78 @@ public class ModuloSoporteTests(EntornoApi entorno)
             (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/festivos", new { fecha = "2027-12-24", nombre = "Otra vez" })).StatusCode);
         Assert.Equal(20, (await JsonAsync(await e.Lider.GetAsync("/api/v1/soporte/festivos?anio=2027"))).GetArrayLength());
         Assert.Equal(HttpStatusCode.BadRequest, (await e.Lider.GetAsync("/api/v1/soporte/festivos?anio=1900")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Recordatorios_con_hora_configurable_enviar_ahora_y_preferencias_del_tipo()
+    {
+        await using var e = await EscenarioAsync();
+        var correoLider = await e.Lider.GetAsync("/api/v1/plataforma/yo");
+        var yo = await JsonAsync(correoLider);
+        var lider = yo.GetProperty("personaId").GetGuid();
+        await AgregarParticipantesAsync(e.Lider, Desarrollo, [lider]);
+        Assert.Equal(HttpStatusCode.Created,
+            (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Desarrollo, fecha = ProximoSabado, personaId = lider })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Enviar(e.Lider, HttpMethod.Put, "/api/v1/soporte/configuracion", new
+        {
+            horaInicioPorDefecto = "08:00", horaFinPorDefecto = "12:00", reglaFestivos = "sin_turno", diasAnticipacionRecordatorio = 7, horaRecordatorios = "06:30",
+        })).StatusCode);
+        Assert.Equal("06:30", (await JsonAsync(await e.Lider.GetAsync("/api/v1/soporte/configuracion"))).GetProperty("horaRecordatorios").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await Enviar(e.Lider, HttpMethod.Put, "/api/v1/soporte/configuracion", new
+        {
+            horaInicioPorDefecto = "08:00", horaFinPorDefecto = "12:00", reglaFestivos = "sin_turno", horaRecordatorios = "25:00",
+        })).StatusCode);
+
+        // Las pruebas apagan la corrida programada; el ambiente tiene correo (buzón de prueba) y no tiene Teams.
+        var estado = await JsonAsync(await e.Lider.GetAsync("/api/v1/soporte/recordatorios"));
+        Assert.False(estado.GetProperty("programados").GetBoolean());
+        Assert.Equal("06:30", estado.GetProperty("hora").GetString());
+        Assert.Equal(7, estado.GetProperty("diasAnticipacion").GetInt32());
+        Assert.True(estado.GetProperty("canales").GetProperty("correo").GetBoolean());
+        Assert.False(estado.GetProperty("canales").GetProperty("teams").GetBoolean());
+
+        // Las preferencias del centro de notificaciones traen el tipo nuevo, con correo y sin Teams en este ambiente.
+        var preferencias = (await JsonAsync(await e.Lider.GetAsync("/api/v1/plataforma/notificaciones/preferencias"))).EnumerateArray()
+            .ToDictionary(t => t.GetProperty("tipo").GetString()!);
+        var canales = preferencias["soporte.recordatorio_turno"].GetProperty("canales").EnumerateArray().ToDictionary(c => c.GetProperty("canal").GetString()!);
+        Assert.True(canales["correo"].GetProperty("disponible").GetBoolean());
+        Assert.True(canales["correo"].GetProperty("activa").GetBoolean());
+        Assert.False(canales["teams"].GetProperty("disponible").GetBoolean());
+        Assert.False(preferencias["soporte.cambio_turno"].GetProperty("canales").EnumerateArray().Single(c => c.GetProperty("canal").GetString() == "correo")
+            .GetProperty("disponible").GetBoolean());
+        Assert.Equal(HttpStatusCode.BadRequest, (await Enviar(e.Lider, HttpMethod.Put, "/api/v1/plataforma/notificaciones/preferencias",
+            new[] { new { tipo = "soporte.recordatorio_turno", canal = "teams", activa = false } })).StatusCode);
+
+        // «Enviar ahora»: 202 y corre en segundo plano; el correo sale con la marca y sin teléfono.
+        Assert.Equal(HttpStatusCode.Accepted, (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/recordatorios/ejecucion")).StatusCode);
+        var buzon = e.Api.Services.GetRequiredService<BuzonDePrueba>();
+        await using var plataforma = entorno.Plataforma(e.Base);
+        var correo = await plataforma.Personas.Where(p => p.Id == lider).Select(p => p.Correo).SingleAsync(Ct);
+        for (var i = 0; i < 100 && buzon.Para(correo).Count == 0; i++)
+        {
+            await Task.Delay(100, Ct);
+        }
+        var mensaje = Assert.Single(buzon.Para(correo));
+        Assert.Equal($"Tu turno de soporte es el sábado {ProximoSabado.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", mensaje.Asunto);
+        Assert.Contains("Desarrollo TI", mensaje.Texto, StringComparison.Ordinal);
+        Assert.True(await plataforma.Notificaciones.AnyAsync(n => n.PersonaId == lider && n.Tipo == "soporte.recordatorio_turno", Ct));
+        JsonElement corrida = default;
+        for (var i = 0; i < 100; i++)
+        {
+            var corridas = (await JsonAsync(await e.Lider.GetAsync("/api/v1/soporte/recordatorios"))).GetProperty("corridas");
+            if (corridas.GetArrayLength() > 0 && corridas[0].GetProperty("terminadaEn").ValueKind != JsonValueKind.Null)
+            {
+                corrida = corridas[0];
+                break;
+            }
+            await Task.Delay(100, Ct);
+        }
+        Assert.Equal("manual", corrida.GetProperty("disparo").GetString());
+        Assert.Equal(2, corrida.GetProperty("enviados").GetInt32());
+
+        // Un lector no ve el estado ni lo dispara.
+        using var lector = await EmpleadoAsync(e.Api);
+        Assert.Equal(HttpStatusCode.Forbidden, (await lector.GetAsync("/api/v1/soporte/recordatorios")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Enviar(lector, HttpMethod.Post, "/api/v1/soporte/recordatorios/ejecucion")).StatusCode);
     }
 }

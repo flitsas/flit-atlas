@@ -68,7 +68,9 @@ public class ModuloSoporteTests(Contenedores contenedores)
 
         Assert.Empty(await soporte.Database.GetPendingMigrationsAsync(Ct));
         Assert.Equal(
-            ["__ef_migraciones_soporte", "soporte_ausencia", "soporte_compensacion", "soporte_configuracion", "soporte_equipo", "soporte_festivo", "soporte_participante", "soporte_turno"],
+            ["__ef_migraciones_soporte", "soporte_ausencia", "soporte_aviso_teams", "soporte_compensacion", "soporte_configuracion", "soporte_equipo",
+                "soporte_evento_calendario", "soporte_feed_ics", "soporte_festivo", "soporte_participante", "soporte_recordatorio",
+                "soporte_recordatorio_corrida", "soporte_solicitud_cambio", "soporte_solicitud_evento", "soporte_turno"],
             (await Tablas(bd)).Except(delNucleo).Order(StringComparer.Ordinal));
     }
 
@@ -87,7 +89,8 @@ public class ModuloSoporteTests(Contenedores contenedores)
             """);
 
         Assert.Equal(
-            ["soporte_ausencia.tipo", "soporte_compensacion.nota", "soporte_configuracion.canal_externo", "soporte_turno.observacion"],
+            ["soporte_ausencia.tipo", "soporte_aviso_teams.contenido", "soporte_compensacion.nota", "soporte_configuracion.canal_externo", "soporte_solicitud_cambio.motivo",
+                "soporte_solicitud_evento.nota", "soporte_turno.observacion"],
             pii.Order(StringComparer.Ordinal));
     }
 

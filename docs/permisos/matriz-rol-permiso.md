@@ -34,14 +34,6 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.organizaciones.gestionar` | Crear y editar organizaciones (interna, clientes y proveedores). | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.auditoria.ver` | Leer la auditoría y las evidencias. | ✔ |   |   |   |   |   | ✔ |   |   |   |   |   |   |   |
 
-## Equipo y responsables (`equipo`)
-
-| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.equipo.ver` | Ver personas, responsables y el mapa de carga. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
-| `atlas.equipo.gestionar` | Cambiar el reparto de responsables, traspasos y revisiones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
-| `atlas.equipo.ver_contacto` | Ver el teléfono y los datos de contacto de las personas. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
-
 ## Contratos de integración (`contratos`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
@@ -99,6 +91,14 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.catalogo.ver` | Ver el catálogo de aplicativos y sus fichas. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
 | `atlas.catalogo.gestionar` | Crear y editar productos, módulos y servicios del catálogo. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.catalogo.editar` | Editar los datos de un aplicativo existente (descripción, repo, tecnología, ambientes, criticidad, estado, etiquetas) sin cambiar la jerarquía; el responsable, solo los suyos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
+
+## Equipo y responsables (`equipo`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.equipo.ver` | Ver personas, responsables y el mapa de carga. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
+| `atlas.equipo.gestionar` | Cambiar el reparto de responsables, traspasos y revisiones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.equipo.ver_contacto` | Ver el teléfono y los datos de contacto de las personas. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
 
 ## Hola (ejemplo) (`hola`)
 

@@ -130,7 +130,7 @@ export type Canal = 'app' | 'push' | 'correo' | 'teams';
 export interface PreferenciaCanal {
   canal: Canal;
   activa: boolean;
-  /** `false` mientras el canal no exista en este ambiente (correo y Teams llegan después). */
+  /** `false` mientras el canal no exista en este ambiente (correo sin proveedor). Teams nunca: no hay aviso personal por Teams (ATLAS-ADR-0033). */
   disponible: boolean;
   /** El canal `app` siempre está activo: es el centro de notificaciones. */
   editable: boolean;

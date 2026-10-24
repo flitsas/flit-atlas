@@ -106,9 +106,10 @@ public sealed record ConfiguracionDto(
     [property: Description("Hora de inicio por defecto (HH:mm, Bogotá).")] string HoraInicioPorDefecto,
     [property: Description("Hora de fin por defecto (HH:mm, Bogotá).")] string HoraFinPorDefecto,
     [property: Description("sin_turno o turno_normal: qué hace la generación con un sábado festivo.")] string ReglaFestivos,
-    [property: Description("Días antes del turno en que salen los recordatorios (HU 2.11).")] int? DiasAnticipacionRecordatorio,
+    [property: Description("Días antes del turno en que sale el recordatorio a la persona (HU 2.11); vacío, solo el del mismo sábado.")] int? DiasAnticipacionRecordatorio,
     [property: Description("Canal de soporte del sábado que ven los externos; vacío, no ven nada.")] string? CanalExterno,
-    [property: Description("Cuándo se guardó por última vez; vacío si nunca (valores por defecto).")] DateTimeOffset? ActualizadoEn);
+    [property: Description("Cuándo se guardó por última vez; vacío si nunca (valores por defecto).")] DateTimeOffset? ActualizadoEn,
+    [property: Description("Hora (HH:mm, Bogotá) a la que corre cada día el trabajo de recordatorios (HU 2.11); 07:00 si nunca se cambió.")] string HoraRecordatorios);
 
 [Description("Configuración global nueva: reemplaza toda la anterior.")]
 public sealed record CambioConfiguracion(
@@ -116,7 +117,8 @@ public sealed record CambioConfiguracion(
     [property: Description("Hora de fin por defecto (HH:mm, Bogotá); posterior al inicio."), MaxLength(5)] string? HoraFinPorDefecto,
     [property: Description("sin_turno o turno_normal."), MaxLength(20)] string? ReglaFestivos,
     [property: Description("Días de anticipación de los recordatorios, de 1 a 30."), Range(1, 30)] int? DiasAnticipacionRecordatorio,
-    [property: Description("Canal de soporte del sábado para externos, sin nombres de personas."), MaxLength(SoporteDbContext.LargoCanal)] string? CanalExterno);
+    [property: Description("Canal de soporte del sábado para externos, sin nombres de personas."), MaxLength(SoporteDbContext.LargoCanal)] string? CanalExterno,
+    [property: Description("Hora (HH:mm, Bogotá) del trabajo diario de recordatorios; vacío, 07:00."), MaxLength(5)] string? HoraRecordatorios = null);
 
 [Description("Participante de la rotación de un equipo.")]
 public sealed record ParticipanteDto(

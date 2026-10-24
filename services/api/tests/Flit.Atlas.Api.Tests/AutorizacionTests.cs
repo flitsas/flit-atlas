@@ -59,6 +59,10 @@ public class AutorizacionTests(EntornoApi entorno)
         "POST /api/v1/identidad/emergencia/passkey/opciones",
         "POST /api/v1/identidad/emergencia/totp/clave",
         "POST /api/v1/identidad/emergencia/activar",
+        // HU 2.10 (ATLAS-ADR-0033): feed .ics suscrito desde Outlook, Google Calendar o el teléfono, que no tienen la cookie.
+        // Se autentica con el token de 256 bits de la URL (guardado como hash, revocable y regenerable); solo vale si la
+        // persona que lo creó sigue activa y con atlas.soporte.ver; no trae correos ni teléfonos. Un token malo es 404.
+        "GET /api/v1/soporte/ics/{token}.ics",
         // Protocolo OAuth/OIDC (HU 1.3c, ATLAS-ADR-0024): OpenIddict autentica al cliente (secreto, PKCE, código o
         // refresh) antes de dejar pasar la petición; authorize toma al usuario de la sesión del BFF si la hay.
         "GET /connect/authorize",

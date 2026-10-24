@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { enviarJson, pedir } from '../../app/api';
+import { conRespaldo, conRespaldoDerivado } from '../../pwa/sinConexion';
 import type { Dia } from './fechas';
+import { RECURSO_EQUIPOS, RECURSO_ESTE_SABADO, RECURSO_TURNOS, tresMeses } from './recursos';
 
 /** Contrato de `/api/v1/soporte` (contracts/openapi/atlas.v1.yaml, etiqueta «Soporte»). Horas HH:mm de Bogotá. */
 export type EstadoTurno = 'programado' | 'confirmado' | 'aplicado' | 'reemplazado' | 'cancelado';
@@ -103,6 +105,8 @@ export interface Configuracion {
   diasAnticipacionRecordatorio: number | null;
   canalExterno: string | null;
   actualizadoEn: string | null;
+  /** HH:mm de Bogotá a la que corre cada día el trabajo de recordatorios (HU 2.11). */
+  horaRecordatorios: string;
 }
 
 export interface CambioConfiguracion {
@@ -111,6 +115,27 @@ export interface CambioConfiguracion {
   reglaFestivos: ReglaFestivos;
   diasAnticipacionRecordatorio: number | null;
   canalExterno: string | null;
+  horaRecordatorios: string | null;
+}
+
+/** Estado de los recordatorios de turno (HU 2.11): solo para quien gestiona el soporte. */
+export interface CorridaRecordatorios {
+  fecha: Dia;
+  disparo: 'programada' | 'manual';
+  iniciadaEn: string;
+  terminadaEn: string | null;
+  enviados: number;
+  fallidos: number;
+  omitidos: number;
+}
+
+export interface EstadoRecordatorios {
+  programados: boolean;
+  hora: string;
+  diasAnticipacion: number | null;
+  canales: { push: boolean; correo: boolean; teams: boolean };
+  enCurso: boolean;
+  corridas: CorridaRecordatorios[];
 }
 
 export interface Participante {
@@ -192,20 +217,153 @@ export interface Indicadores {
   cumplimiento: number | null;
 }
 
+// --- Importador del Excel (HU 2.7) ---
+
+export interface NombreImportacion {
+  texto: string;
+  clave: string;
+  coincidencia: 'exacta' | 'parcial' | 'ambigua' | 'ninguna';
+  personaId: string | null;
+  nombre: string | null;
+  nueva: boolean;
+}
+
+export interface FilaImportacion {
+  fila: number;
+  fecha: Dia | null;
+  textoFecha: string | null;
+  responsable: NombreImportacion | null;
+  estado: EstadoTurno;
+  reemplazo: NombreImportacion | null;
+  compensacion: { para: 'responsable' | 'reemplazo'; fecha: Dia | null; estado: EstadoCompensacion } | null;
+  observacion: string | null;
+  requiereRevision: boolean;
+  accion: 'crear' | 'ya_importado' | 'omitir';
+  motivo: string | null;
+  interpretaciones: string[];
+  ambiguedades: string[];
+}
+
+export interface ResumenImportacion {
+  filas: number;
+  importadas: number;
+  yaImportadas: number;
+  omitidas: number;
+  turnos: number;
+  compensaciones: number;
+  personasInactivas: number;
+  participantes: number;
+  generadosQuitados: number;
+  interpretaciones: number;
+  ambiguos: number;
+}
+
+export interface VistaPreviaImportacion {
+  equipo: EquipoResumen;
+  hoja: string;
+  huella: string;
+  resumen: ResumenImportacion;
+  filas: FilaImportacion[];
+  personasNuevas: { clave: string; nombre: string; filas: number; ultimaFecha: Dia | null; confirmada: boolean }[];
+  nombresAmbiguos: { clave: string; texto: string; candidatas: { id: string; nombre: string; activa: boolean }[]; elegida: string | null }[];
+  participantesNuevos: { personaId: string | null; nombre: string; activo: boolean }[];
+  avisos: string[];
+}
+
+export interface SolicitudImportacion {
+  equipoId: string | null;
+  nombreArchivo: string | null;
+  contenido: string;
+  crearInactivas: string[];
+  elegidas: { clave: string; personaId: string }[];
+  agregarParticipantes: boolean;
+  huella?: string;
+}
+
+// --- Cambios de turno y compensaciones (HU 2.9) ---
+
+export type EstadoSolicitud = 'pendiente_reemplazo' | 'pendiente_aprobacion' | 'aprobada' | 'rechazada' | 'cancelada';
+export type EstadoCompensacion = 'pendiente' | 'tomada';
+
+export interface SolicitudCambio {
+  id: string;
+  turno: Turno;
+  solicitante: PersonaSoporte;
+  reemplazo: PersonaSoporte;
+  estado: EstadoSolicitud;
+  motivo: string | null;
+  turnoNuevoId: string | null;
+  resueltaPor: PersonaSoporte | null;
+  resueltaEn: string | null;
+  creadaEn: string;
+  historial: { accion: string; persona: { id: string; nombre: string }; nota: string | null; ocurridoEn: string; hechaEn: string | null }[];
+  puedeResponder: boolean;
+  puedeResolver: boolean;
+  puedeCancelar: boolean;
+}
+
+export interface Compensacion {
+  id: string;
+  turno: { id: string; fecha: Dia; equipo: EquipoResumen };
+  persona: PersonaSoporte;
+  fechaCompensada: Dia | null;
+  estado: EstadoCompensacion;
+  aprobadaPor: PersonaSoporte | null;
+  nota: string | null;
+  puedeCambiar: boolean;
+  creadaEn: string;
+}
+
+export interface ReporteCompensaciones {
+  equipoId: string | null;
+  total: number;
+  personas: { persona: PersonaSoporte; pendientes: number; sinFecha: number; proxima: Dia | null; compensaciones: Compensacion[] }[];
+}
+
 const BASE = '/api/v1/soporte';
 const json = async <T>(respuesta: Promise<Response>): Promise<T> => (await (await respuesta).json()) as T;
 const conEquipo = (equipo: string | null | undefined) => (equipo ? `&equipo=${encodeURIComponent(equipo)}` : '');
 
 export const CLAVE = ['soporte'] as const;
 
+/**
+ * Sin conexión (HU 2.12) cualquier rango sale de los tres meses guardados (todos los equipos), recortado al rango y al
+ * equipo pedidos. En línea, la consulta de los tres meses de todos los equipos refresca lo guardado.
+ */
 export const obtenerCalendario = (desde: Dia, hasta: Dia, equipo?: string | null) =>
-  json<Calendario>(pedir(`${BASE}/turnos?desde=${desde}&hasta=${hasta}${conEquipo(equipo)}`));
-export const obtenerEsteSabado = () => json<EsteSabado>(pedir(`${BASE}/este-sabado`));
+  conRespaldoDerivado<Calendario, Calendario>(
+    RECURSO_TURNOS,
+    () => json<Calendario>(pedir(`${BASE}/turnos?desde=${desde}&hasta=${hasta}${conEquipo(equipo)}`)),
+    (guardado) => recortarCalendario(guardado, desde, hasta, equipo ?? null),
+    (datos) => {
+      const rango = tresMeses();
+      return !equipo && desde === rango.desde && hasta === rango.hasta ? datos : null;
+    },
+  );
+
+/** Lo guardado entre `desde` y `hasta` (y del equipo, si se pide); `null` si no toca el rango guardado. */
+export function recortarCalendario(guardado: Calendario, desde: Dia, hasta: Dia, equipo: string | null): Calendario | null {
+  if (hasta < guardado.desde || desde > guardado.hasta) return null;
+  const enRango = (fecha: Dia) => fecha >= desde && fecha <= hasta;
+  return {
+    desde,
+    hasta,
+    equipoId: equipo,
+    turnos: guardado.turnos.filter((t) => enRango(t.fecha) && (!equipo || t.equipo.id === equipo)),
+    festivos: guardado.festivos.filter((f) => enRango(f.fecha)),
+  };
+}
+
+export const obtenerEsteSabado = () => conRespaldo(RECURSO_ESTE_SABADO, () => json<EsteSabado>(pedir(`${BASE}/este-sabado`)));
 export const obtenerCanal = () => json<CanalSoporte>(pedir(`${BASE}/canal`));
 export const obtenerConfiguracion = () => json<Configuracion>(pedir(`${BASE}/configuracion`));
 export const guardarConfiguracion = (cambio: CambioConfiguracion) =>
   json<Configuracion>(enviarJson(`${BASE}/configuracion`, 'PUT', cambio));
-export const listarEquipos = () => json<Equipo[]>(pedir(`${BASE}/equipos`));
+export const obtenerRecordatorios = () => json<EstadoRecordatorios>(pedir(`${BASE}/recordatorios`));
+export const enviarRecordatoriosAhora = async () => {
+  await enviarJson(`${BASE}/recordatorios/ejecucion`, 'POST');
+};
+export const listarEquipos = () => conRespaldo(RECURSO_EQUIPOS, () => json<Equipo[]>(pedir(`${BASE}/equipos`)));
 export const crearEquipo = (cambio: CambioEquipo) => json<Equipo>(enviarJson(`${BASE}/equipos`, 'POST', cambio));
 export const cambiarEquipo = (id: string, cambio: CambioEquipo) =>
   json<Equipo>(enviarJson(`${BASE}/equipos/${encodeURIComponent(id)}`, 'PUT', cambio));
@@ -251,6 +409,65 @@ export const confirmarGeneracion = (equipoId: string, meses: number, desde: Dia,
 export const obtenerIndicadores = (desde: Dia, hasta: Dia, equipo?: string | null) =>
   json<Indicadores>(pedir(`${BASE}/indicadores?desde=${desde}&hasta=${hasta}${conEquipo(equipo)}`));
 
+export const previsualizarImportacion = (solicitud: SolicitudImportacion) =>
+  json<VistaPreviaImportacion>(enviarJson(`${BASE}/importacion/vista-previa`, 'POST', solicitud));
+export const confirmarImportacion = (solicitud: SolicitudImportacion & { huella: string }) =>
+  json<{ importacionId: string; informe: VistaPreviaImportacion }>(enviarJson(`${BASE}/importacion/confirmar`, 'POST', solicitud));
+
+export const RUTA_SOLICITUDES = `${BASE}/solicitudes-cambio`;
+export const listarSolicitudes = (estado: 'abiertas' | 'cerradas' | 'todas' = 'abiertas') =>
+  json<SolicitudCambio[]>(pedir(`${RUTA_SOLICITUDES}?estado=${estado}`));
+export const obtenerReporteCompensaciones = () => json<ReporteCompensaciones>(pedir(`${BASE}/compensaciones/pendientes`));
+export const listarCompensaciones = (estado: 'pendiente' | 'tomada' | 'todas' = 'todas') =>
+  json<Compensacion[]>(pedir(`${BASE}/compensaciones?estado=${estado}`));
+export const registrarCompensacion = (turnoId: string, fechaCompensada: Dia | null, nota: string | null) =>
+  json<Compensacion>(enviarJson(`${BASE}/compensaciones`, 'POST', { turnoId, fechaCompensada, nota }));
+export const cambiarCompensacion = (id: string, cambio: { fechaCompensada: Dia | null; estado: EstadoCompensacion; nota: string | null }) =>
+  json<Compensacion>(enviarJson(`${BASE}/compensaciones/${encodeURIComponent(id)}`, 'PUT', cambio));
+
+// --- Microsoft 365 (HU 2.10, ATLAS-ADR-0033) ---
+
+export interface EstadoM365 {
+  calendario: {
+    activo: boolean;
+    /** Por qué está apagado (local, dev o sin permisos); vacío si está activo. */
+    motivo: string | null;
+    nombreCalendario: string;
+    pendientes: number;
+    conErrores: number;
+    ultimaSincronizacion: string | null;
+  };
+  teams: { activo: boolean; motivo: string | null; pendientes: number };
+}
+
+export type TipoFeed = 'personal' | 'equipo';
+
+export interface FeedIcs {
+  id: string;
+  tipo: TipoFeed;
+  equipo: EquipoResumen | null;
+  creadoEn: string;
+  ultimoUsoEn: string | null;
+}
+
+/** La URL lleva el token: solo se ve al crearlo o regenerarlo. */
+export interface FeedIcsCreado {
+  id: string;
+  tipo: TipoFeed;
+  equipo: EquipoResumen | null;
+  url: string;
+  urlWebcal: string;
+  creadoEn: string;
+}
+
+export const obtenerEstadoM365 = () => json<EstadoM365>(pedir(`${BASE}/microsoft-365`));
+export const listarFeeds = () => json<FeedIcs[]>(pedir(`${BASE}/feeds`));
+export const crearFeed = (tipo: TipoFeed, equipoId: string | null) =>
+  json<FeedIcsCreado>(enviarJson(`${BASE}/feeds`, 'POST', { tipo, equipoId }));
+export const revocarFeed = async (id: string) => {
+  await enviarJson(`${BASE}/feeds/${encodeURIComponent(id)}`, 'DELETE');
+};
+
 export function useCalendario(desde: Dia, hasta: Dia, equipo: string | null) {
   return useQuery({
     queryKey: [...CLAVE, 'turnos', desde, hasta, equipo ?? 'todos'],
@@ -292,3 +509,20 @@ export const textoCupo = (e: Pick<Equipo, 'personasMinimo' | 'personasMaximo'>):
   e.personasMinimo === e.personasMaximo
     ? `${e.personasMaximo} ${e.personasMaximo === 1 ? 'persona' : 'personas'} por sábado`
     : `${e.personasMinimo} a ${e.personasMaximo} personas por sábado`;
+
+export const TEXTO_SOLICITUD: Record<EstadoSolicitud, string> = {
+  pendiente_reemplazo: 'Espera al reemplazo',
+  pendiente_aprobacion: 'Espera aprobación',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+  cancelada: 'Cancelada',
+};
+
+export const TEXTO_PASO: Record<string, string> = {
+  solicitada: 'Solicitó el cambio',
+  aceptada: 'Aceptó el reemplazo',
+  rechazada_por_reemplazo: 'No aceptó el reemplazo',
+  aprobada: 'Aprobó el cambio',
+  rechazada: 'Rechazó el cambio',
+  cancelada: 'Canceló la solicitud',
+};

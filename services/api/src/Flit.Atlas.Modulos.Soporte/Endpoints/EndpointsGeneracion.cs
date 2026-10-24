@@ -4,8 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using Flit.Atlas.Modulos.Soporte.Datos;
 using Flit.Atlas.Modulos.Soporte.Dominio;
+using Flit.Atlas.Modulos.Soporte.Dominio.Microsoft365;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Microsoft365;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -218,7 +220,8 @@ internal static class EndpointsGeneracion
 
     private static async Task<IResult> ConfirmarAsync(
         [Description("Equipo, ventana y huella de la vista previa que se publica.")] ConfirmacionGeneracion confirmacion,
-        HttpContext http, IPermisosDeSesion permisos, SoporteDbContext soporte, PlataformaDbContext plataforma, TimeProvider reloj, CancellationToken ct)
+        HttpContext http, IPermisosDeSesion permisos, SoporteDbContext soporte, PlataformaDbContext plataforma, ColaAvisosTeams avisosTeams,
+        TimeProvider reloj, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(confirmacion.Huella))
         {
@@ -256,6 +259,19 @@ internal static class EndpointsGeneracion
             GeneracionId = generacion,
             CreadoPorPersonaId = persona,
         }));
+        if (crear.Count + quitar.Count > 0)
+        {
+            // Aviso en el canal de Teams del soporte (HU 2.10), con los sábados nuevos.
+            var nombres = await PersonasAsync(plataforma, crear.Select(c => c.Persona), ct);
+            var dia = static (DateOnly f) => f.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            avisosTeams.Encolar(soporte, TipoAvisoTeams.GeneracionPublicada, new MensajeTeams(
+                $"Rotación publicada: {p.Equipo.Nombre}",
+                $"Se publicó la rotación del soporte de los sábados de {p.Equipo.Nombre} del {dia(p.Desde)} al {dia(p.Hasta)}: " +
+                $"{crear.Count} {(crear.Count == 1 ? "turno nuevo" : "turnos nuevos")} y {quitar.Count} {(quitar.Count == 1 ? "quitado" : "quitados")}. " +
+                "Cada persona recibe su evento en Outlook.",
+                [.. crear.OrderBy(c => c.Fecha).Select(c => new HechoTeams(dia(c.Fecha), NombreDe(nombres, c.Persona)))],
+                avisosTeams.Enlace("/soporte"), "Ver el calendario"));
+        }
         await GuardarAsync(soporte, plataforma,
             [Evento(http, reloj, "generacion_confirmada", "soporte_generacion", generacion,
                 new { equipoId = p.Equipo.Id, desde = p.Desde, hasta = p.Hasta, creados = crear.Count, eliminados = quitar.Count, huella = p.Huella })], ct);

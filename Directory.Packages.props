@@ -32,6 +32,8 @@
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" Version="10.0.13" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Identity.Web" Version="4.16.0" />
+    <!-- La que ya trae Microsoft.Identity.Web 4.16.0; el módulo de equipo la usa para el JWT de la GitHub App. -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <!-- Servidor de tokens (HU 1.3c, ATLAS-ADR-0024). Apache-2.0; 7.7.1 del 17/09/2026 ya trae el arreglo de
          GHSA-925x-4h4v-2792. La 7.7.2 (10/10/2026) no tiene 2 semanas y no trae arreglos de seguridad. -->
     <PackageVersion Include="OpenIddict.AspNetCore" Version="7.7.1" />
@@ -49,6 +51,9 @@
     <PackageVersion Include="MimeKit" Version="4.18.1" />
     <!-- QR del TOTP como SVG (HU 1.5). MIT, sin dependencias. -->
     <PackageVersion Include="QRCoder" Version="1.8.0" />
+    <!-- Lectura del .xlsx de la rotación de soporte (HU 2.7, ATLAS-ADR-0029). SDK de Open XML de Microsoft, MIT; 3.5.1 del
+         18/03/2026. Solo depende de System.IO.Packaging (MIT). Se prefirió a ClosedXML por tener menos dependencias. -->
+    <PackageVersion Include="DocumentFormat.OpenXml" Version="3.5.1" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
@@ -66,6 +71,8 @@
   <ItemGroup Label="Pruebas">
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <!-- Reloj falso de las pruebas de la sincronización con Microsoft 365 (HU 2.10). 10.10.0 es del 09/09/2026; MIT. -->
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <PackageVersion Include="Testcontainers.RabbitMq" Version="4.15.0" />
     <PackageVersion Include="Testcontainers.Redis" Version="4.15.0" />
