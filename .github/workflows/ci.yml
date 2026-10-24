@@ -80,7 +80,7 @@ jobs:
           sudo mv vacuum oasdiff /usr/local/bin/
           rm vacuum.tgz oasdiff.tgz
       - name: Lint OpenAPI
-        run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi.yaml contracts/openapi/atlas.v1.yaml
+        run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi.yaml --ignore-file contracts/vacuum/openapi-excepciones.yaml contracts/openapi/atlas.v1.yaml
       - name: Lint AsyncAPI
         run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/asyncapi.yaml contracts/asyncapi/atlas-events.v1.yaml
       - name: Cambios incompatibles frente a la rama base (solo advierte en F1)

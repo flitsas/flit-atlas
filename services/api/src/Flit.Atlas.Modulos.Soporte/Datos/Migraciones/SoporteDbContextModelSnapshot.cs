@@ -74,6 +74,73 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.AvisoTeams", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Canal")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("canal");
+
+                    b.Property<string>("Contenido")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("contenido")
+                        .HasComment("@pii");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTimeOffset?>("EnviadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enviado_en");
+
+                    b.Property<int>("Intentos")
+                        .HasColumnType("integer")
+                        .HasColumnName("intentos");
+
+                    b.Property<bool>("Pendiente")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pendiente");
+
+                    b.Property<DateTimeOffset>("ProximoIntentoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("proximo_intento_en");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<string>("UltimoError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("ultimo_error");
+
+                    b.HasKey("Id")
+                        .HasName("pk_soporte_aviso_teams");
+
+                    b.HasIndex("ProximoIntentoEn")
+                        .HasDatabaseName("ix_soporte_aviso_teams_pendientes")
+                        .HasFilter("pendiente");
+
+                    b.ToTable("soporte_aviso_teams", "atlas", t =>
+                        {
+                            t.HasComment("Avisos por publicar en un canal de Teams, con reintentos (HU 2.10 y 2.11).");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.Compensacion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -283,6 +350,75 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.EventoCalendario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("EventoGraphId")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("evento_graph_id");
+
+                    b.Property<int>("Intentos")
+                        .HasColumnType("integer")
+                        .HasColumnName("intentos");
+
+                    b.Property<bool>("Pendiente")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pendiente");
+
+                    b.Property<Guid?>("PersonaSincronizadaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_sincronizada_id");
+
+                    b.Property<DateTimeOffset>("ProximoIntentoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("proximo_intento_en");
+
+                    b.Property<DateTimeOffset?>("SincronizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sincronizado_en");
+
+                    b.Property<Guid>("TurnoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("turno_id");
+
+                    b.Property<string>("UltimoError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("ultimo_error");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_soporte_evento_calendario");
+
+                    b.HasIndex("ProximoIntentoEn")
+                        .HasDatabaseName("ix_soporte_evento_calendario_pendientes")
+                        .HasFilter("pendiente");
+
+                    b.HasIndex("TurnoId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_soporte_evento_calendario_turno_id");
+
+                    b.ToTable("soporte_evento_calendario", "atlas", t =>
+                        {
+                            t.HasComment("Evento de Outlook de cada turno en el calendario compartido (id de Graph) y su sincronización pendiente (HU 2.10).");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.EventoSolicitudCambio", b =>
                 {
                     b.Property<Guid>("Id")
@@ -338,6 +474,74 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                     b.ToTable("soporte_solicitud_evento", "atlas", t =>
                         {
                             t.HasComment("Historial de cada solicitud de cambio, con la llave de idempotencia de cada acción.");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.FeedIcs", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("EquipoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("equipo_id");
+
+                    b.Property<Guid>("PersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_id");
+
+                    b.Property<DateTimeOffset?>("RevocadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revocado_en");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("tipo");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("token_hash")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset?>("UltimoUsoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultimo_uso_en");
+
+                    b.HasKey("Id")
+                        .HasName("pk_soporte_feed_ics");
+
+                    b.HasIndex("EquipoId")
+                        .HasDatabaseName("ix_soporte_feed_ics_equipo_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_soporte_feed_ics_token_hash");
+
+                    b.HasIndex("PersonaId", "Tipo", "EquipoId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_soporte_feed_ics_vigente")
+                        .HasFilter("revocado_en IS NULL");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("PersonaId", "Tipo", "EquipoId"), false);
+
+                    b.ToTable("soporte_feed_ics", "atlas", t =>
+                        {
+                            t.HasComment("Feeds .ics personales y de equipo; el token solo se guarda como hash SHA-256 (HU 2.10).");
+
+                            t.HasCheckConstraint("ck_soporte_feed_ics_equipo", "(tipo = 'equipo') = (equipo_id IS NOT NULL)");
                         });
                 });
 
@@ -618,6 +822,15 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_soporte_solicitud_evento_soporte_solicitud_cambio_solicitud");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.FeedIcs", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Soporte.Datos.EquipoSoporte", null)
+                        .WithMany()
+                        .HasForeignKey("EquipoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_soporte_feed_ics_soporte_equipo_equipo_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.Participante", b =>

@@ -370,6 +370,49 @@ export const registrarCompensacion = (turnoId: string, fechaCompensada: Dia | nu
 export const cambiarCompensacion = (id: string, cambio: { fechaCompensada: Dia | null; estado: EstadoCompensacion; nota: string | null }) =>
   json<Compensacion>(enviarJson(`${BASE}/compensaciones/${encodeURIComponent(id)}`, 'PUT', cambio));
 
+// --- Microsoft 365 (HU 2.10, ATLAS-ADR-0033) ---
+
+export interface EstadoM365 {
+  calendario: {
+    activo: boolean;
+    /** Por qué está apagado (local, dev o sin permisos); vacío si está activo. */
+    motivo: string | null;
+    nombreCalendario: string;
+    pendientes: number;
+    conErrores: number;
+    ultimaSincronizacion: string | null;
+  };
+  teams: { activo: boolean; motivo: string | null; pendientes: number };
+}
+
+export type TipoFeed = 'personal' | 'equipo';
+
+export interface FeedIcs {
+  id: string;
+  tipo: TipoFeed;
+  equipo: EquipoResumen | null;
+  creadoEn: string;
+  ultimoUsoEn: string | null;
+}
+
+/** La URL lleva el token: solo se ve al crearlo o regenerarlo. */
+export interface FeedIcsCreado {
+  id: string;
+  tipo: TipoFeed;
+  equipo: EquipoResumen | null;
+  url: string;
+  urlWebcal: string;
+  creadoEn: string;
+}
+
+export const obtenerEstadoM365 = () => json<EstadoM365>(pedir(`${BASE}/microsoft-365`));
+export const listarFeeds = () => json<FeedIcs[]>(pedir(`${BASE}/feeds`));
+export const crearFeed = (tipo: TipoFeed, equipoId: string | null) =>
+  json<FeedIcsCreado>(enviarJson(`${BASE}/feeds`, 'POST', { tipo, equipoId }));
+export const revocarFeed = async (id: string) => {
+  await enviarJson(`${BASE}/feeds/${encodeURIComponent(id)}`, 'DELETE');
+};
+
 export function useCalendario(desde: Dia, hasta: Dia, equipo: string | null) {
   return useQuery({
     queryKey: [...CLAVE, 'turnos', desde, hasta, equipo ?? 'todos'],

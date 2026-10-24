@@ -6071,6 +6071,153 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.soporte.aprobar
+  /api/v1/soporte/microsoft-365:
+    get:
+      tags:
+        - Soporte
+      summary: Estado de Microsoft 365 del soporte
+      description: 'Si el calendario compartido de Outlook y los avisos en el canal de Teams están activos en este ambiente (y, si no, por qué), cuántos eventos y avisos esperan sincronizarse y cuándo fue la última sincronización. Sin la configuración (local, dev) todo aparece apagado con su motivo. Requiere atlas.soporte.ver.'
+      operationId: ObtenerEstadoM365Soporte
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoM365Dto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.soporte.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+  /api/v1/soporte/feeds:
+    get:
+      tags:
+        - Soporte
+      summary: Mis feeds .ics
+      description: 'Los feeds .ics vigentes de la persona en sesión (el personal y los de equipo), sin su URL: el token solo se muestra al crearlo. Requiere atlas.soporte.ver.'
+      operationId: ListarFeedsIcsSoporte
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedIcsDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.soporte.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+    post:
+      tags:
+        - Soporte
+      summary: Crear o regenerar un feed .ics
+      description: 'Crea el feed personal (mis turnos) o el de un equipo y devuelve su URL con el token, que no se vuelve a mostrar. Si ya había uno igual, lo revoca (regenerar). El feed no trae correos ni teléfonos. Queda en la auditoría. Requiere atlas.soporte.ver.'
+      operationId: CrearFeedIcsSoporte
+      requestBody:
+        description: 'Tipo de feed y, si es de equipo, cuál.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudFeedIcs'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedIcsCreadoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.ver.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+  '/api/v1/soporte/feeds/{id}':
+    delete:
+      tags:
+        - Soporte
+      summary: Revocar un feed .ics
+      description: Su URL deja de funcionar de inmediato. Solo los propios. Queda en la auditoría. Requiere atlas.soporte.ver.
+      operationId: RevocarFeedIcsSoporte
+      parameters:
+        - name: id
+          in: path
+          description: Id del feed.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.ver.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.ver
+  '/api/v1/soporte/ics/{token}.ics':
+    get:
+      tags:
+        - Soporte
+      summary: Feed .ics (calendario suscrito)
+      description: 'iCalendar (RFC 5545, zona America/Bogota) con los turnos vigentes del feed, de 90 días atrás a un año adelante. Sin sesión: se autentica con el token de la URL, que solo vale mientras no se revoque y la persona que lo creó siga activa y con atlas.soporte.ver. Un token desconocido o revocado responde 404.'
+      operationId: ObtenerFeedIcsSoporte
+      parameters:
+        - name: token
+          in: path
+          description: Token del feed (43 caracteres base64url).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/calendar:
+              schema:
+                type: string
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
 components:
   schemas:
     AceptacionDocumento:
@@ -7415,6 +7562,61 @@ components:
           type: string
           description: 'Mensaje para la persona, en español.'
       description: Error de una operación de soporte.
+    EstadoCalendarioM365Dto:
+      required:
+        - activo
+        - motivo
+        - nombreCalendario
+        - pendientes
+        - conErrores
+        - ultimaSincronizacion
+      type: object
+      properties:
+        activo:
+          type: boolean
+          description: Si los turnos se sincronizan con el calendario compartido.
+        motivo:
+          type:
+            - 'null'
+            - string
+          description: Por qué está apagado; vacío si está activo.
+        nombreCalendario:
+          type: string
+          description: Nombre del calendario.
+        pendientes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Turnos con cambios que aún no llegan a Outlook.
+          format: int32
+        conErrores:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'De esos, los que fallaron al menos una vez (se reintentan solos).'
+          format: int32
+        ultimaSincronizacion:
+          type:
+            - 'null'
+            - string
+          description: Última vez que un evento quedó sincronizado.
+          format: date-time
+      description: Estado del calendario compartido «Soporte TI sábados».
+    EstadoM365Dto:
+      required:
+        - calendario
+        - teams
+      type: object
+      properties:
+        calendario:
+          description: Calendario compartido de Outlook.
+          $ref: '#/components/schemas/EstadoCalendarioM365Dto'
+        teams:
+          description: Avisos en el canal de Teams.
+          $ref: '#/components/schemas/EstadoTeamsM365Dto'
+      description: Estado de la integración del soporte con Microsoft 365 en este ambiente.
     EstadoSincronizacion:
       required:
         - id
@@ -7509,6 +7711,29 @@ components:
             - string
           description: 'Tipo de la excepción si la corrida falló (sin el mensaje, que podría traer datos).'
       description: 'Resultado de la última corrida de la sincronización de personas con Microsoft Graph. Solo conteos, sin datos personales.'
+    EstadoTeamsM365Dto:
+      required:
+        - activo
+        - motivo
+        - pendientes
+      type: object
+      properties:
+        activo:
+          type: boolean
+          description: Si los avisos salen al canal.
+        motivo:
+          type:
+            - 'null'
+            - string
+          description: Por qué está apagado; vacío si está activo.
+        pendientes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Avisos en cola.
+          format: int32
+      description: Estado de los avisos en el canal de Teams del soporte.
     EsteSabadoDto:
       required:
         - fecha
@@ -7562,6 +7787,71 @@ components:
           description: 'Cuándo lo hizo la persona en su dispositivo, si lo hizo sin conexión.'
           format: date-time
       description: Paso del historial de una solicitud de cambio.
+    FeedIcsCreadoDto:
+      required:
+        - id
+        - tipo
+        - equipo
+        - url
+        - urlWebcal
+        - creadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id del feed.
+          format: uuid
+        tipo:
+          type: string
+          description: personal o equipo.
+        equipo:
+          oneOf:
+            - type: 'null'
+            - description: Equipo del feed de equipo.
+              $ref: '#/components/schemas/EquipoResumenDto'
+        url:
+          type: string
+          description: 'URL HTTPS para suscribirse desde Outlook, Google Calendar o el teléfono.'
+        urlWebcal:
+          type: string
+          description: La misma URL con el esquema webcal:// (abre la app de calendario).
+        creadoEn:
+          type: string
+          description: Cuándo se creó.
+          format: date-time
+      description: 'Feed .ics recién creado: la URL lleva el token y no se vuelve a mostrar.'
+    FeedIcsDto:
+      required:
+        - id
+        - tipo
+        - equipo
+        - creadoEn
+        - ultimoUsoEn
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id del feed.
+          format: uuid
+        tipo:
+          type: string
+          description: personal (mis turnos) o equipo.
+        equipo:
+          oneOf:
+            - type: 'null'
+            - description: Equipo del feed de equipo; vacío en el personal.
+              $ref: '#/components/schemas/EquipoResumenDto'
+        creadoEn:
+          type: string
+          description: Cuándo se creó o se regeneró.
+          format: date-time
+        ultimoUsoEn:
+          type:
+            - 'null'
+            - string
+          description: Última vez que un calendario lo leyó (con precisión de una hora).
+          format: date-time
+      description: Feed .ics vigente de la persona en sesión (sin su URL).
     FestivoDto:
       required:
         - fecha
@@ -10362,6 +10652,25 @@ components:
           description: Día de la revisión (hoy o después).
           format: date
       description: Fecha de la próxima revisión.
+    SolicitudFeedIcs:
+      required:
+        - tipo
+        - equipoId
+      type: object
+      properties:
+        tipo:
+          maxLength: 20
+          type:
+            - 'null'
+            - string
+          description: personal o equipo.
+        equipoId:
+          type:
+            - 'null'
+            - string
+          description: Equipo del feed de equipo.
+          format: uuid
+      description: Feed .ics que se crea o se regenera.
     SolicitudGeneracion:
       required:
         - equipoId
@@ -11256,4 +11565,4 @@ tags:
   - name: Hola
     description: 'Módulo de ejemplo de docs/como-crear-un-modulo.md: saludos por organización con permisos, predicado obligatorio y RLS. Apagado por defecto (bandera modulo.hola).'
   - name: Soporte
-    description: 'Soporte de los sábados por equipos de cada área: configuración, equipos, participantes, turnos con estados y horario, ausencias, festivos de Colombia, generación automática con vista previa, indicadores, importador del Excel con revisión, cambios de turno y compensaciones.'
+    description: 'Soporte de los sábados por equipos de cada área: configuración, equipos, participantes, turnos con estados y horario, ausencias, festivos de Colombia, generación automática con vista previa, indicadores, importador del Excel con revisión, cambios de turno y compensaciones, y Microsoft 365: calendario compartido de Outlook, avisos en el canal de Teams y feeds .ics.'

@@ -1,6 +1,7 @@
 using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Mensajeria;
+using Flit.Atlas.Plataforma.Microsoft365;
 using Flit.Atlas.Plataforma.Notificaciones;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.Extensions.Configuration;
@@ -55,6 +56,15 @@ public static class ExtensionesPlataforma
             string.Equals(sp.GetRequiredService<IConfiguration>()[$"{OpcionesCorreo.Seccion}:Proveedor"], OpcionesCorreo.ProveedorSmtp, StringComparison.OrdinalIgnoreCase)
                 ? ActivatorUtilities.CreateInstance<EnviadorSmtp>(sp)
                 : ActivatorUtilities.CreateInstance<EnviadorDesactivado>(sp));
+
+        // Microsoft 365 para los módulos (ATLAS-ADR-0033): el token de aplicación de Graph lo pone la identidad cuando hay
+        // Entra (sin Entra, nada llama a Graph) y los avisos de Teams salen por el webhook de un flujo de Workflows. El
+        // cliente de Teams no registra sus peticiones: la URL del flujo es la credencial.
+        servicios.TryAddScoped<IAccesoGraph, SinAccesoGraph>();
+        servicios.AddHttpClient(ClienteGraph.Nombre, c => c.BaseAddress = ClienteGraph.Base);
+        servicios.AddOptions<OpcionesTeams>().BindConfiguration(OpcionesTeams.Seccion);
+        servicios.AddHttpClient(NotificadorTeamsWorkflows.NombreCliente).RemoveAllLoggers();
+        servicios.TryAddSingleton<INotificadorTeams, NotificadorTeamsWorkflows>();
 
         // Lecturas entre módulos (ATLAS-ADR-0031): por defecto vacías; el catálogo y el soporte registran las suyas.
         servicios.TryAddScoped<Modulos.ILectorAplicativos, Modulos.SinAplicativos>();

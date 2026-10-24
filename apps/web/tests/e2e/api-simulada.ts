@@ -369,6 +369,27 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         });
       case '/api/v1/soporte/festivos':
         return json(route, [{ fecha: '2026-12-25', nombre: 'Navidad', tipo: 'fijo', trasladado: false, id: null }]);
+      // HU 2.10: Microsoft 365 apagado (como en local y dev) y un feed de equipo.
+      case '/api/v1/soporte/microsoft-365':
+        return json(route, {
+          calendario: {
+            activo: false,
+            motivo: 'Falta el buzón compartido del calendario (Soporte__M365__Buzon) y su permiso en Graph.',
+            nombreCalendario: 'Soporte TI sábados',
+            pendientes: 0,
+            conErrores: 0,
+            ultimaSincronizacion: null,
+          },
+          teams: { activo: false, motivo: 'Falta la URL del flujo de Workflows del canal de Teams (Plataforma__Teams__Canales__soporte).', pendientes: 0 },
+        });
+      case '/api/v1/soporte/feeds':
+        if (route.request().method() === 'POST')
+          return json(route, {
+            id: 'f1', tipo: 'personal', equipo: null, creadoEn: '2026-10-23T15:00:00Z',
+            url: 'https://atlas.ejemplo.com/api/v1/soporte/ics/token-ficticio-de-una-direccion-larga-para-el-movil.ics',
+            urlWebcal: 'webcal://atlas.ejemplo.com/api/v1/soporte/ics/token-ficticio-de-una-direccion-larga-para-el-movil.ics',
+          }, 201);
+        return json(route, [{ id: 'f0', tipo: 'equipo', equipo: { id: 'e2', nombre: 'Operaciones' }, creadoEn: '2026-10-22T15:00:00Z', ultimoUsoEn: '2026-10-23T10:00:00Z' }]);
       default: {
         const ficha = /^\/api\/v1\/catalogo\/aplicativos\/([a-z0-9-]+)$/.exec(url.pathname);
         const aplicativo = ficha && APLICATIVOS.find((a) => a.slug === ficha[1]);

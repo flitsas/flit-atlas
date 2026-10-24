@@ -57,6 +57,7 @@ internal static class EndpointsSoporte
         EndpointsConsultas.Mapear(grupo);
         EndpointsImportacion.Mapear(grupo);
         EndpointsCambios.Mapear(grupo);
+        EndpointsM365.Mapear(grupo);
     }
 
     private static void MapearEquipos(RouteGroupBuilder grupo)

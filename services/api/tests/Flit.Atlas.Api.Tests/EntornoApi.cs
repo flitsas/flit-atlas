@@ -98,7 +98,7 @@ public sealed class EntornoApi : IAsyncLifetime
     /// </summary>
     public WebApplicationFactory<Program> Api(
         string ambiente = "local", bool simulado = true, string? baseDeDatos = null,
-        IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null) =>
+        IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null, Action<IServiceCollection>? servicios = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             // HU 1.5: sin consultar Have I Been Pwned (sin red en CI) y con la URL pública de los enlaces de los correos.
@@ -125,6 +125,7 @@ public sealed class EntornoApi : IAsyncLifetime
                 {
                     s.AddSingleton(reloj);
                 }
+                servicios?.Invoke(s);
             });
             b.UseSetting("ConnectionStrings:atlas", baseDeDatos ?? Postgres.GetConnectionString());
             b.UseSetting("ConnectionStrings:redis", Redis.GetConnectionString());

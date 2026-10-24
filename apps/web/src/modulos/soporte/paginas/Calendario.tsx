@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, BarChart3, ChevronLeft, ChevronRight, Plus, Settings2 } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, CalendarPlus, ChevronLeft, ChevronRight, Plus, Settings2 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -139,6 +139,10 @@ export default function Calendario() {
         <Link to="/soporte/cambios" className="inline-flex min-h-toque items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-atlas-activo">
           <ArrowLeftRight className="size-4" aria-hidden="true" />
           Cambios y compensaciones
+        </Link>
+        <Link to="/soporte/microsoft-365" className="inline-flex min-h-toque items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-atlas-activo">
+          <CalendarPlus className="size-4" aria-hidden="true" />
+          Outlook y calendarios
         </Link>
         {gestiona && (
           <>
