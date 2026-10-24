@@ -1,13 +1,16 @@
 import { Archive, ArrowLeft, ChevronRight, Pencil, Pin, Plus, Send } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
-import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
 import { NoEncontrada } from '../../../app/paginas/Estados';
+import { useSesionOpcional } from '../../../app/sesion';
 import { formatearFechaHora } from '../../../app/ui/formato';
 import { Hoja } from '../../../app/ui/Hoja';
+import { BotonCompartir } from '../../../app/ui/Compartir';
 import { Boton, Tarjeta } from '../../../app/ui/Tarjeta';
 import { Etiqueta } from '../componentes/ui';
+import { ExportarPaquete } from '../exportaciones/ExportarPaquete';
 import { type Aviso, Cargando, MostrarAviso } from '../guias/componentes';
 import {
   archivarPaquete,
@@ -59,8 +62,15 @@ function Volver({ a, texto }: { a: string; texto: string }) {
 // --- Lista ---
 
 function Lista() {
+  const [parametros] = useSearchParams();
   const [vista, setVista] = useState<'activos' | 'archivados'>('activos');
   const lista = usePaquetes(vista === 'archivados' ? { estado: 'archivado' } : {});
+  // Enlace de la notificación «Tu exportación está lista» (HU 4.5): `?paquete=<id>&exportacion=<id>` abre el paquete con su exportación.
+  const paquete = parametros.get('paquete');
+  if (paquete) {
+    const exportacion = parametros.get('exportacion');
+    return <Navigate replace to={`/contratos/paquetes/${encodeURIComponent(paquete)}${exportacion ? `?exportacion=${encodeURIComponent(exportacion)}` : ''}`} />;
+  }
   return (
     <>
       <Volver a="/contratos" texto="Contratos" />
@@ -152,6 +162,8 @@ function Nuevo() {
 function Detalle() {
   const { paqueteId = '' } = useParams();
   const ubicacion = useLocation();
+  const [parametros] = useSearchParams();
+  const puedeExportar = useSesionOpcional()?.acceso.permisos?.includes('atlas.exportaciones.solicitar') ?? false;
   const inicial = (ubicacion.state as { aviso?: string } | null)?.aviso;
   const detalle = usePaquete(paqueteId);
   const [editando, setEditando] = useState(false);
@@ -232,6 +244,20 @@ function Detalle() {
       </header>
       <InsigniasPaquete paquete={p} />
       <MostrarAviso aviso={aviso} />
+
+      <div className="flex flex-wrap gap-2">
+        {/* Sin revisión, el servidor exporta la vigente o, si nunca se publicó, la última (HU 4.5). */}
+        {puedeExportar && (
+          <ExportarPaquete
+            base="/api/v1/contratos"
+            origen={{ paqueteId: p.id }}
+            exportacionInicial={parametros.get('exportacion')}
+            enlace={{ ruta: `/contratos/paquetes/${encodeURIComponent(p.id)}`, titulo: p.nombre, que: 'este paquete', etiqueta: 'Compartir enlace al paquete' }}
+          />
+        )}
+        {/* HU 4.6: el enlace interno del paquete (sin `?exportacion=`, que es de cada persona). */}
+        <BotonCompartir ruta={`/contratos/paquetes/${encodeURIComponent(p.id)}`} titulo={p.nombre} que="este paquete" />
+      </div>
 
       {gestionable && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Acciones del paquete">

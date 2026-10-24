@@ -507,6 +507,103 @@ public sealed class HistorialCanal : Entidad
     public string? Ejecucion { get; init; }
 }
 
+/// <summary>Estado de una exportación (HU 4.5, ATLAS-ADR-0042).</summary>
+public enum EstadoExportacion
+{
+    /// <summary>Solicitada: la entrada está en el S3 y el evento en la outbox; atlas-docs aún no la toma.</summary>
+    Pendiente,
+
+    /// <summary>atlas-docs la está generando.</summary>
+    Procesando,
+
+    /// <summary>Los archivos están en el S3: se descargan con una URL firmada.</summary>
+    Lista,
+
+    /// <summary>No se pudo generar (spec inválido, PDF no disponible, tiempo agotado…).</summary>
+    Fallida,
+
+    /// <summary>Pasó la retención: los archivos se borraron del S3.</summary>
+    Vencida,
+}
+
+/// <summary>Qué se exporta: un paquete en una revisión (podado, para clientes) o una versión completa (solo internos).</summary>
+public enum OrigenExportacion
+{
+    Paquete,
+    Version,
+}
+
+/// <summary>
+/// Una exportación de contratos (plan 00 §8.4 y §8.7, HU 4.5, ATLAS-ADR-0042): quién la pidió, de qué organización si es
+/// externo, el origen (<c>{paqueteId, revision}</c> o <c>{versionId}</c>), los formatos, el estado y lo que dejó
+/// atlas-docs en el S3 (claves, hash del contenido). Con <c>organizacion_id</c>: predicado obligatorio y RLS, como toda
+/// tabla con datos de organizaciones. Nunca guarda el contenido del spec: la entrada vive en el S3.
+/// </summary>
+public sealed class ExportacionContratos : Entidad
+{
+    /// <summary>Persona que la pidió: la única que la ve y la descarga.</summary>
+    public required Guid SolicitadaPor { get; init; }
+
+    /// <summary>Organización del externo que la pidió desde el portal; vacío si es interna.</summary>
+    public Guid? OrganizacionId { get; init; }
+
+    /// <summary>Se pidió desde el portal de clientes (decide qué endpoints la leen y el enlace del aviso).</summary>
+    public bool DesdePortal { get; init; }
+
+    public required OrigenExportacion Origen { get; init; }
+
+    public Guid? PaqueteId { get; init; }
+
+    /// <summary>Revisión del paquete que se exportó.</summary>
+    public int? Revision { get; init; }
+
+    public Guid? VersionId { get; init; }
+
+    /// <summary>Contrato de la versión (para el enlace del aviso).</summary>
+    public Guid? ContratoId { get; init; }
+
+    /// <summary>Para mostrar: «Integración ICT · revisión 3» o «core-ict 1.1.0».</summary>
+    public required string Nombre { get; init; }
+
+    /// <summary><c>openapi</c>, <c>postman</c>, <c>html</c>, <c>pdf</c>, <c>word</c>, <c>excel</c> y siempre <c>zip</c>.</summary>
+    public List<string> Formatos { get; init; } = [];
+
+    public EstadoExportacion Estado { get; set; } = EstadoExportacion.Pendiente;
+
+    /// <summary>Clave del «paquete a exportar» en el S3: <c>exportaciones/&lt;id&gt;/entrada.json</c>.</summary>
+    public required string EntradaClave { get; init; }
+
+    /// <summary>SHA-256 de la entrada tal como se subió (qué se le entregó a atlas-docs).</summary>
+    public required string EntradaSha256 { get; init; }
+
+    /// <summary>Clave del ZIP en el S3, cuando está lista.</summary>
+    public string? Objeto { get; set; }
+
+    /// <summary>SHA-256 del contenido exportado que calcula atlas-docs (va en la portada de cada formato).</summary>
+    public string? HashContenido { get; set; }
+
+    /// <summary>Archivos en el S3 (<c>jsonb</c>): <c>[{clave, ruta, formato, bytes, sha256, tipo}]</c>.</summary>
+    public string Archivos { get; set; } = "[]";
+
+    /// <summary><c>spec_invalido</c>, <c>pdf_no_disponible</c>, <c>entrada_invalida</c>, <c>tiempo_agotado</c> o <c>interno</c>.</summary>
+    public string? ErrorCodigo { get; set; }
+
+    /// <summary>Mensaje corto del error, sin contenido del spec.</summary>
+    public string? Error { get; set; }
+
+    public required DateTimeOffset SolicitadaEn { get; init; }
+
+    public DateTimeOffset? IniciadaEn { get; set; }
+
+    /// <summary>Cuando quedó lista o fallida.</summary>
+    public DateTimeOffset? TerminadaEn { get; set; }
+
+    /// <summary>Fin de la retención: después se borran los archivos y queda vencida.</summary>
+    public DateTimeOffset? VenceEn { get; set; }
+
+    public DateTimeOffset? VencidaEn { get; set; }
+}
+
 /// <summary>
 /// Tablas <c>contratos_*</c> del módulo con su historial <c>__ef_migraciones_contratos</c> (ATLAS-ADR-0026 y
 /// ATLAS-ADR-0035). El prefijo es el id del módulo (<c>contratos</c>), como en los demás módulos; el plan 00 §8.4 las
@@ -555,6 +652,12 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
     public DbSet<PaqueteContratos> Paquetes => Set<PaqueteContratos>();
 
     public DbSet<RevisionPaquete> RevisionesPaquete => Set<RevisionPaquete>();
+
+    public DbSet<ExportacionContratos> Exportaciones => Set<ExportacionContratos>();
+
+    public const int LargoNombreExportacion = 300;
+    public const int LargoClaveObjeto = 500;
+    public const int LargoErrorExportacion = 500;
 
     public DbSet<ComparticionPaquete> Comparticiones => Set<ComparticionPaquete>();
 
@@ -744,6 +847,40 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
             e.HasIndex(r => new { r.PaqueteId, r.Numero }).IsUnique();
         });
 
+        modelBuilder.Entity<ExportacionContratos>(e =>
+        {
+            e.ToTable(Prefijo + "exportacion", t =>
+            {
+                t.HasComment("Exportaciones de paquetes y versiones: quién, origen, formatos, estado y objetos en el S3 (HU 4.5, ATLAS-ADR-0042).");
+                t.HasCheckConstraint("ck_contratos_exportacion_origen",
+                    "(origen = 'paquete' AND paquete_id IS NOT NULL AND revision IS NOT NULL AND version_id IS NULL) "
+                    + "OR (origen = 'version' AND version_id IS NOT NULL AND paquete_id IS NULL AND revision IS NULL)");
+                // Un externo solo exporta paquetes compartidos desde el portal (plan 00 §6.2); una versión completa es interna.
+                t.HasCheckConstraint("ck_contratos_exportacion_externa", "organizacion_id IS NULL OR (desde_portal AND origen = 'paquete')");
+                t.HasCheckConstraint("ck_contratos_exportacion_lista",
+                    "estado <> 'lista' OR (objeto IS NOT NULL AND hash_contenido IS NOT NULL AND terminada_en IS NOT NULL AND vence_en IS NOT NULL)");
+                t.HasCheckConstraint("ck_contratos_exportacion_hash", "hash_contenido IS NULL OR hash_contenido ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("ck_contratos_exportacion_archivos", "jsonb_typeof(archivos) = 'array'");
+            });
+            e.Property(x => x.Id).ValueGeneratedNever();
+            Enum(e.Property(x => x.Origen), 20);
+            Enum(e.Property(x => x.Estado), 20);
+            e.Property(x => x.Nombre).HasMaxLength(LargoNombreExportacion);
+            e.Property(x => x.EntradaClave).HasMaxLength(LargoClaveObjeto);
+            e.Property(x => x.EntradaSha256).HasMaxLength(64).IsFixedLength();
+            e.Property(x => x.Objeto).HasMaxLength(LargoClaveObjeto);
+            e.Property(x => x.HashContenido).HasMaxLength(64).IsFixedLength();
+            e.Property(x => x.Archivos).HasColumnType("jsonb");
+            e.Property(x => x.ErrorCodigo).HasMaxLength(40);
+            e.Property(x => x.Error).HasMaxLength(LargoErrorExportacion);
+            e.HasOne<PaqueteContratos>().WithMany().HasForeignKey(x => x.PaqueteId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<VersionContrato>().WithMany().HasForeignKey(x => x.VersionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.SolicitadaPor, x.SolicitadaEn });
+            e.HasIndex(x => x.OrganizacionId);
+            // El trabajo de retención busca las que vencen y las pendientes viejas.
+            e.HasIndex(x => new { x.Estado, x.VenceEn });
+        });
+
         modelBuilder.Entity<ComparticionPaquete>(e =>
         {
             e.ToTable(Prefijo + "comparticion", t =>
@@ -796,7 +933,8 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
 
         // Predicado obligatorio: contratos_comparticion (HU 4.3) y contratos_sandbox (HU 4.7) solo devuelven filas de las organizaciones del alcance de la
         // petición. Los contratos, versiones, guías y paquetes son internos: el portal llega a ellos solo desde una
-        // compartición de la organización de la sesión (ATLAS-ADR-0043).
+        // compartición de la organización de la sesión (ATLAS-ADR-0043). Las exportaciones de un externo llevan su organización
+        // (HU 4.5): quedan filtradas aquí y por RLS.
         AplicarPredicadoDeOrganizacion(modelBuilder);
     }
 

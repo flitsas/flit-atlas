@@ -188,12 +188,19 @@ describe('navegación del portal', () => {
 describe('acciones del portal', () => {
   it('sin permiso, deshabilitada con el motivo; con permiso pero sin conectar, «pronto»; conectada, habilitada', () => {
     expect(estadoAccion('exportar', false)).toMatchObject({ habilitada: false, motivo: expect.stringContaining('no incluyen exportar') });
-    expect(estadoAccion('exportar', true)).toMatchObject({ habilitada: false, motivo: expect.stringContaining('pronto') });
+    // HU 4.5 y 4.7: exportar y sandbox ya están conectadas al cargar el portal (ExportacionDelPortal y Sandbox).
+    expect(estadoAccion('exportar', true)).toMatchObject({ habilitada: true, motivo: null });
+    expect(estadoAccion('sandbox', true)).toMatchObject({ habilitada: true, motivo: null });
+    // Sin Microcks en el ambiente, el sandbox sale deshabilitado con su frase completa.
+    expect(estadoAccion('sandbox', true, false)).toMatchObject({ habilitada: false, motivo: 'El sandbox no está disponible.', completo: true });
+    // Una conexión nueva reemplaza a la anterior y, al desconectarla, la acción queda sin conectar: «pronto».
+    const original = estadoAccion('sandbox', true).ejecutar!;
     const ejecutar = vi.fn();
-    const desconectar = conectarAccionPortal('exportar', ejecutar);
-    expect(estadoAccion('exportar', true)).toMatchObject({ habilitada: true, motivo: null, ejecutar });
+    const desconectar = conectarAccionPortal('sandbox', ejecutar);
+    expect(estadoAccion('sandbox', true)).toMatchObject({ habilitada: true, motivo: null, ejecutar });
     desconectar();
-    expect(estadoAccion('exportar', true).habilitada).toBe(false);
+    expect(estadoAccion('sandbox', true)).toMatchObject({ habilitada: false, motivo: expect.stringContaining('pronto') });
+    conectarAccionPortal('sandbox', original);
   });
 });
 
