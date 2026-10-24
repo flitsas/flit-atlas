@@ -95,6 +95,17 @@ export async function leer<T>(clave: string, ahora = Date.now()): Promise<Guarda
   }
 }
 
+/** Claves guardadas que empiezan por `prefijo` (p. ej. lo de los favoritos, HU 4.9). */
+export async function clavesConPrefijo(prefijo: string): Promise<string[]> {
+  if (!disponible()) return [];
+  const base = await abrir();
+  try {
+    return await base.getAllKeys('recursos', IDBKeyRange.bound(prefijo, `${prefijo}￿`));
+  } finally {
+    base.close();
+  }
+}
+
 export async function olvidar(clave: string): Promise<void> {
   if (!disponible()) return;
   const base = await abrir();

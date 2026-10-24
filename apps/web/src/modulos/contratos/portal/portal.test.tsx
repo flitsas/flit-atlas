@@ -51,7 +51,8 @@ const AVISO = {
   contrato: 'API de Trámites Demo',
   version: '1.2.0',
   retiroEn: '2027-06-30',
-  mensaje: 'La versión 1.2.0 de API de Trámites Demo está deprecada y se retira el 30/06/2027.',
+  reemplazo: '2.0.0',
+  mensaje: 'La versión 1.2.0 de API de Trámites Demo está deprecada y se retira el 30/06/2027. La reemplaza la versión 2.0.0.',
 };
 
 const INICIO: InicioPortal = {

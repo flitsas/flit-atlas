@@ -7,7 +7,8 @@ import type { ModuloAtlas } from '../../app/modulos/contrato';
  * obligatoriedad, tablas de referencia, versiones con diff, guías y canales); desde la HU 3.7, el enlace directo a una
  * guía; desde la HU 4.1, los paquetes con revisiones (`/contratos/paquetes`); desde las HU 4.3 y 4.4, «Compartido con» en
  * el paquete y el portal de clientes (`/portal`, ATLAS-ADR-0043): Inicio del cliente, paquete y contrato compartidos con
- * el spec podado, guías y cambios. Un externo solo ve la entrada «Portal»: las demás exigen ver_internos.
+ * el spec podado, guías y cambios. Un externo solo ve la entrada «Portal»: las demás exigen ver_internos. Desde la HU 4.9, los favoritos
+ * se ven sin conexión; desde la HU 4.8, deprecar una versión con su fecha de retiro (ATLAS-ADR-0046).
  */
 export const moduloContratos: ModuloAtlas = {
   id: 'contratos',
@@ -53,6 +54,9 @@ export const moduloContratos: ModuloAtlas = {
   ],
   // El proveedor `contratos` del servidor (BusquedaContratos) entrega estos tipos.
   busqueda: { proveedor: 'contratos', tipos: ['contrato', 'operacion'] },
+  // HU 4.9 (ATLAS-ADR-0034): los favoritos (contratos internos y lo compartido en el portal) se guardan sin conexión con
+  // el mismo TTL; su sincronizador va en el chunk de favoritos.
+  offline: { recursos: [], ttlHoras: 72, cargarSincronizador: () => import('./favoritos/sinConexion') },
   bandera: 'modulo.contratos',
   banderaPorDefecto: true,
 };

@@ -18,7 +18,7 @@ export async function sincronizarSinConexion(
   acceso: AccesoUsuario,
   ahora = Date.now(),
 ): Promise<{ guardados: number; borrados: number }> {
-  const borrados = acceso.permisos ? await depurarSinPermiso(acceso.permisos).catch(() => 0) : 0;
+  let borrados = acceso.permisos ? await depurarSinPermiso(acceso.permisos).catch(() => 0) : 0;
   let guardados = 0;
   const pendientes = modulos
     .filter((m) => m.offline && banderaActiva(m, acceso.banderas))
@@ -33,6 +33,17 @@ export async function sincronizarSinConexion(
       guardados++;
     } catch {
       // Sin red o un 4xx/5xx: queda lo último guardado (si lo hay) hasta la próxima vez.
+    }
+  }
+  // Lo que cada módulo sincroniza a su manera (los favoritos de contratos, HU 4.9), en su chunk.
+  for (const modulo of modulos.filter((m) => m.offline?.cargarSincronizador && banderaActiva(m, acceso.banderas))) {
+    try {
+      const { sincronizar } = await modulo.offline!.cargarSincronizador!();
+      const propio = await sincronizar({ permisos: acceso.permisos });
+      guardados += propio.guardados;
+      borrados += propio.borrados;
+    } catch {
+      // Igual que arriba: lo guardado queda hasta la próxima vez.
     }
   }
   return { guardados, borrados };

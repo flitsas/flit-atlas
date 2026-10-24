@@ -108,3 +108,21 @@ internal sealed class SinDocumentacionDelPortal : IDocumentacionDelPortal
         System.Security.Claims.ClaimsPrincipal usuario, Guid organizacionId, IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<DocumentoDelPortal>>([]);
 }
+
+/// <summary>
+/// Responsables vigentes (principal o secundario) de los aplicativos, para los demás módulos (HU 4.8, ATLAS-ADR-0046):
+/// los avisos de deprecación de un contrato llegan también a quienes responden por su aplicativo. Lo implementa el módulo
+/// de equipo con su reparto vigente (hoy en Bogotá), sin que nadie más lea sus tablas.
+/// </summary>
+public interface ILectorResponsables
+{
+    /// <summary>Personas responsables vigentes de cada aplicativo pedido; los que no tienen, no aparecen.</summary>
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> DeAplicativosAsync(IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default);
+}
+
+/// <summary>Sin módulo de equipo no hay responsables.</summary>
+internal sealed class SinResponsables : ILectorResponsables
+{
+    public Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> DeAplicativosAsync(IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>>(new Dictionary<Guid, IReadOnlyList<Guid>>());
+}

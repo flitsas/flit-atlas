@@ -4,9 +4,12 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
 import { BotonCompartir } from '../../../app/ui/Compartir';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Operaciones } from '../componentes/Operaciones';
 import { Etiqueta, type Pestana, Pestanas, useEscritorio } from '../componentes/ui';
 import { VistaAsyncApi } from '../componentes/VistaAsyncApi';
+import { BotonFavorito } from '../favoritos/componentes';
+import { PERMISO_PORTAL, recurso, rutaSpecPodado } from '../favoritos/sinConexion';
 import { Cargando } from '../guias/componentes';
 import { documentoAsync } from '../spec/asyncapi';
 import { leerSpec } from '../spec/documento';
@@ -72,7 +75,9 @@ export default function ContratoPortal() {
         </p>
         <h1 className="text-2xl font-semibold break-words sm:text-3xl">{c.nombre}</h1>
         <InsigniasContrato contrato={c} />
+        {tecnico && <BotonFavorito objetivo={{ ambito: 'portal', tipo: 'contrato', paqueteId: p.id, contratoId: c.contratoId }} que="el contrato" />}
       </header>
+      <DatosGuardados recurso={recurso(rutaSpecPodado(p.id, c.contratoId), PERMISO_PORTAL).clave} sinTelefonos={false} />
       <Avisos avisos={avisos.filter((a) => a.contratoId === c.contratoId)} />
       {!tecnico ? (
         <ErrorPortal error={new ErrorApi(403, { codigo: 'solo_resumen' })} que="este contrato" />

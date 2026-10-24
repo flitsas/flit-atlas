@@ -80,7 +80,8 @@ internal static class EndpointsPortal
         string Contrato,
         string Version,
         DateOnly? RetiroEn,
-        string Mensaje);
+        [property: Description("La versión estable vigente más alta posterior, si la hay (la que recomienda el aviso).")] string? Reemplazo,
+        [property: Description("El mismo texto que el aviso por correo y push: versión, contrato, fecha de retiro dd/mm/aaaa y su reemplazo.")] string Mensaje);
 
     [Description("Documento funcional de un aplicativo (llega con la documentación, F5).")]
     public sealed record DocumentoDelAplicativo(Guid Id, string Titulo, string Tipo, string Ruta);
@@ -214,10 +215,11 @@ internal static class EndpointsPortal
     // --- Lectura ---
 
     private static async Task<IResult> InicioAsync(
-        HttpContext http, AccesoPortal acceso, PlataformaDbContext plataforma, ILectorAplicativos lector, IDocumentacionDelPortal documentacion,
-        TimeProvider reloj, CancellationToken ct)
+        HttpContext http, AccesoPortal acceso, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
+        IDocumentacionDelPortal documentacion, TimeProvider reloj, CancellationToken ct)
     {
         var vista = await acceso.VistaAsync(http.User, ct);
+        var reemplazos = await ReemplazosAsync(contexto, vista.Paquetes, ct);
         var aplicativos = (await lector.ListarAsync(ct)).ToDictionary(a => a.Id);
         var organizacion = await plataforma.Organizaciones.AsNoTracking().Where(o => o.Id == vista.OrganizacionId).Select(o => o.Nombre).FirstOrDefaultAsync(ct);
         var paquetes = vista.Paquetes.Select(p => Paquete(p, aplicativos)).ToList();
@@ -234,7 +236,7 @@ internal static class EndpointsPortal
             .ToList();
         await AuditarAsync(http, plataforma, reloj, AccionInicio, vista, null, null, new { paquetes = vista.Paquetes.Select(p => p.Paquete.Id).ToList() }, ct);
         return Results.Ok(new InicioPortal(new OrganizacionDelPortal(vista.OrganizacionId, organizacion ?? "Tu organización"), tarjetas, paquetes,
-            [.. vista.Paquetes.SelectMany(Avisos)]));
+            [.. vista.Paquetes.SelectMany(p => Avisos(p, reemplazos))]));
     }
 
     private static async Task<IResult> PaqueteAsync(
@@ -261,7 +263,8 @@ internal static class EndpointsPortal
                 c.Tecnico ? [.. c.Guias.Select(g => new GuiaCompartida(g.GuiaId, g.Titulo, g.Operacion, g.Revision))] : []);
         }).ToList();
         await AuditarAsync(http, plataforma, reloj, AccionPaquete, vista, paquete.Paquete.Id.ToString(), paquete.Revision, new { nivel = Texto(paquete.Nivel) }, ct);
-        return Results.Ok(new DetallePaquetePortal(Paquete(paquete, aplicativos), contratos, [.. Avisos(paquete)]));
+        var reemplazos = await ReemplazosAsync(contexto, [paquete], ct);
+        return Results.Ok(new DetallePaquetePortal(Paquete(paquete, aplicativos), contratos, [.. Avisos(paquete, reemplazos)]));
     }
 
     private static async Task<IResult> SpecAsync(
@@ -428,14 +431,18 @@ internal static class EndpointsPortal
     private static string? Texto(JsonElement objeto, string propiedad) =>
         objeto.TryGetProperty(propiedad, out var valor) && valor.ValueKind == JsonValueKind.String ? valor.GetString() : null;
 
-    private static IEnumerable<AvisoDelPortal> Avisos(PaqueteDelPortal p) => p.Contratos
+    /// <summary>El reemplazo de cada versión deprecada de los paquetes (HU 4.8: el aviso del portal dice lo mismo que el correo).</summary>
+    private static Task<Dictionary<Guid, string?>> ReemplazosAsync(ContratosDbContext contexto, IEnumerable<PaqueteDelPortal> paquetes, CancellationToken ct) =>
+        Deprecacion.ReglasDeprecacion.ReemplazosAsync(contexto,
+            [.. paquetes.SelectMany(p => p.Contratos).Where(c => c.Version.Estado == EstadoVersion.Deprecada).Select(c => (c.Version.Id, c.Contrato.Id, c.Version.Version))], ct);
+
+    private static IEnumerable<AvisoDelPortal> Avisos(PaqueteDelPortal p, IReadOnlyDictionary<Guid, string?> reemplazos) => p.Contratos
         .Where(c => c.Version.Estado != EstadoVersion.Vigente)
         .Select(c => c.Version.Estado == EstadoVersion.Deprecada
             ? new AvisoDelPortal("deprecada", p.Paquete.Id, p.Paquete.Nombre, c.Contrato.Id, c.Contrato.Nombre, c.Version.Version, c.Version.RetiroEn,
-                c.Version.RetiroEn is { } fecha
-                    ? $"La versión {c.Version.Version} de {c.Contrato.Nombre} está deprecada y se retira el {fecha.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}."
-                    : $"La versión {c.Version.Version} de {c.Contrato.Nombre} está deprecada.")
-            : new AvisoDelPortal("retirada", p.Paquete.Id, p.Paquete.Nombre, c.Contrato.Id, c.Contrato.Nombre, c.Version.Version, c.Version.RetiroEn,
+                reemplazos.GetValueOrDefault(c.Version.Id),
+                Deprecacion.ReglasDeprecacion.MensajePortal(c.Version.Version, c.Contrato.Nombre, c.Version.RetiroEn, reemplazos.GetValueOrDefault(c.Version.Id)))
+            : new AvisoDelPortal("retirada", p.Paquete.Id, p.Paquete.Nombre, c.Contrato.Id, c.Contrato.Nombre, c.Version.Version, c.Version.RetiroEn, null,
                 $"La versión {c.Version.Version} de {c.Contrato.Nombre} se retiró: pide a FLIT la versión vigente."));
 
     private static PaqueteCompartido Paquete(PaqueteDelPortal p, IReadOnlyDictionary<Guid, AplicativoLeido> aplicativos) => new(
@@ -455,11 +462,11 @@ internal static class EndpointsPortal
 
     private static string Texto(NivelPortal nivel) => nivel == NivelPortal.Tecnico ? "tecnico" : "resumen";
 
-    private static IResult SoloResumen() => Results.Json(new ErrorPortal("solo_resumen",
+    internal static IResult SoloResumen() => Results.Json(new ErrorPortal("solo_resumen",
         "Tu rol ve el resumen de este paquete, sin el detalle técnico. Si lo necesitas, pide a FLIT que te comparta el paquete."), statusCode: StatusCodes.Status403Forbidden);
 
     /// <summary>404 sin revelar si el paquete existe (de otra organización, vencido, revocado o fuera del alcance), auditado.</summary>
-    private static async Task<IResult> NegadoAsync(
+    internal static async Task<IResult> NegadoAsync(
         HttpContext http, PlataformaDbContext plataforma, TimeProvider reloj, VistaPortal vista, Guid paqueteId, string? detalle, CancellationToken ct)
     {
         await AuditarAsync(http, plataforma, reloj, AccionNegado, vista, paqueteId.ToString(), null, new { detalle }, ct);
@@ -467,7 +474,7 @@ internal static class EndpointsPortal
     }
 
     /// <summary>Toda vista de un externo queda en la auditoría (§8.9): quién, qué, versión, cuándo, IP y organización.</summary>
-    private static async Task AuditarAsync(
+    internal static async Task AuditarAsync(
         HttpContext http, PlataformaDbContext plataforma, TimeProvider reloj, string accion, VistaPortal vista, string? recurso, int? revision, object datos,
         CancellationToken ct)
     {

@@ -383,6 +383,107 @@ public sealed class ComparticionPaquete : Entidad
     public Guid? RevocadoPor { get; set; }
 }
 
+/// <summary>Cuándo sale un aviso de deprecación (HU 4.8, ATLAS-ADR-0046).</summary>
+public enum MomentoAviso
+{
+    /// <summary>Al deprecar (o al llegar alguien nuevo a una versión ya deprecada).</summary>
+    Deprecacion,
+
+    /// <summary>N días antes del retiro (los de <c>Contratos:AvisosDeprecacion:DiasRecordatorio</c>).</summary>
+    Recordatorio,
+}
+
+/// <summary>Canal por el que sale un aviso de deprecación.</summary>
+public enum CanalAviso
+{
+    App,
+    Push,
+    Correo,
+}
+
+/// <summary>Estado del envío de un aviso por un canal.</summary>
+public enum EstadoAviso
+{
+    /// <summary>Reclamado antes de salir: si la corrida se corta aquí, no se repite (pudo haber salido).</summary>
+    EnCurso,
+
+    Enviado,
+
+    /// <summary>No salió; se reintenta en la corrida siguiente hasta el tope de intentos.</summary>
+    Fallido,
+}
+
+/// <summary>
+/// Un aviso de deprecación por persona y canal (HU 4.8, ATLAS-ADR-0046): la marca que lo hace idempotente. La clave
+/// (<c>version:retiro:momento[-dias]:persona:canal</c>) es única: repetir la corrida, deprecar otra vez con la misma fecha
+/// o tener la persona varios paquetes con la versión no lo manda dos veces. Lleva la organización de la persona (RLS).
+/// </summary>
+public sealed class AvisoDeprecacion : Entidad
+{
+    public required string Clave { get; init; }
+
+    public required Guid VersionId { get; init; }
+
+    /// <summary>La fecha de retiro del aviso: si cambia, el aviso es otro.</summary>
+    public required DateOnly RetiroEn { get; init; }
+
+    public required MomentoAviso Momento { get; init; }
+
+    /// <summary>Días antes del retiro de un recordatorio; vacío en el de la deprecación.</summary>
+    public int? Dias { get; init; }
+
+    public required Guid PersonaId { get; init; }
+
+    /// <summary>Organización de la persona (una externa, o FLIT para los responsables internos).</summary>
+    public required Guid OrganizacionId { get; init; }
+
+    public required CanalAviso Canal { get; init; }
+
+    public EstadoAviso Estado { get; set; } = EstadoAviso.EnCurso;
+
+    public int Intentos { get; set; }
+
+    public DateTimeOffset? EnviadoEn { get; set; }
+
+    /// <summary>Solo el tipo de la falla (nunca el destinatario ni el contenido).</summary>
+    public string? Error { get; set; }
+}
+
+/// <summary>Qué se marca como favorito (HU 4.9, ATLAS-ADR-0034).</summary>
+public enum TipoFavorito
+{
+    /// <summary>Un contrato interno (pantalla del contrato, con <c>ver_internos</c>).</summary>
+    Contrato,
+
+    /// <summary>Un paquete compartido en el portal.</summary>
+    Paquete,
+
+    /// <summary>Un contrato de un paquete compartido en el portal.</summary>
+    ContratoCompartido,
+
+    /// <summary>Una guía de un paquete compartido en el portal.</summary>
+    Guia,
+}
+
+/// <summary>
+/// Favorito de una persona (HU 4.9): lo que la PWA guarda en el dispositivo para verlo sin conexión, si la persona lo puede
+/// ver. Lleva la organización de la persona (predicado y RLS). Uno por persona y objeto.
+/// </summary>
+public sealed class FavoritoContrato : Entidad
+{
+    public required Guid PersonaId { get; init; }
+
+    public required Guid OrganizacionId { get; init; }
+
+    public required TipoFavorito Tipo { get; init; }
+
+    public Guid? PaqueteId { get; init; }
+
+    public Guid? ContratoId { get; init; }
+
+    public Guid? GuiaId { get; init; }
+}
+
 /// <summary>
 /// Qué versión de un contrato corre hoy en un ambiente (plan 00 §8.1 y §8.2, regla 5; HU 3.4 y ATLAS-ADR-0035 §8): una
 /// fila por contrato y ambiente, que mueve el CD con <c>PUT /api/v1/contratos/canales/{ambiente}</c>. Cada cambio deja
@@ -592,7 +693,15 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
 
     public DbSet<ComparticionPaquete> Comparticiones => Set<ComparticionPaquete>();
 
+    public DbSet<AvisoDeprecacion> AvisosDeprecacion => Set<AvisoDeprecacion>();
+
+    public DbSet<FavoritoContrato> Favoritos => Set<FavoritoContrato>();
+
     public const int LargoAmbiente = 20;
+
+    public const int LargoClaveAviso = 200;
+
+    public const int LargoErrorAviso = 100;
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion) =>
         ConfigurarOpciones(opciones, cadenaConexion, TablaHistorial);
@@ -825,6 +934,43 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
             e.HasIndex(c => new { c.PaqueteId, c.OrganizacionId }).IsUnique();
             // El portal parte siempre de las comparticiones de la organización de la sesión.
             e.HasIndex(c => c.OrganizacionId);
+        });
+
+        modelBuilder.Entity<AvisoDeprecacion>(e =>
+        {
+            e.ToTable(Prefijo + "aviso_deprecacion", t =>
+            {
+                t.HasComment("Avisos de deprecación enviados por persona y canal: la marca que los hace idempotentes (HU 4.8, ATLAS-ADR-0046).");
+                t.HasCheckConstraint("ck_contratos_aviso_deprecacion_dias", "(momento = 'recordatorio') = (dias IS NOT NULL)");
+            });
+            e.Property(a => a.Id).ValueGeneratedNever();
+            e.Property(a => a.Clave).HasMaxLength(LargoClaveAviso);
+            e.Property(a => a.Error).HasMaxLength(LargoErrorAviso);
+            Enum(e.Property(a => a.Momento), 20);
+            Enum(e.Property(a => a.Canal), 20);
+            Enum(e.Property(a => a.Estado), 20);
+            e.HasOne<VersionContrato>().WithMany().HasForeignKey(a => a.VersionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(a => a.Clave).IsUnique();
+            e.HasIndex(a => new { a.VersionId, a.RetiroEn });
+            e.HasIndex(a => a.OrganizacionId);
+        });
+
+        modelBuilder.Entity<FavoritoContrato>(e =>
+        {
+            e.ToTable(Prefijo + "favorito", t =>
+            {
+                t.HasComment("Contratos, paquetes y guías favoritos de cada persona, para verlos sin conexión (HU 4.9, ATLAS-ADR-0034).");
+                t.HasCheckConstraint("ck_contratos_favorito_tipo",
+                    "(tipo = 'contrato' AND contrato_id IS NOT NULL AND paquete_id IS NULL AND guia_id IS NULL) "
+                    + "OR (tipo = 'paquete' AND paquete_id IS NOT NULL AND contrato_id IS NULL AND guia_id IS NULL) "
+                    + "OR (tipo = 'contrato_compartido' AND paquete_id IS NOT NULL AND contrato_id IS NOT NULL AND guia_id IS NULL) "
+                    + "OR (tipo = 'guia' AND paquete_id IS NOT NULL AND guia_id IS NOT NULL AND contrato_id IS NULL)");
+            });
+            e.Property(f => f.Id).ValueGeneratedNever();
+            Enum(e.Property(f => f.Tipo), 30);
+            // Uno por persona y objeto (los vacíos cuentan como iguales).
+            e.HasIndex(f => new { f.PersonaId, f.Tipo, f.PaqueteId, f.ContratoId, f.GuiaId }).IsUnique().AreNullsDistinct(false);
+            e.HasIndex(f => f.OrganizacionId);
         });
 
         // translate() y lower() para la búsqueda sin tildes, como en el catálogo.
