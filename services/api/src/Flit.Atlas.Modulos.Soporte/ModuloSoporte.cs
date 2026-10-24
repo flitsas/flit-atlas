@@ -77,8 +77,12 @@ public sealed class ModuloSoporte : IModuloAtlas
 
     public Type? ContextoDatos => typeof(SoporteDbContext);
 
-    /// <summary>Avisos de los cambios de turno y las compensaciones en el centro de notificaciones (HU 2.9).</summary>
-    public IReadOnlyList<Plataforma.Notificaciones.TipoNotificacion> TiposNotificacion => [EndpointsCambios.TipoCambios];
+    /// <summary>
+    /// Avisos de los cambios de turno y las compensaciones (HU 2.9) y los recordatorios de turno por app, push, correo y
+    /// Teams (HU 2.11), con sus preferencias en el centro de notificaciones.
+    /// </summary>
+    public IReadOnlyList<Plataforma.Notificaciones.TipoNotificacion> TiposNotificacion =>
+        [EndpointsCambios.TipoCambios, Recordatorios.RecordatoriosSoporte.Tipo];
 
     public void RegistrarDatos(IServiceCollection servicios, string cadenaConexion) =>
         servicios.AddDbContext<SoporteDbContext>(o => SoporteDbContext.Configurar(o, cadenaConexion));
@@ -88,6 +92,12 @@ public sealed class ModuloSoporte : IModuloAtlas
         // Los endpoints usan los contextos, TimeProvider y los permisos de la sesión. Para los demás módulos, solo la
         // lectura del soporte de turno de una fecha («¿A quién llamo?», ATLAS-ADR-0031).
         servicios.AddScoped<Plataforma.Modulos.ISoporteDeTurno, Dominio.SoporteDeTurno>();
+
+        // Recordatorios de turno (HU 2.11): el trabajo diario y «Enviar ahora» (el endpoint usa la misma instancia).
+        servicios.AddOptions<Recordatorios.OpcionesRecordatorios>().BindConfiguration(Recordatorios.OpcionesRecordatorios.Seccion);
+        servicios.AddScoped<Recordatorios.RecordatoriosSoporte>();
+        servicios.AddSingleton<Recordatorios.TrabajoRecordatorios>();
+        servicios.AddHostedService(sp => sp.GetRequiredService<Recordatorios.TrabajoRecordatorios>());
     }
 
     public void MapearEndpoints(RouteGroupBuilder grupo) => EndpointsSoporte.Mapear(grupo);

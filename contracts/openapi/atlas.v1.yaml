@@ -2927,7 +2927,7 @@ paths:
       tags:
         - Plataforma
       summary: Preferencias de notificación
-      description: 'Cada tipo de notificación con el estado de sus canales (app, push, correo y Teams).'
+      description: 'Cada tipo de notificación (del núcleo y de los módulos) con el estado de sus canales (app, push, correo y Teams). Un canal no disponible es uno que el tipo no usa o que el ambiente no tiene configurado.'
       operationId: ListarPreferenciasDeNotificacion
       responses:
         '200':
@@ -2946,7 +2946,7 @@ paths:
       tags:
         - Plataforma
       summary: Guardar preferencias de notificación
-      description: Activa o apaga canales por tipo. El canal app no se puede apagar; correo y Teams aún no están disponibles.
+      description: Activa o apaga canales por tipo. El canal app no se puede apagar; un canal no disponible para el tipo o el ambiente responde 400.
       operationId: GuardarPreferenciasDeNotificacion
       requestBody:
         description: Cambios de preferencia a aplicar.
@@ -4356,7 +4356,7 @@ paths:
       tags:
         - Soporte
       summary: Configuración del soporte
-      description: 'Horario por defecto (08:00 a 12:00 en Bogotá si nunca se cambió), regla de festivos (por defecto, sin turno), anticipación de los recordatorios y canal para externos. Requiere atlas.soporte.ver.'
+      description: 'Horario por defecto (08:00 a 12:00 en Bogotá si nunca se cambió), regla de festivos (por defecto, sin turno), anticipación y hora de los recordatorios (07:00 si nunca se cambió) y canal para externos. Requiere atlas.soporte.ver.'
       operationId: ObtenerConfiguracionSoporte
       responses:
         '200':
@@ -6071,6 +6071,61 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.soporte.aprobar
+  /api/v1/soporte/recordatorios:
+    get:
+      tags:
+        - Soporte
+      summary: Estado de los recordatorios de turno
+      description: 'Hora y anticipación de los recordatorios, canales que tiene el ambiente y las últimas 10 corridas con sus conteos (sin nombres). Requiere atlas.soporte.gestionar.'
+      operationId: ObtenerRecordatoriosSoporte
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoRecordatoriosDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.soporte.gestionar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.gestionar
+  /api/v1/soporte/recordatorios/ejecucion:
+    post:
+      tags:
+        - Soporte
+      summary: Enviar los recordatorios ahora
+      description: 'Pide una corrida ya, sin esperar a la hora del día: manda lo que falte de hoy (lo ya enviado no se repite). Responde 202 y corre en segundo plano; 409 si ya hay una pedida o en curso. Requiere atlas.soporte.gestionar con alcance global.'
+      operationId: EjecutarRecordatoriosSoporte
+      responses:
+        '202':
+          description: Accepted
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorSoporte'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.soporte.gestionar
 components:
   schemas:
     AceptacionDocumento:
@@ -6512,6 +6567,12 @@ components:
             - 'null'
             - string
           description: 'Canal de soporte del sábado para externos, sin nombres de personas.'
+        horaRecordatorios:
+          maxLength: 5
+          type:
+            - 'null'
+            - string
+          description: 'Hora (HH:mm, Bogotá) del trabajo diario de recordatorios; vacío, 07:00.'
       description: 'Configuración global nueva: reemplaza toda la anterior.'
     CambioEquipo:
       required:
@@ -6677,6 +6738,23 @@ components:
             type: string
           description: 'Campos que cambiaron (dedicacion, vigencia, orden).'
       description: Un cambio entre dos versiones.
+    CanalesRecordatorioDto:
+      required:
+        - push
+        - correo
+        - teams
+      type: object
+      properties:
+        push:
+          type: boolean
+          description: 'Hay llaves VAPID: push puede llegar a los dispositivos suscritos.'
+        correo:
+          type: boolean
+          description: Hay proveedor de correo (SMTP en qa).
+        teams:
+          type: boolean
+          description: Hay integración con Teams (HU 2.10).
+      description: Canales de los recordatorios que tiene este ambiente.
     CanalSoporteDto:
       required:
         - fecha
@@ -6993,6 +7071,7 @@ components:
         - diasAnticipacionRecordatorio
         - canalExterno
         - actualizadoEn
+        - horaRecordatorios
       type: object
       properties:
         horaInicioPorDefecto:
@@ -7010,7 +7089,7 @@ components:
             - 'null'
             - integer
             - string
-          description: Días antes del turno en que salen los recordatorios (HU 2.11).
+          description: 'Días antes del turno en que sale el recordatorio a la persona (HU 2.11); vacío, solo el del mismo sábado.'
           format: int32
         canalExterno:
           type:
@@ -7023,6 +7102,9 @@ components:
             - string
           description: Cuándo se guardó por última vez; vacío si nunca (valores por defecto).
           format: date-time
+        horaRecordatorios:
+          type: string
+          description: 'Hora (HH:mm, Bogotá) a la que corre cada día el trabajo de recordatorios (HU 2.11); 07:00 si nunca se cambió.'
       description: Configuración global del soporte de los sábados.
     ConfirmacionGeneracion:
       required:
@@ -7058,6 +7140,56 @@ components:
             - string
           description: 'Huella de la vista previa: si algo cambió desde entonces, la confirmación se rechaza.'
       description: 'Confirmación de una vista previa: el mismo equipo, la misma ventana y la huella que devolvió.'
+    CorridaRecordatoriosDto:
+      required:
+        - fecha
+        - disparo
+        - iniciadaEn
+        - terminadaEn
+        - enviados
+        - fallidos
+        - omitidos
+      type: object
+      properties:
+        fecha:
+          type: string
+          description: Día de Bogotá.
+          format: date
+        disparo:
+          type: string
+          description: programada o manual.
+        iniciadaEn:
+          type: string
+          description: Cuándo empezó.
+          format: date-time
+        terminadaEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo terminó; vacío si se cortó o sigue en curso.
+          format: date-time
+        enviados:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Envíos que salieron (un recordatorio por canal).
+          format: int32
+        fallidos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Envíos que fallaron; se reintentan en la corrida siguiente.
+          format: int32
+        omitidos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Canales que no se intentaron: preferencia apagada, sin dispositivos o canal sin configurar.'
+          format: int32
+      description: Una corrida del trabajo de recordatorios.
     CuentaARecuperar:
       required:
         - correo
@@ -7415,6 +7547,42 @@ components:
           type: string
           description: 'Mensaje para la persona, en español.'
       description: Error de una operación de soporte.
+    EstadoRecordatoriosDto:
+      required:
+        - programados
+        - hora
+        - diasAnticipacion
+        - canales
+        - enCurso
+        - corridas
+      type: object
+      properties:
+        programados:
+          type: boolean
+          description: Si la corrida diaria está encendida en este ambiente (Soporte__Recordatorios__Habilitados).
+        hora:
+          type: string
+          description: 'Hora (HH:mm, Bogotá) de la corrida diaria.'
+        diasAnticipacion:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Días de anticipación del recordatorio a la persona; vacío, solo el del mismo sábado.'
+          format: int32
+        canales:
+          description: Canales que tiene el ambiente.
+          $ref: '#/components/schemas/CanalesRecordatorioDto'
+        enCurso:
+          type: boolean
+          description: Si esta réplica tiene una corrida pedida o en curso.
+        corridas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorridaRecordatoriosDto'
+          description: 'Las últimas corridas, de la más reciente a la más vieja.'
+      description: Estado de los recordatorios de turno (HU 2.11).
     EstadoSincronizacion:
       required:
         - id

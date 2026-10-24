@@ -36,7 +36,7 @@ internal static class EndpointsSoporte
             .WithSummary("Configuración del soporte")
             .WithDescription(
                 "Horario por defecto (08:00 a 12:00 en Bogotá si nunca se cambió), regla de festivos (por defecto, sin turno), " +
-                "anticipación de los recordatorios y canal para externos. Requiere atlas.soporte.ver.")
+                "anticipación y hora de los recordatorios (07:00 si nunca se cambió) y canal para externos. Requiere atlas.soporte.ver.")
             .Produces<ConfiguracionDto>();
 
         grupo.MapPut("/configuracion", GuardarConfiguracionAsync)
@@ -57,6 +57,7 @@ internal static class EndpointsSoporte
         EndpointsConsultas.Mapear(grupo);
         EndpointsImportacion.Mapear(grupo);
         EndpointsCambios.Mapear(grupo);
+        EndpointsRecordatorios.Mapear(grupo);
     }
 
     private static void MapearEquipos(RouteGroupBuilder grupo)
@@ -160,7 +161,7 @@ internal static class EndpointsSoporte
 
     internal static ConfiguracionDto ConfiguracionDto(ConfiguracionSoporte c) => new(
         Hora(c.HoraInicioPorDefecto)!, Hora(c.HoraFinPorDefecto)!, ReglasTurno.Texto(c.ReglaFestivos),
-        c.DiasAnticipacionRecordatorio, c.CanalExterno, c.CreadoEn == default ? null : c.ActualizadoEn);
+        c.DiasAnticipacionRecordatorio, c.CanalExterno, c.CreadoEn == default ? null : c.ActualizadoEn, Hora(c.HoraRecordatorios)!);
 
     private static async Task<IResult> GuardarConfiguracionAsync(
         [Description("Configuración global del soporte.")] CambioConfiguracion cambio,
@@ -185,6 +186,10 @@ internal static class EndpointsSoporte
         {
             errores["diasAnticipacionRecordatorio"] = ["La anticipación de los recordatorios va de 1 a 30 días."];
         }
+        if (!LeerHora(cambio.HoraRecordatorios, out var horaRecordatorios))
+        {
+            errores["horaRecordatorios"] = ["La hora de los recordatorios va en formato HH:mm (por ejemplo, 07:00)."];
+        }
         var canal = Limpiar(cambio.CanalExterno);
         if (canal is { Length: > SoporteDbContext.LargoCanal })
         {
@@ -206,6 +211,7 @@ internal static class EndpointsSoporte
         configuracion.ReglaFestivos = regla!.Value;
         configuracion.DiasAnticipacionRecordatorio = cambio.DiasAnticipacionRecordatorio;
         configuracion.CanalExterno = canal;
+        configuracion.HoraRecordatorios = horaRecordatorios ?? ConfiguracionSoporte.HoraRecordatoriosPorDefecto;
         configuracion.ActualizadoPorPersonaId = PersonaDeSesion(http.User);
         await GuardarAsync(soporte, plataforma,
             [Evento(http, reloj, "configuracion_actualizada", "soporte_configuracion", configuracion.Id, new
@@ -214,6 +220,7 @@ internal static class EndpointsSoporte
                 horaFin = Hora(fin),
                 regla = ReglasTurno.Texto(regla.Value),
                 dias = cambio.DiasAnticipacionRecordatorio,
+                horaRecordatorios = Hora(configuracion.HoraRecordatorios),
                 canalExterno = canal is not null,
             })], ct);
         return Results.Ok(ConfiguracionDto(configuracion));

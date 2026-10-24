@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 
 import { tienePermiso } from '../../../app/modulos/resolver';
 import { useSesion } from '../../../app/sesion';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Hoja } from '../../../app/ui/Hoja';
 import { Icono } from '../../../app/ui/Icono';
 import { Boton, cn, Insignia } from '../../../app/ui/Tarjeta';
@@ -41,6 +42,7 @@ import {
   sumarMeses,
 } from '../fechas';
 import { moduloSoporte } from '../modulo';
+import { RECURSO_TURNOS, tresMeses } from '../recursos';
 
 type Vista = 'lista' | 'semana' | 'mes';
 
@@ -156,6 +158,8 @@ export default function Calendario() {
         )}
       </div>
 
+      <DatosGuardados recurso={RECURSO_TURNOS.clave} />
+      <ProximoTurno personaId={yo.personaId} />
       <MostrarAviso aviso={aviso} />
       <PendientesDeEnviar acciones={pendientes} />
       {equipos.data && equipos.data.length > 1 && <FiltroEquipo equipos={equipos.data} valor={equipo} alCambiar={setEquipo} />}
@@ -211,6 +215,25 @@ export default function Calendario() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * «Tu próximo turno» (HU 2.12): el primero vigente de la persona en los tres meses que también se guardan sin conexión
+ * (la misma consulta que la vista en lista). Si no tiene turnos en esos meses, no se muestra.
+ */
+function ProximoTurno({ personaId }: { personaId: string }) {
+  const { desde, hasta } = tresMeses();
+  const calendario = useCalendario(desde, hasta, null);
+  const proximo = calendario.data?.turnos.find(
+    (t) => t.persona.id === personaId && t.fecha >= desde && (t.estado === 'programado' || t.estado === 'confirmado'),
+  );
+  if (!proximo) return null;
+  return (
+    <section aria-label="Tu próximo turno" className="flex min-w-0 flex-col gap-2">
+      <h2 className="text-base font-semibold">Tu próximo turno</h2>
+      <TarjetaTurno turno={proximo} />
+    </section>
   );
 }
 

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { enviarJson, pedir } from '../../app/api';
+import { conRespaldo, conRespaldoDerivado } from '../../pwa/sinConexion';
+import { RECURSO_REPARTO } from './recursos';
 
 /**
  * Cliente de los responsables (`/api/v1/equipo`, etiqueta «Equipo», HU 2.3, 2.4 y 2.5, ATLAS-ADR-0031): reparto por
@@ -279,15 +281,55 @@ async function enviar<T>(ruta: string, metodo: 'POST' | 'PUT' | 'DELETE', cuerpo
 
 const deSlug = (slug: string) => `${EQUIPO}/aplicativos/${encodeURIComponent(slug)}`;
 
-export const obtenerReparto = () => leer<Reparto>(`${EQUIPO}/responsabilidades`);
+export const obtenerReparto = () => conRespaldo(RECURSO_REPARTO, () => leer<Reparto>(`${EQUIPO}/responsabilidades`));
 export const obtenerCarga = () => leer<MapaCarga>(`${EQUIPO}/carga`);
 export const obtenerMias = () => leer<ResponsabilidadesPersona>(`${EQUIPO}/yo/responsabilidades`);
 export const obtenerVersiones = () => leer<VersionResumen[]>(`${EQUIPO}/versiones`);
 export const obtenerTraspasos = () => leer<Traspaso[]>(`${EQUIPO}/traspasos`);
 export const obtenerRevisiones = () => leer<Revisiones>(`${EQUIPO}/revisiones`);
 export const obtenerCodeowners = () => leer<Codeowners>(`${EQUIPO}/codeowners`);
-export const obtenerResponsablesDe = (slug: string) => leer<ResponsablesAplicativo>(`${deSlug(slug)}/responsables`);
-export const obtenerAQuienLlamo = (slug: string) => leer<AQuienLlamo>(`${deSlug(slug)}/a-quien-llamo`);
+/** La fila del reparto guardado de un aplicativo (sin conexión); `null` si no tiene responsables propios en él. */
+export function filaDe(reparto: Reparto, slug: string): FilaReparto | null {
+  return [...reparto.productos, ...reparto.modulos, ...reparto.servicios].find((f) => f.aplicativo.slug === slug) ?? null;
+}
+
+/** Sin conexión (HU 2.12) salen del reparto guardado: sin herencia del padre, sin traspaso y sin contacto. */
+export const obtenerResponsablesDe = (slug: string) =>
+  conRespaldoDerivado<ResponsablesAplicativo, Reparto>(RECURSO_REPARTO, () => leer<ResponsablesAplicativo>(`${deSlug(slug)}/responsables`), (reparto) => {
+    const fila = filaDe(reparto, slug);
+    return fila
+      ? {
+          aplicativo: fila.aplicativo,
+          principal: fila.principal,
+          secundario: fila.secundario,
+          heredadoDe: null,
+          definiciones: reparto.definiciones,
+          traspaso: null,
+          version: reparto.version?.numero ?? null,
+          puedeGestionar: false,
+          veContacto: false,
+        }
+      : null;
+  });
+
+/** Sin conexión: el principal y el secundario del reparto guardado; el soporte de turno se ve en el calendario. */
+export const obtenerAQuienLlamo = (slug: string) =>
+  conRespaldoDerivado<AQuienLlamo, Reparto>(RECURSO_REPARTO, () => leer<AQuienLlamo>(`${deSlug(slug)}/a-quien-llamo`), (reparto) => {
+    const fila = filaDe(reparto, slug);
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+    return fila
+      ? {
+          aplicativo: fila.aplicativo,
+          hoy,
+          esSabado: new Date(`${hoy}T12:00:00Z`).getUTCDay() === 6,
+          soporte: null,
+          principal: fila.principal,
+          secundario: fila.secundario,
+          heredadoDe: null,
+          veContacto: false,
+        }
+      : null;
+  });
 export const obtenerFicha = (slug: string) => leer<{ aplicativo: AplicativoRef; markdown: string }>(`${deSlug(slug)}/ficha-responsables`);
 export const compararVersiones = (desde: number, hasta: number) =>
   leer<Comparacion>(`${EQUIPO}/versiones/comparacion?desde=${desde}&hasta=${hasta}`);

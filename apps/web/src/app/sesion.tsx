@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, type ReactNode, useCallback, useContext, useMemo } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
-import { borrarDatosLocales, guardar, leer } from '../pwa/almacen';
+import { borrarDatosDePersona, borrarDatosLocales, guardar, leer } from '../pwa/almacen';
 import { desactivarPush } from '../pwa/push';
 import { ErrorApi, obtenerBanderas, obtenerYo, salir, type Yo } from './api';
 import { marcarSesion } from './errores';
@@ -23,7 +23,20 @@ export const CLAVE_BANDERAS = ['plataforma', 'banderas'] as const;
 
 const RECURSO_YO = 'plataforma.yo';
 const RECURSO_BANDERAS = 'plataforma.banderas';
+/** De quién es lo guardado en el dispositivo (sin vencimiento práctico): si entra otra persona, se borra todo (HU 2.12). */
+const RECURSO_DUENO = 'plataforma.dueno';
 const TTL_HORAS = 24;
+const TTL_DUENO_HORAS = 24 * 365;
+
+/**
+ * Lo guardado en el dispositivo es de una sola persona (HU 2.12, ATLAS-ADR-0034): sin sesión (401) o con otra persona,
+ * se borra (caché sin conexión y acciones sin enviar) antes de guardar nada de la nueva.
+ */
+async function asegurarDueno(yo: Yo | null): Promise<void> {
+  const dueno = await leer<string>(RECURSO_DUENO).catch(() => null);
+  if (dueno && dueno.datos !== yo?.personaId) await borrarDatosDePersona().catch(() => undefined);
+  if (yo && dueno?.datos !== yo.personaId) await guardar(RECURSO_DUENO, yo.personaId, TTL_DUENO_HORAS).catch(() => undefined);
+}
 
 /** Sin red, `fetch` falla con `TypeError`; un 5xx del proxy no es «sin conexión». */
 const esFallaDeRed = (error: unknown) => !(error instanceof ErrorApi) && (error instanceof TypeError || !navigator.onLine);
@@ -33,6 +46,7 @@ export async function cargarSesion(): Promise<EstadoSesion> {
     const yo = await obtenerYo();
     // Los errores de la PWA solo se reportan con sesión (`errores.ts`).
     marcarSesion(yo !== null);
+    await asegurarDueno(yo);
     if (yo) await guardar(RECURSO_YO, yo, TTL_HORAS).catch(() => undefined);
     return { yo, sinConexion: false };
   } catch (error) {
@@ -89,6 +103,13 @@ export function ProveedorSesion({
     [banderas.data, estado.yo.permisos],
   );
   const navegacion = useMemo(() => resolverNavegacion(modulos, acceso), [modulos, acceso]);
+
+  // Datos sin conexión (HU 2.12): con red y sesión, se guarda lo de cada módulo según los permisos. Carga diferida.
+  const listo = !estado.sinConexion && !banderas.isPending;
+  useEffect(() => {
+    if (!listo) return;
+    void import('../pwa/sincronizacion').then((m) => m.sincronizarSinConexion(modulos, acceso)).catch(() => undefined);
+  }, [listo, modulos, acceso]);
 
   /**
    * Cierre de sesión completo (§6.3): quita la suscripción push de este dispositivo, borra la caché sin conexión

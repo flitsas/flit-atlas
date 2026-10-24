@@ -108,6 +108,9 @@ public sealed class EntornoApi : IAsyncLifetime
             b.UseSetting("Plataforma:Correo:Proveedor", "smtp");
             b.UseSetting("Plataforma:Correo:Remitente", "atlas@ejemplo.com");
             b.UseSetting("Plataforma:Correo:Smtp:Host", "127.0.0.1");
+            // HU 2.11: sin la corrida diaria de recordatorios (la base es compartida y mandaría correos y avisos a otras
+            // pruebas); las pruebas la piden con «Enviar ahora» o llaman al servicio.
+            b.UseSetting("Soporte:Recordatorios:Habilitados", "false");
             foreach (var (clave, valor) in configuracion ?? new Dictionary<string, string>())
             {
                 b.UseSetting(clave, valor);

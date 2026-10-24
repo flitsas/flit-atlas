@@ -189,6 +189,19 @@ curl -s https://qa.atlas.flitsas.com/api/v1/identidad/token/yo -H "Authorization
 
 Sin GitHub configurado, la pantalla de CODEOWNERS muestra el bloque sugerido y dice que no puede comparar.
 
+## Recordatorios de turno de soporte (HU 2.11, ATLAS-ADR-0029)
+
+- `TrabajoRecordatorios` (módulo de soporte) mira cada 5 minutos si en Bogotá ya pasó la hora de los recordatorios (`horaRecordatorios` de `PUT /api/v1/soporte/configuracion`, 07:00 por defecto) y si falta la corrida del día; si la réplica arranca tarde, la recupera. Un candado consultivo de PostgreSQL deja correr un nodo a la vez.
+- Manda `diasAnticipacionRecordatorio` días antes del sábado a la persona de turno y, el mismo sábado, a cada persona de turno y al canal de Teams del equipo: bandeja, push, correo (`IEnviadorCorreo`, SMTP en qa) y Teams (`INotificadorTeams`; vacío hasta la HU 2.10). Cada persona elige sus canales en las preferencias del centro de notificaciones (tipo `soporte.recordatorio_turno`).
+- Idempotente: cada envío por canal queda en `soporte_recordatorio` (clave única) antes de salir; las corridas, en `soporte_recordatorio_corrida`. Lo fallido se reintenta en la corrida siguiente (hasta 3 veces).
+- `GET /api/v1/soporte/recordatorios` (estado y últimas corridas) y `POST /api/v1/soporte/recordatorios/ejecucion` («Enviar ahora», 202), con `atlas.soporte.gestionar`.
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `Soporte__Recordatorios__Habilitados` | `true` | `false` apaga la corrida diaria («Enviar ahora» sigue) |
+| `Soporte__Recordatorios__Intervalo` | `00:05:00` | Cada cuánto revisa si ya es la hora |
+| `Atlas__UrlPublica` | — | URL del botón del correo (la misma de las invitaciones) |
+
 ## Contratos (HU 1.7)
 
 - `contracts/openapi/atlas.v1.yaml` se genera desde los endpoints con `Microsoft.AspNetCore.OpenApi` (OpenAPI 3.1, `ContratoOpenApi.cs`) y `ContratoOpenApiTests` falla si no coincide con el código. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.ContratoOpenApiTests` (detalles en [`contracts/openapi/README.md`](../../contracts/openapi/README.md)).

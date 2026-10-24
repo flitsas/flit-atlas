@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { enviarJson, pedir } from '../../app/api';
+import { conRespaldoDerivado } from '../../pwa/sinConexion';
+import { RECURSO_APLICATIVOS } from './recursos';
 
 /** Contrato de `/api/v1/catalogo` (contracts/openapi/atlas.v1.yaml, etiqueta «Catálogo», ATLAS-ADR-0028). */
 export type Tipo = 'producto' | 'modulo' | 'servicio';
@@ -86,8 +88,53 @@ export function rutaListado(filtro: FiltroCatalogo = {}): string {
   return consulta ? `${BASE}?${consulta}` : BASE;
 }
 
-export const listarAplicativos = async (filtro: FiltroCatalogo = {}) => json<ListadoAplicativos>(await pedir(rutaListado(filtro)));
-export const obtenerFicha = async (slug: string) => json<FichaAplicativo>(await pedir(`${BASE}/${encodeURIComponent(slug)}`));
+const sinTildes = (texto: string) => texto.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+/** El filtro aplicado en el dispositivo sobre el listado guardado (sin conexión): igual al del servidor en lo esencial. */
+export function filtrarListado(listado: ListadoAplicativos, filtro: FiltroCatalogo): ListadoAplicativos {
+  const texto = sinTildes(filtro.texto?.trim() ?? '');
+  const elementos = listado.elementos.filter(
+    (a) =>
+      (!filtro.grupo || a.grupo === filtro.grupo) &&
+      (!filtro.estado || a.estado === filtro.estado) &&
+      (!filtro.criticidad || a.criticidad === filtro.criticidad) &&
+      (!filtro.tipo || a.tipo === filtro.tipo) &&
+      (!texto || [a.nombre, a.slug, a.descripcion ?? '', ...a.etiquetas, ...a.tecnologias].some((c) => sinTildes(c).includes(texto))),
+  );
+  return { total: elementos.length, elementos };
+}
+
+const sinFiltros = (filtro: FiltroCatalogo) => Object.values(filtro).every((v) => typeof v !== 'string' || !v.trim());
+
+/** En línea, el listado sin filtros refresca lo guardado; sin conexión, se filtra lo guardado (HU 2.12). */
+export const listarAplicativos = async (filtro: FiltroCatalogo = {}) =>
+  conRespaldoDerivado<ListadoAplicativos, ListadoAplicativos>(
+    RECURSO_APLICATIVOS,
+    async () => json<ListadoAplicativos>(await pedir(rutaListado(filtro))),
+    (guardado) => filtrarListado(guardado, filtro),
+    (datos) => (sinFiltros(filtro) ? datos : null),
+  );
+
+/** Sin conexión, la ficha se arma con lo que trae el listado guardado (sin repo, ambientes ni permisos de edición). */
+export const obtenerFicha = async (slug: string) =>
+  conRespaldoDerivado<FichaAplicativo, ListadoAplicativos>(
+    RECURSO_APLICATIVOS,
+    async () => json<FichaAplicativo>(await pedir(`${BASE}/${encodeURIComponent(slug)}`)),
+    (guardado, guardadoEn) => {
+      const aplicativo = guardado.elementos.find((a) => a.slug === slug);
+      if (!aplicativo) return null;
+      return {
+        ...aplicativo,
+        repo: null,
+        rutaEnRepo: null,
+        ambientes: [],
+        hijos: guardado.elementos.filter((a) => a.padreId === aplicativo.id),
+        permisos: { editar: false, gestionar: false },
+        creadoEn: guardadoEn.toISOString(),
+        actualizadoEn: guardadoEn.toISOString(),
+      };
+    },
+  );
 export const crearAplicativo = async (s: SolicitudAplicativo) => json<FichaAplicativo>(await enviarJson(BASE, 'POST', s));
 export const actualizarAplicativo = async (id: string, s: SolicitudAplicativo) =>
   json<FichaAplicativo>(await enviarJson(`${BASE}/${encodeURIComponent(id)}`, 'PUT', s));

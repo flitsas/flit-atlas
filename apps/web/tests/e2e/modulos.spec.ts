@@ -223,6 +223,11 @@ test.describe('soporte de los sábados', () => {
     await page.goto('/soporte/gestion');
     await expect(page.getByRole('heading', { level: 1, name: 'Gestionar el soporte' })).toBeVisible();
     await expect(page.getByRole('form', { name: 'Configuración del soporte' })).toBeVisible();
+    await expect(page.getByLabel('Hora de envío')).toHaveValue('07:00');
+    // HU 2.11: el estado de los recordatorios con sus canales y la última corrida.
+    await expect(page.getByRole('list', { name: 'Canales de los recordatorios' })).toContainText('Teams: sin configurar');
+    await expect(page.getByRole('list', { name: 'Últimas corridas' })).toContainText('6 enviados, 1 fallidos, 2 omitidos');
+    await expect(page.getByRole('button', { name: 'Enviar ahora' })).toBeEnabled();
     await sinScrollHorizontal(page, '/soporte/gestion');
     await sinErroresCriticosDeAxe(page, '/soporte/gestion');
     expect(violaciones).toEqual([]);

@@ -18,11 +18,13 @@ import {
   crearFestivo,
   eliminarAusencia,
   eliminarFestivo,
+  enviarRecordatoriosAhora,
   type Equipo,
   guardarConfiguracion,
   listarAusencias,
   listarFestivos,
   obtenerConfiguracion,
+  obtenerRecordatorios,
   ordenarParticipantes,
   type Participante,
   previsualizarGeneracion,
@@ -65,6 +67,7 @@ export default function Gestion() {
         Importar el Excel de la rotación
       </Link>
       <SeccionConfiguracion alAvisar={setAviso} />
+      <SeccionRecordatorios alAvisar={setAviso} />
       <SeccionEquipos equipos={equipos.data ?? []} alAvisar={setAviso} />
       {gestionables.length > 0 && equipo && (
         <section aria-label="Equipo que gestionas" className="flex min-w-0 flex-col gap-5">
@@ -117,6 +120,7 @@ function FormularioConfiguracion({ actual, alAvisar }: { actual: Configuracion }
   const [fin, setFin] = useState(actual.horaFinPorDefecto);
   const [regla, setRegla] = useState<ReglaFestivos>(actual.reglaFestivos);
   const [dias, setDias] = useState(actual.diasAnticipacionRecordatorio?.toString() ?? '');
+  const [horaRecordatorios, setHoraRecordatorios] = useState(actual.horaRecordatorios);
   const [canal, setCanal] = useState(actual.canalExterno ?? '');
   const [enviando, setEnviando] = useState(false);
 
@@ -131,6 +135,7 @@ function FormularioConfiguracion({ actual, alAvisar }: { actual: Configuracion }
           reglaFestivos: regla,
           diasAnticipacionRecordatorio: dias ? Number(dias) : null,
           canalExterno: canal.trim() || null,
+          horaRecordatorios: horaRecordatorios || null,
         }),
       'Se guardó la configuración.',
       'No se pudo guardar la configuración.',
@@ -164,10 +169,23 @@ function FormularioConfiguracion({ actual, alAvisar }: { actual: Configuracion }
           { valor: 'turno_normal', texto: 'Turno normal', ayuda: 'El sábado festivo lleva turno como cualquier otro.' },
         ]}
       />
-      <label className="font-medium">
-        Recordatorio, días antes del turno
-        <input type="number" min={1} max={30} inputMode="numeric" value={dias} onChange={(e) => setDias(e.target.value)} className={claseCampo} />
-      </label>
+      <fieldset className="flex min-w-0 flex-col gap-2">
+        <legend className="mb-1 font-medium">Recordatorios de turno</legend>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="min-w-0">
+            Días antes del turno
+            <input type="number" min={1} max={30} inputMode="numeric" value={dias} onChange={(e) => setDias(e.target.value)} className={claseCampo} />
+          </label>
+          <label className="min-w-0">
+            Hora de envío
+            <input type="time" required value={horaRecordatorios} onChange={(e) => setHoraRecordatorios(e.target.value)} className={claseCampo} />
+          </label>
+        </div>
+        <p className="text-xs text-atlas-texto-suave">
+          Cada día a esa hora (Bogotá) Atlas avisa por la app, push, correo y Teams a quien tiene turno en esos días, y el mismo sábado al equipo.
+          Sin días, solo sale el aviso del sábado. Cada persona elige sus canales en Notificaciones.
+        </p>
+      </fieldset>
       <label className="font-medium">
         Canal de soporte para externos
         <input type="text" maxLength={200} value={canal} onChange={(e) => setCanal(e.target.value)} className={claseCampo} placeholder="soporte@ejemplo.com" aria-describedby="ayuda-canal" />
@@ -180,6 +198,72 @@ function FormularioConfiguracion({ actual, alAvisar }: { actual: Configuracion }
         Guardar configuración
       </Boton>
     </form>
+  );
+}
+
+// --- Recordatorios (HU 2.11) ---
+
+const TEXTO_DISPARO = { programada: 'Programada', manual: 'Enviar ahora' } as const;
+
+function SeccionRecordatorios({ alAvisar }: PropsSeccion) {
+  const cliente = useQueryClient();
+  const estado = useQuery({ queryKey: [...CLAVE, 'recordatorios'], queryFn: obtenerRecordatorios, retry: false });
+  const [enviando, setEnviando] = useState(false);
+  const datos = estado.data;
+
+  async function enviarAhora() {
+    alAvisar(null);
+    setEnviando(true);
+    try {
+      await enviarRecordatoriosAhora();
+      alAvisar({ tono: 'exito', texto: 'Se pidió el envío: los recordatorios que falten de hoy salen en unos segundos.' });
+      window.setTimeout(() => void cliente.invalidateQueries({ queryKey: [...CLAVE, 'recordatorios'] }), 3000);
+    } catch (e) {
+      alAvisar(avisoDeError(e, 'No se pudo pedir el envío de los recordatorios.'));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <Tarjeta titulo="Recordatorios de turno" icono="notificaciones">
+      {estado.isPending && <p role="status">Cargando los recordatorios…</p>}
+      {estado.isError && <p role="alert">No se pudo cargar el estado de los recordatorios.</p>}
+      {datos && (
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
+          <p>
+            {datos.programados ? `Salen cada día a las ${datos.hora} (Bogotá)` : 'La corrida diaria está apagada en este ambiente'}
+            {datos.diasAnticipacion ? `, ${datos.diasAnticipacion} ${datos.diasAnticipacion === 1 ? 'día' : 'días'} antes del turno y el mismo sábado.` : ', solo el mismo sábado.'}
+          </p>
+          <ul aria-label="Canales de los recordatorios" className="flex flex-wrap gap-2">
+            <li><Insignia tono="exito">App</Insignia></li>
+            <li><Insignia tono={datos.canales.push ? 'exito' : 'neutral'}>Push{datos.canales.push ? '' : ': sin llaves'}</Insignia></li>
+            <li><Insignia tono={datos.canales.correo ? 'exito' : 'neutral'}>Correo{datos.canales.correo ? '' : ': sin configurar'}</Insignia></li>
+            <li><Insignia tono={datos.canales.teams ? 'exito' : 'neutral'}>Teams{datos.canales.teams ? '' : ': sin configurar'}</Insignia></li>
+          </ul>
+          {datos.corridas.length > 0 ? (
+            <ul aria-label="Últimas corridas" className="flex flex-col gap-2">
+              {datos.corridas.map((c) => (
+                <li key={`${c.iniciadaEn}-${c.disparo}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
+                  <span className="min-w-0">
+                    <span className="block font-medium">{formatearDia(c.fecha)} · {TEXTO_DISPARO[c.disparo]}</span>
+                    <span className="text-atlas-texto-suave">
+                      {c.terminadaEn ? `${c.enviados} enviados, ${c.fallidos} fallidos, ${c.omitidos} omitidos` : 'En curso o interrumpida'}
+                    </span>
+                  </span>
+                  {c.fallidos > 0 && <Insignia tono="neutral">Se reintenta</Insignia>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-atlas-texto-suave">Aún no ha corrido.</p>
+          )}
+          <Boton variante="secundario" className="self-start" disabled={enviando || datos.enCurso} onClick={() => void enviarAhora()}>
+            Enviar ahora
+          </Boton>
+        </div>
+      )}
+    </Tarjeta>
   );
 }
 

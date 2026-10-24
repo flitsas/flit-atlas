@@ -14,6 +14,7 @@ public sealed class ConfiguracionSoporte : Entidad
 {
     public static readonly TimeOnly InicioPorDefecto = new(8, 0);
     public static readonly TimeOnly FinPorDefecto = new(12, 0);
+    public static readonly TimeOnly HoraRecordatoriosPorDefecto = new(7, 0);
     public const ReglaFestivos ReglaPorDefecto = Dominio.ReglaFestivos.SinTurno;
 
     /// <summary>Siempre <c>true</c>: con el índice único garantiza una sola fila.</summary>
@@ -27,8 +28,17 @@ public sealed class ConfiguracionSoporte : Entidad
     /// <summary>Qué hace la generación con un sábado festivo de Colombia.</summary>
     public ReglaFestivos ReglaFestivos { get; set; } = ReglaPorDefecto;
 
-    /// <summary>Días antes del turno en que salen los recordatorios (HU 2.11); vacío mientras no se defina.</summary>
+    /// <summary>
+    /// Días antes del turno en que sale el recordatorio a la persona (HU 2.11); vacío mientras no se defina (solo sale el
+    /// del mismo sábado).
+    /// </summary>
     public int? DiasAnticipacionRecordatorio { get; set; }
+
+    /// <summary>
+    /// Hora de Bogotá a la que corre el trabajo diario de los recordatorios (HU 2.11). Por defecto 07:00
+    /// [por verificar con el líder].
+    /// </summary>
+    public TimeOnly HoraRecordatorios { get; set; } = HoraRecordatoriosPorDefecto;
 
     /// <summary>
     /// Canal de soporte del sábado que ven los externos (un correo, un número o un canal, sin nombres de personas).
@@ -224,6 +234,65 @@ public sealed class EventoSolicitudCambio : Entidad
 }
 
 /// <summary>
+/// Un recordatorio de turno por un canal (HU 2.11): la marca que impide mandarlo dos veces. Se crea <c>en_curso</c> antes
+/// de enviar y pasa a <c>enviado</c> o <c>fallido</c>; uno que quedó <c>en_curso</c> (la réplica se cayó a mitad) no se
+/// repite: mejor un aviso de menos que uno doble. Los fallidos se reintentan en las corridas siguientes, hasta
+/// <see cref="Recordatorios.RecordatoriosSoporte.TopeIntentos"/> veces, mientras el turno no haya pasado.
+/// </summary>
+public sealed class RecordatorioEnviado : Entidad
+{
+    /// <summary>Única: <c>momento:turno:canal</c> o, para el aviso al canal de Teams del equipo, <c>momento:equipo:fecha:canal</c>.</summary>
+    public required string Clave { get; init; }
+
+    public required MomentoRecordatorio Momento { get; init; }
+
+    public required CanalRecordatorio Canal { get; init; }
+
+    public required Guid EquipoId { get; init; }
+
+    public required DateOnly Fecha { get; init; }
+
+    /// <summary>Turno recordado; vacío en el aviso al canal de Teams del equipo.</summary>
+    public Guid? TurnoId { get; init; }
+
+    /// <summary>Destinatario (<c>plataforma_persona</c>); vacío en el aviso al canal de Teams del equipo.</summary>
+    public Guid? PersonaId { get; init; }
+
+    public EstadoRecordatorio Estado { get; set; } = EstadoRecordatorio.EnCurso;
+
+    public int Intentos { get; set; }
+
+    /// <summary>Tipo de la última falla (p. ej. <c>CorreoNoEnviadoException</c>), sin datos personales.</summary>
+    public string? Error { get; set; }
+
+    public DateTimeOffset? EnviadoEn { get; set; }
+}
+
+/// <summary>
+/// Una corrida del trabajo de recordatorios (HU 2.11). Solo una programada por día (índice único parcial): si dos réplicas
+/// llegan a la vez, el candado de PostgreSQL deja correr una y la otra ve la corrida del día hecha.
+/// </summary>
+public sealed class CorridaRecordatorios : Entidad
+{
+    /// <summary>Día de Bogotá de la corrida.</summary>
+    public required DateOnly Fecha { get; init; }
+
+    public required DisparoRecordatorios Disparo { get; init; }
+
+    /// <summary>Quien la pidió con «Enviar ahora» (corrida manual).</summary>
+    public Guid? PedidaPorPersonaId { get; init; }
+
+    public DateTimeOffset? TerminadaEn { get; set; }
+
+    public int Enviados { get; set; }
+
+    public int Fallidos { get; set; }
+
+    /// <summary>Canales que no se intentaron: preferencia apagada, sin dispositivos o canal sin configurar.</summary>
+    public int Omitidos { get; set; }
+}
+
+/// <summary>
 /// Tablas <c>soporte_*</c> del módulo Soporte de los sábados, con su historial <c>__ef_migraciones_soporte</c>
 /// (ATLAS-ADR-0026 y ATLAS-ADR-0029). Solo mapea sus tablas: las personas se leen de <c>PlataformaDbContext</c> y las
 /// llaves foráneas hacia <c>plataforma_persona</c> se crean a mano en la migración.
@@ -245,6 +314,8 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
     public const int LargoCanal = 200;
     public const int LargoNombreEquipo = 100;
     public const int PersonasMaximasPorTurno = 10;
+    public const int LargoClaveRecordatorio = 120;
+    public const int LargoErrorRecordatorio = 100;
 
     /// <summary>Equipos que crea la migración inicial con lo que dijo el líder (se pueden renombrar o desactivar).</summary>
     public static readonly Guid EquipoDesarrolloTi = new("0199a0c0-0000-7000-8000-000000000001");
@@ -262,6 +333,8 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
     public DbSet<Compensacion> Compensaciones => Set<Compensacion>();
     public DbSet<SolicitudCambio> SolicitudesCambio => Set<SolicitudCambio>();
     public DbSet<EventoSolicitudCambio> EventosSolicitud => Set<EventoSolicitudCambio>();
+    public DbSet<RecordatorioEnviado> Recordatorios => Set<RecordatorioEnviado>();
+    public DbSet<CorridaRecordatorios> CorridasRecordatorios => Set<CorridaRecordatorios>();
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion) =>
         ConfigurarOpciones(opciones, cadenaConexion, TablaHistorial);
@@ -402,6 +475,30 @@ public sealed class SoporteDbContext(DbContextOptions<SoporteDbContext> opciones
             e.HasOne<SolicitudCambio>().WithMany().HasForeignKey(v => v.SolicitudId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(v => v.LlaveIdempotencia).IsUnique().HasDatabaseName("ux_soporte_solicitud_evento_llave");
             e.HasIndex(v => v.SolicitudId);
+        });
+
+        modelBuilder.Entity<RecordatorioEnviado>(e =>
+        {
+            e.ToTable(Prefijo + "recordatorio", t => t.HasComment("Recordatorios de turno enviados por canal (HU 2.11): impiden mandar dos veces el mismo."));
+            e.Property(r => r.Id).ValueGeneratedNever();
+            e.Property(r => r.Clave).HasMaxLength(LargoClaveRecordatorio);
+            Enum(e.Property(r => r.Momento));
+            Enum(e.Property(r => r.Canal));
+            Enum(e.Property(r => r.Estado));
+            e.Property(r => r.Error).HasMaxLength(LargoErrorRecordatorio);
+            e.HasIndex(r => r.Clave).IsUnique().HasDatabaseName("ux_soporte_recordatorio_clave");
+            e.HasIndex(r => new { r.Fecha, r.Estado });
+            e.HasOne<Turno>().WithMany().HasForeignKey(r => r.TurnoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<EquipoSoporte>().WithMany().HasForeignKey(r => r.EquipoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CorridaRecordatorios>(e =>
+        {
+            e.ToTable(Prefijo + "recordatorio_corrida", t => t.HasComment("Corridas del trabajo diario de recordatorios (HU 2.11), con sus conteos."));
+            e.Property(c => c.Id).ValueGeneratedNever();
+            Enum(e.Property(c => c.Disparo));
+            // Una corrida programada por día, aunque haya varias réplicas.
+            e.HasIndex(c => c.Fecha).IsUnique().HasFilter("disparo = 'programada'").HasDatabaseName("ux_soporte_recordatorio_corrida_programada");
         });
 
         // Ninguna entidad tiene OrganizacionId: el predicado no agrega filtros, pero se llama como en todo módulo para que
