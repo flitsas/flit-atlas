@@ -6,6 +6,7 @@ using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
+using Flit.Atlas.Identidad.Externos;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
@@ -115,6 +116,8 @@ public sealed class EntornoApi : IAsyncLifetime
             b.UseSetting("Plataforma:Mensajeria:Consumo:Habilitado", "false");
             // HU 4.8: lo mismo con los avisos de deprecación; las pruebas corren AvisosDeprecacion por versión.
             b.UseSetting("Contratos:AvisosDeprecacion:Habilitados", "false");
+            // F4-SEC-13: qa y pdn no arrancan sin redes confiables; aquí, el proxy de loopback que simula IpDeLoopback.
+            b.UseSetting("Atlas:Proxy:RedesConfiables", "127.0.0.1/32,::1/128");
             foreach (var (clave, valor) in configuracion ?? new Dictionary<string, string>())
             {
                 b.UseSetting(clave, valor);
@@ -123,7 +126,7 @@ public sealed class EntornoApi : IAsyncLifetime
             {
                 s.SinRegistroDeEventosDeWindows();
                 // Los correos (invitaciones, recuperación) quedan en un buzón en memoria que las pruebas leen.
-                s.AddSingleton<BuzonDePrueba>();
+                s.AddSingleton(sp => new BuzonDePrueba { Pendientes = () => sp.GetRequiredService<ColaCorreosIdentidad>().Pendientes });
                 s.Replace(ServiceDescriptor.Singleton<IEnviadorCorreo>(sp => sp.GetRequiredService<BuzonDePrueba>()));
                 // TestServer no trae IP remota: se simula un proxy de loopback para que X-Forwarded-For valga.
                 s.AddSingleton<IStartupFilter, IpDeLoopback>();

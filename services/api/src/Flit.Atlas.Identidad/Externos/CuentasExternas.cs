@@ -62,6 +62,7 @@ public sealed class CuentasExternas(
     RegistroSeguridad registro,
     IInvalidadorSesiones invalidador,
     CorreosExternos correos,
+    ColaCorreosIdentidad colaCorreos,
     IOptions<OpcionesExternos> opciones,
     TimeProvider reloj)
 {
@@ -254,7 +255,8 @@ public sealed class CuentasExternas(
 
     /// <summary>
     /// Pide la recuperación: si el correo es de una cuenta externa, envía el enlace (de un solo uso, 30 minutos). La
-    /// respuesta es la misma exista o no la cuenta (sin enumeración).
+    /// respuesta es la misma exista o no la cuenta (sin enumeración), también en el tiempo: el correo sale de la cola en
+    /// memoria, después de responder (F4-SEC-04, ATLAS-ADR-0049).
     /// </summary>
     public async Task SolicitarRecuperacionAsync(string? correo, HttpContext http, CancellationToken ct)
     {
@@ -278,8 +280,11 @@ public sealed class CuentasExternas(
             await registro.RegistrarAsync(TiposEventoSeguridad.RecuperacionSolicitada, datos with { Detalle = new { enviada = false, motivo = "limite" } }, ct);
             return;
         }
-        var enviado = await EnviarRecuperacionAsync(usuario, persona.Nombre, forzada: false, http, ct);
-        await registro.RegistrarAsync(TiposEventoSeguridad.RecuperacionSolicitada, datos with { Detalle = new { enviada = enviado } }, ct);
+        var token = await usuarios.GenerateUserTokenAsync(usuario, TokenOptions.DefaultProvider, PropositoRecuperacion);
+        var mensaje = correos.Recuperacion(usuario.Email!, persona.Nombre, Enlace(usuario, token),
+            reloj.GetUtcNow() + opciones.Value.VigenciaRecuperacion, forzada: false, http);
+        var encolada = colaCorreos.Encolar(new CorreoPendiente(mensaje, datos, "recuperacion"));
+        await registro.RegistrarAsync(TiposEventoSeguridad.RecuperacionSolicitada, datos with { Detalle = new { encolada } }, ct);
     }
 
     /// <summary>El usuario del enlace de recuperación si el enlace aún sirve (token de Identity ligado al sello de seguridad).</summary>
@@ -332,8 +337,8 @@ public sealed class CuentasExternas(
             }
             var codigos = await factores.NuevosCodigosAsync(usuario);
             Exigir(await usuarios.SetLockoutEndDateAsync(usuario, null));
-            Exigir(await usuarios.ResetAccessFailedCountAsync(usuario));
-            // El sello nuevo invalida este mismo enlace (un solo uso) y las sesiones.
+            // El sello nuevo invalida este mismo enlace (un solo uso) y las sesiones. Los contadores de fallos ya volvieron a
+            // cero al retirar los factores.
             Exigir(await usuarios.UpdateSecurityStampAsync(usuario));
             await registro.RegistrarAsync(TiposEventoSeguridad.FactoresRetirados, datos with { Detalle = new { metodos = retirados, motivo = "recuperacion" } }, ct);
             await registro.RegistrarAsync(TiposEventoSeguridad.FactorRegistrado, datos with { Detalle = new { metodo = factor!.Metodo } }, ct);
@@ -346,7 +351,14 @@ public sealed class CuentasExternas(
             return resultado;
         }
         await factores.OlvidarAsync(factor!);
+        // Todas las sesiones del BFF y los tokens de OpenIddict (Bearer y refresh) de la persona dejan de servir.
         await invalidador.InvalidarSesionesAsync(persona.Id, MotivosInvalidacion.CambioDeCredenciales, null, ct);
+        // Aviso al titular, sin enlaces (F4-SEC-06, ATLAS-ADR-0049): si no fue él, sabe que alguien tiene su buzón.
+        if (!colaCorreos.Encolar(new CorreoPendiente(
+            CorreosExternos.AvisoRecuperacion(usuario.Email!, persona.Nombre, factor!.Metodo, reloj.GetUtcNow()), datos, "aviso_recuperacion")))
+        {
+            await registro.RegistrarAsync(TiposEventoSeguridad.CorreoNoEnviado, datos with { Detalle = new { motivo = "aviso_recuperacion" } }, ct);
+        }
 
         // Si puede entrar y no tiene documentos pendientes, la sesión queda abierta; si no, entra por el ingreso normal.
         var actualizado = await usuarios.FindByIdAsync(usuario.Id.ToString());
@@ -400,10 +412,12 @@ public sealed class CuentasExternas(
     private async Task<bool> EnviarRecuperacionAsync(UsuarioAtlas usuario, string nombre, bool forzada, HttpContext http, CancellationToken ct)
     {
         var token = await usuarios.GenerateUserTokenAsync(usuario, TokenOptions.DefaultProvider, PropositoRecuperacion);
-        var enlace = $"{usuario.Id:N}.{Base64Url.EncodeToString(Convert.FromBase64String(token))}";
         var vence = reloj.GetUtcNow() + opciones.Value.VigenciaRecuperacion;
-        return await correos.EnviarRecuperacionAsync(usuario.Email!, nombre, enlace, vence, forzada, http, ct);
+        return await correos.EnviarRecuperacionAsync(usuario.Email!, nombre, Enlace(usuario, token), vence, forzada, http, ct);
     }
+
+    /// <summary>Fragmento del enlace: id del usuario y token de Identity (ligado al sello de seguridad).</summary>
+    private static string Enlace(UsuarioAtlas usuario, string token) => $"{usuario.Id:N}.{Base64Url.EncodeToString(Convert.FromBase64String(token))}";
 
     private static void Exigir(IdentityResult resultado)
     {

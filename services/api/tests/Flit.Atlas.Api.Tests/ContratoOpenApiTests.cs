@@ -34,6 +34,7 @@ public class ContratoOpenApiTests
             b.UseSetting("ConnectionStrings:redis", "127.0.0.1:1,abortConnect=false");
             b.UseSetting("ConnectionStrings:rabbitmq", "amqp://x:x@127.0.0.1:1");
             b.UseSetting("Atlas:Ambiente", ambiente);
+            b.UseSetting("Atlas:Proxy:RedesConfiables", "10.0.0.0/8");
             b.ConfigureTestServices(s => s.SinRegistroDeEventosDeWindows());
             b.UseSetting(ExtensionesIdentidad.ClaveSimulado, ambiente is "local" or "dev" ? "true" : "false");
             b.UseSetting($"{ExtensionesIdentidad.SeccionEntra}:TenantId", "00000000-0000-0000-0000-00000000a71a");

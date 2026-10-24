@@ -40,6 +40,15 @@ public sealed class OpcionesLimiteTasa
     public int ExternosPorIp { get; set; } = 10;
 
     /// <summary>
+    /// Intentos de ingreso local (contraseña y segundo factor) por cuenta atacada y <see cref="VentanaPorCuenta"/>, sumando
+    /// todas las IP y réplicas (contador en Redis, ATLAS-ADR-0049): un ataque repartido entre muchas IP también se frena.
+    /// Cuenta por correo, exista o no la cuenta, para que el 429 no revele nada.
+    /// </summary>
+    public int IngresoPorCuenta { get; set; } = 20;
+
+    public TimeSpan VentanaPorCuenta { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
     /// Reportes de errores de la PWA por persona y ventana (<c>POST /api/v1/plataforma/errores-cliente</c>, con sesión):
     /// una pantalla de error envía un solo reporte, así que un tope bajo evita que una sesión llene el log.
     /// </summary>

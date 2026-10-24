@@ -585,6 +585,43 @@ public partial class TokensTests(EntornoApi entorno)
         Assert.Contains("concesion_vencida", error.GetProperty("error_description").GetString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// F4-SEC-19 (ATLAS-ADR-0049): un externo no estira su acceso con los refresh de atlas-cli más allá del tope absoluto de
+    /// su sesión (24 h); un empleado conserva los 30 días de la concesión.
+    /// </summary>
+    [Fact]
+    public async Task El_refresh_de_un_externo_no_pasa_del_tope_absoluto_de_su_sesion()
+    {
+        var reloj = new RelojDePrueba();
+        await using var api = await ApiAsync(reloj: reloj);
+        var ip = IpNueva();
+        var externo = await entorno.ExternoAsync(api, Flit.Atlas.Plataforma.Permisos.RolesAtlas.Integrador, DateTimeOffset.UtcNow.AddDays(60), await BaseAsync());
+        using var navegador = Navegador.De(api);
+        navegador.Ip = ip;
+        Assert.Equal(HttpStatusCode.NoContent, (await navegador.EntrarComoAsync(externo.UsuarioId)).StatusCode);
+        var pkce = Pkce.Nuevo();
+        var autorizacion = await navegador.GetAsync(UrlAutorizar(pkce));
+        Assert.True(autorizacion.StatusCode == HttpStatusCode.Redirect, await autorizacion.Content.ReadAsStringAsync(Ct));
+        var parametros = ParametrosDe(autorizacion.Headers.Location!);
+        using var http = Cliente(api, ip);
+        var (estado, tokens) = await TokenAsync(http,
+            ("grant_type", "authorization_code"), ("client_id", Cli), ("code", parametros["code"]),
+            ("redirect_uri", RedirectCli), ("code_verifier", pkce.Verificador));
+        Assert.True(estado == HttpStatusCode.OK, tokens.ToString());
+
+        // A las 23 h el refresh todavía rota.
+        reloj.Adelantar(TimeSpan.FromHours(23));
+        var (a23, rotado) = await RefrescarAsync(http, tokens.GetProperty("refresh_token").GetString()!);
+        Assert.True(a23 == HttpStatusCode.OK, rotado.ToString());
+        // A las 25 h, aunque ese refresh dure 7 días, la concesión del externo ya venció.
+        reloj.Adelantar(TimeSpan.FromHours(2));
+        var (a25, error) = await RefrescarAsync(http, rotado.GetProperty("refresh_token").GetString()!);
+
+        Assert.Equal(HttpStatusCode.BadRequest, a25);
+        Assert.Equal("invalid_grant", error.GetProperty("error").GetString());
+        Assert.Contains("concesion_vencida", error.GetProperty("error_description").GetString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Revocar_el_refresh_en_connect_revoke_lo_deja_inservible()
     {

@@ -95,7 +95,10 @@ public static class EndpointsCuentasExternas
     internal static bool EsRutaDeIngreso(PathString ruta) =>
         RutasDeIngreso.Any(r => ruta.StartsWithSegments(r, StringComparison.OrdinalIgnoreCase));
 
-    private static string? _hashFicticio;
+    /// <summary>Fallos del segundo factor que admite un mismo paso del ingreso; luego hay que volver a la contraseña.</summary>
+    public const int FallosPorPaso = 5;
+
+    private const string TipoFallosPaso = "ingreso-contrasena-fallos";
 
     internal static void MapCuentasExternas(this RouteGroupBuilder identidad)
     {
@@ -141,7 +144,9 @@ public static class EndpointsCuentasExternas
             .WithSummary("Ingreso de externos con contraseña (paso 1)")
             .WithDescription(
                 "Verifica correo y contraseña con bloqueo progresivo y responde el paso del TOTP; nunca abre sesión solo con la " +
-                "contraseña. 401 genérico si no coinciden o la cuenta está bloqueada; 403 mfa_requerido si la cuenta no tiene segundo factor. No requiere sesión.")
+                "contraseña, y la contraseña correcta no reinicia los fallos del segundo factor. 401 genérico si no coinciden, si la " +
+                "cuenta está bloqueada o si no tiene contraseña (solo passkey: no suma al bloqueo); 403 mfa_requerido si la cuenta no " +
+                "tiene segundo factor; 429 si la cuenta recibió demasiados intentos (por correo, exista o no). No requiere sesión.")
             .Produces<PasoIngreso>()
             .Produces<ErrorExternos>(StatusCodes.Status401Unauthorized)
             .Produces<ErrorExternos>(StatusCodes.Status403Forbidden);
@@ -149,8 +154,10 @@ public static class EndpointsCuentasExternas
             .WithName("EntrarConSegundoFactor")
             .WithSummary("Ingreso de externos con contraseña (paso 2: TOTP)")
             .WithDescription(
-                "Código TOTP (o un código de recuperación) del paso anterior. Los fallos suman al bloqueo progresivo y un código no " +
-                "se acepta dos veces. 204 abre la sesión; 409 terminos_pendientes si hay versiones nuevas de los documentos. No requiere sesión.")
+                "Código TOTP de 6 dígitos (o un código de recuperación) del paso anterior. Los fallos tienen su propio contador, que " +
+                "suma al bloqueo progresivo y que la contraseña no reinicia; tras 5 fallos el paso deja de servir (401 paso_vencido) " +
+                "y hay que volver a la contraseña. Un código TOTP, o uno de un paso de tiempo anterior, no se acepta dos veces. 204 " +
+                "abre la sesión; 409 terminos_pendientes si hay versiones nuevas de los documentos. No requiere sesión.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<TerminosPendientes>(StatusCodes.Status409Conflict)
             .Produces<ErrorExternos>(StatusCodes.Status401Unauthorized)
@@ -292,9 +299,13 @@ public static class EndpointsCuentasExternas
 
     private static async Task<IResult> EntrarConContrasenaAsync(
         [Description("Correo y contraseña.")] SolicitudIngresoLocal solicitud, UserManager<UsuarioAtlas> usuarios, VerificadorContrasena verificador, PlataformaDbContext plataforma,
-        SesionExterna sesion, PasosTemporales pasos, RegistroSeguridad registro, CancellationToken ct)
+        SesionExterna sesion, PasosTemporales pasos, RegistroSeguridad registro, LimiteIngresoPorCuenta limite, HttpContext http, CancellationToken ct)
     {
         var correo = (solicitud.Correo ?? string.Empty).Trim().ToLowerInvariant();
+        if (!await limite.PermitirAsync(correo, ct))
+        {
+            return limite.Rechazo(http);
+        }
         var usuario = correo.Length is > 0 and <= 320 ? await usuarios.FindByEmailAsync(correo) : null;
         var persona = usuario is null ? null : await plataforma.Personas.AsNoTracking().FirstOrDefaultAsync(p => p.Id == usuario.PersonaId, ct);
         // Solo cuentas locales: externos y la cuenta de emergencia (ATLAS-ADR-0027). Un empleado entra con Microsoft.
@@ -302,9 +313,7 @@ public static class EndpointsCuentasExternas
             || (persona.Tipo != TipoPersona.Externo && !await sesion.EsEmergenciaAsync(persona.Id, ct)))
         {
             // Mismo trabajo que una verificación real: el tiempo no dice si el correo existe.
-            var ficticio = new UsuarioAtlas { PersonaId = Guid.Empty };
-            _hashFicticio ??= usuarios.PasswordHasher.HashPassword(ficticio, Guid.NewGuid().ToString());
-            usuarios.PasswordHasher.VerifyHashedPassword(ficticio, _hashFicticio, solicitud.Contrasena ?? string.Empty);
+            HashFicticio.Verificar(usuarios.PasswordHasher, solicitud.Contrasena);
             await registro.RegistrarAsync(TiposEventoSeguridad.InicioFallido, new DatosEventoSeguridad
             {
                 Detalle = new { metodo = MetodosExternos.Contrasena, motivo = "cuenta_desconocida" },
@@ -334,7 +343,7 @@ public static class EndpointsCuentasExternas
 
     private static async Task<IResult> SegundoFactorAsync(
         [Description("Paso del ingreso y código TOTP o de recuperación.")] SolicitudSegundoFactor solicitud, UserManager<UsuarioAtlas> usuarios, VerificadorContrasena verificador, PasosTemporales pasos,
-        IConnectionMultiplexer redis, SesionExterna sesion, DocumentosLegales legales, RegistroSeguridad registro,
+        IConnectionMultiplexer redis, SesionExterna sesion, DocumentosLegales legales, RegistroSeguridad registro, LimiteIngresoPorCuenta limite,
         HttpContext http, CancellationToken ct)
     {
         var paso = await pasos.LeerAsync<PasoContrasena>(TipoPasoContrasena, solicitud.Estado);
@@ -342,6 +351,10 @@ public static class EndpointsCuentasExternas
         if (paso is null || usuario is null || usuario.SecurityStamp != paso.Sello)
         {
             return PasoVencido();
+        }
+        if (!await limite.PermitirAsync(usuario.Email, ct))
+        {
+            return limite.Rechazo(http);
         }
         var datos = new DatosEventoSeguridad { UsuarioId = usuario.Id, PersonaId = usuario.PersonaId };
         ResultadoVerificacion resultado;
@@ -354,26 +367,37 @@ public static class EndpointsCuentasExternas
         else
         {
             metodo = "totp";
-            var codigo = (solicitud.Codigo ?? string.Empty).Replace(" ", string.Empty, StringComparison.Ordinal);
-            // Un código TOTP no sirve dos veces (ASVS V2.8.4): se recuerda por usuario mientras pueda seguir vigente.
-            var nuevo = codigo.Length is > 0 and <= 10 && await redis.GetDatabase().StringSetAsync(
-                $"{PasosTemporales.Prefijo}totp-usado:{usuario.Id:N}:{codigo}", 1, TimeSpan.FromMinutes(3), When.NotExists);
-            resultado = nuevo ? await verificador.VerificarTotpAsync(usuario, codigo, ct) : ResultadoVerificacion.Invalida;
-            if (!nuevo)
-            {
-                await registro.RegistrarAsync(TiposEventoSeguridad.MfaFallido, datos with { Detalle = new { metodo, motivo = "codigo_reutilizado" } }, ct);
-            }
+            // Se normaliza una sola vez (6 dígitos, sin espacios); otro formato cuenta como fallo. El último paso de tiempo
+            // aceptado queda en la base: un código no sirve dos veces (RFC 6238 §5.2, ATLAS-ADR-0049).
+            resultado = await verificador.VerificarTotpAsync(usuario, CodigosTotp.Normalizar(solicitud.Codigo), ct);
         }
+        var claveFallos = $"{PasosTemporales.Prefijo}{TipoFallosPaso}:{solicitud.Estado}";
         if (resultado == ResultadoVerificacion.Bloqueada)
         {
             await pasos.BorrarAsync(TipoPasoContrasena, solicitud.Estado);
+            await redis.GetDatabase().KeyDeleteAsync(claveFallos);
             return Error(StatusCodes.Status401Unauthorized, "cuenta_bloqueada", "La cuenta quedó bloqueada un tiempo por intentos fallidos.");
         }
         if (resultado != ResultadoVerificacion.Valida)
         {
+            // Tras FallosPorPaso fallos el paso deja de servir: para seguir hay que volver a poner la contraseña, que no
+            // reinicia el contador del segundo factor (F4-SEC-01).
+            var fallos = await redis.GetDatabase().StringIncrementAsync(claveFallos);
+            if (fallos == 1)
+            {
+                await redis.GetDatabase().KeyExpireAsync(claveFallos, TimeSpan.FromMinutes(10));
+            }
+            if (fallos >= FallosPorPaso)
+            {
+                await pasos.BorrarAsync(TipoPasoContrasena, solicitud.Estado);
+                await redis.GetDatabase().KeyDeleteAsync(claveFallos);
+                return Error(StatusCodes.Status401Unauthorized, "paso_vencido", "Demasiados códigos errados. Empieza de nuevo con tu contraseña.");
+            }
             return Error(StatusCodes.Status401Unauthorized, "codigo_invalido", "El código no es válido. Escribe el código actual de tu aplicación.");
         }
         await pasos.BorrarAsync(TipoPasoContrasena, solicitud.Estado);
+        await redis.GetDatabase().KeyDeleteAsync(claveFallos);
+        await verificador.IngresoCompletadoAsync(usuario, ct);
         await registro.RegistrarAsync(TiposEventoSeguridad.MfaVerificado, datos with { Detalle = new { metodo } }, ct);
         if (metodo == "codigo_recuperacion")
         {
@@ -393,7 +417,7 @@ public static class EndpointsCuentasExternas
     }
 
     private static async Task<IResult> EntrarConPasskeyAsync(
-        [Description("Paso del ingreso y respuesta del autenticador.")] SolicitudPasskey solicitud, IPasskeyHandler<UsuarioAtlas> passkeys, UserManager<UsuarioAtlas> usuarios, PasosTemporales pasos,
+        [Description("Paso del ingreso y respuesta del autenticador.")] SolicitudPasskey solicitud, IPasskeyHandler<UsuarioAtlas> passkeys, UserManager<UsuarioAtlas> usuarios, VerificadorContrasena verificador, PasosTemporales pasos,
         SesionExterna sesion, DocumentosLegales legales, RegistroSeguridad registro, HttpContext http, CancellationToken ct)
     {
         var paso = await pasos.TomarAsync<PasoIngresoPasskey>(TipoPasoPasskey, solicitud.Estado);
@@ -424,7 +448,7 @@ public static class EndpointsCuentasExternas
         }
         // Contador de firmas y estado de respaldo actualizados (detecta autenticadores clonados).
         await usuarios.AddOrUpdatePasskeyAsync(usuario, resultado.Passkey);
-        await usuarios.ResetAccessFailedCountAsync(usuario);
+        await verificador.IngresoCompletadoAsync(usuario, ct);
         await registro.RegistrarAsync(TiposEventoSeguridad.MfaVerificado, datos with { Detalle = new { metodo = MetodosExternos.Passkey } }, ct);
         return await CompletarIngresoAsync(http, usuario, MetodosExternos.Passkey, sesion, legales, pasos, registro, ct);
     }

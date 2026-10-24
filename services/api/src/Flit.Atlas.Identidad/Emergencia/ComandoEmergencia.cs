@@ -1,5 +1,8 @@
 using System.Globalization;
+using Flit.Atlas.Identidad.Seguridad;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using OpenTelemetry.Logs;
 
 namespace Flit.Atlas.Identidad.Emergencia;
 
@@ -17,6 +20,20 @@ public static class ComandoEmergencia
     public const string Uso = "Uso: dotnet Flit.Atlas.Api.dll emergencia activar";
 
     private static readonly TimeZoneInfo Bogota = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
+
+    /// <summary>
+    /// Logs del comando (F4-SEC-21, ATLAS-ADR-0049): ningún proveedor de consola (la salida es solo del comando), y al de
+    /// OpenTelemetry (que exporta por OTLP al colector y de ahí a Loki) solo llegan las advertencias de
+    /// <see cref="RegistroSeguridad"/>, que son los eventos <c>identidad.emergencia.*</c> con su tipo y su id, sin datos
+    /// personales ni el enlace.
+    /// </summary>
+    public static void ConfigurarLogs(ILoggingBuilder logs)
+    {
+        ArgumentNullException.ThrowIfNull(logs);
+        logs.ClearProviders();
+        logs.AddOpenTelemetry(o => o.IncludeFormattedMessage = true);
+        logs.AddFilter((categoria, nivel) => categoria == typeof(RegistroSeguridad).FullName && nivel >= LogLevel.Warning);
+    }
 
     /// <summary>¿Los argumentos del proceso piden el comando y no el servidor?</summary>
     public static bool EsComando(IReadOnlyList<string> args) =>
