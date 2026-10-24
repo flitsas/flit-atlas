@@ -20,6 +20,23 @@ public sealed class UsuarioAtlas : IdentityUser<Guid>
     public DateTimeOffset CreadoEn { get; set; }
 }
 
+/// <summary>
+/// Estado del segundo factor de una cuenta local (ATLAS-ADR-0049): fallos seguidos del TOTP o de los códigos de
+/// recuperación, con su propio contador (la contraseña correcta no lo reinicia; se reinicia al terminar el ingreso), y el
+/// último paso de tiempo TOTP aceptado (RFC 6238 §5.2: un código no sirve dos veces). Tabla aparte de
+/// <c>identidad_usuario</c> para que el <c>UpdateAsync</c> de Identity, que reescribe toda la fila del usuario, nunca pise
+/// estos valores: solo se escriben con SQL atómico.
+/// </summary>
+public sealed class SegundoFactorUsuario
+{
+    public required Guid UsuarioId { get; init; }
+
+    public int Fallos { get; set; }
+
+    /// <summary>Paso (Unix / 30 s) del último código TOTP aceptado; uno igual o anterior se rechaza.</summary>
+    public long? UltimoPasoTotp { get; set; }
+}
+
 /// <summary>Rol de ASP.NET Core Identity. No se usa para autorizar: los roles de Atlas viven en <c>plataforma_*</c>.</summary>
 public sealed class RolIdentity : IdentityRole<Guid>;
 

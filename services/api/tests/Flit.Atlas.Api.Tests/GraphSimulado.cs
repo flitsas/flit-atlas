@@ -31,6 +31,9 @@ public sealed class GraphSimulado : HttpMessageHandler
         public byte[]? Foto { get; set; }
         public string TipoFoto { get; set; } = "image/jpeg";
         public bool EnGrupo { get; set; } = true;
+
+        /// <summary>Grupos de Entra del usuario (<c>transitiveMemberOf</c>), para los roles que vienen de grupos.</summary>
+        public List<Guid> Grupos { get; set; } = [];
     }
 
     public ConcurrentDictionary<Guid, Usuario> Usuarios { get; } = new();
@@ -79,6 +82,12 @@ public sealed class GraphSimulado : HttpMessageHandler
         if (partes is ["v1.0", "users", var idFoto, "photos", _, "$value"])
         {
             return Task.FromResult(Foto(idFoto));
+        }
+        if (partes is ["v1.0", "users", var idGrupos, "transitiveMemberOf", "microsoft.graph.group"])
+        {
+            return Task.FromResult(Guid.TryParse(idGrupos, out var oidGrupos) && Usuarios.TryGetValue(oidGrupos, out var conGrupos)
+                ? Json(new Dictionary<string, object?> { ["value"] = conGrupos.Grupos.Select(g => new { id = g }).ToList() })
+                : new HttpResponseMessage(HttpStatusCode.NotFound));
         }
         if (partes is ["v1.0", "users", _, "photo", "$value"])
         {

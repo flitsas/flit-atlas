@@ -53,6 +53,7 @@ public sealed partial class SincronizadorPersonas(
     PlataformaDbContext plataforma,
     IDirectorioEntra directorio,
     IInvalidadorSesiones invalidador,
+    RegistroSeguridad registro,
     IOptions<OpcionesSincronizacionPersonas> opciones,
     TimeProvider reloj,
     ILogger<SincronizadorPersonas> log)
@@ -137,13 +138,27 @@ public sealed partial class SincronizadorPersonas(
         var id = Guid.CreateVersion7();
         try
         {
-            var deshabilitar = await AplicarAsync(config, inicio, conteo, ct);
+            var (deshabilitar, conRolesCambiados, sinVincular) = await AplicarAsync(config, inicio, conteo, ct);
 
             // Después de guardar el estado (ATLAS-ADR-0022): un ingreso simultáneo o ve la persona inactiva o queda con el
             // sello viejo.
             foreach (var personaId in deshabilitar)
             {
                 await invalidador.InvalidarSesionesAsync(personaId, MotivoInvalidacion, null, ct);
+            }
+            // Roles de grupos de Entra recalculados (F4-SEC-08, ATLAS-ADR-0049): quien salió de un grupo pierde el rol ya, con
+            // sus sesiones y sus refresh, sin esperar a que vuelva a entrar.
+            foreach (var personaId in conRolesCambiados)
+            {
+                await invalidador.InvalidarSesionesAsync(personaId, MotivosInvalidacion.CambioDeRoles, null, ct);
+            }
+            foreach (var personaId in sinVincular)
+            {
+                await registro.RegistrarAsync(TiposEventoSeguridad.VinculoPorCorreoRechazado, new DatosEventoSeguridad
+                {
+                    PersonaId = personaId,
+                    Detalle = new { origen = "sincronizacion", motivo = "persona_con_roles" },
+                }, ct);
             }
 
             var estado = conteo.Estado(id, Texto(disparo), origen, Resultados.Exitosa, inicio, reloj.GetUtcNow(), null);
@@ -160,6 +175,8 @@ public sealed partial class SincronizadorPersonas(
                     sin_cambios = estado.SinCambios,
                     omitidas = estado.Omitidas,
                     retenidas = estado.Retenidas,
+                    roles_recalculados = conRolesCambiados.Count,
+                    sin_vincular = sinVincular.Count,
                     duracion_ms = (long)cronometro.Elapsed.TotalMilliseconds,
                 }));
             await GuardarEstadoAsync(plataforma, estado, ct);
@@ -200,8 +217,11 @@ public sealed partial class SincronizadorPersonas(
         }
     }
 
-    /// <summary>Lee Graph y aplica los cambios en una sola transacción; devuelve las personas a las que hay que cerrar sesión.</summary>
-    private async Task<List<Guid>> AplicarAsync(
+    /// <summary>
+    /// Lee Graph y aplica los cambios en una sola transacción. Devuelve las personas deshabilitadas y las que cambiaron de
+    /// roles por grupos (a las dos hay que cerrarles la sesión) y las que no se enlazaron por correo porque tienen roles.
+    /// </summary>
+    private async Task<(List<Guid> Deshabilitar, List<Guid> ConRolesCambiados, List<Guid> SinVincular)> AplicarAsync(
         OpcionesSincronizacionPersonas config, DateTimeOffset ahora, Conteo conteo, CancellationToken ct)
     {
         // 1. Lo que dice Entra (antes de tocar la base: si Graph falla a mitad, no queda nada a medias).
@@ -223,6 +243,10 @@ public sealed partial class SincronizadorPersonas(
             .ToListAsync(ct);
         var porOid = empleados.Where(p => p.EntraOid is not null).ToDictionary(p => p.EntraOid!.Value);
         var porCorreo = empleados.Where(p => p.EntraOid is null).ToDictionary(p => p.Correo, StringComparer.Ordinal);
+        // Una persona sin oid con roles asignados no se enlaza por correo (F4-SEC-07, ATLAS-ADR-0049): el correo de Entra
+        // se cambia y se recicla, y quien lo tuviera heredaría esos roles. Queda un evento para que un administrador decida.
+        var conRoles = (await plataforma.AsignacionesRol.Select(a => a.PersonaId).Distinct().ToListAsync(ct)).ToHashSet();
+        var sinVincular = new List<Guid>();
         var correosOcupados = (await plataforma.Personas.Select(p => p.Correo).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
         // Las enlazadas que el listado no trajo (o todas, con el origen «enlazadas») se consultan una por una: un 404 es una
@@ -241,6 +265,12 @@ public sealed partial class SincronizadorPersonas(
         {
             if (usuario.Correo is { } correo && porCorreo.Remove(correo, out var existente))
             {
+                if (conRoles.Contains(existente.Id))
+                {
+                    sinVincular.Add(existente.Id);
+                    conteo.Omitidas++;
+                    continue;
+                }
                 existente.EntraOid = usuario.Id;
                 porOid[usuario.Id] = existente;
                 estados[usuario.Id] = usuario;
@@ -265,7 +295,11 @@ public sealed partial class SincronizadorPersonas(
             nuevas.Add((persona, usuario));
         }
 
-        // 3. Datos, foto y estado de cada persona enlazada.
+        // 3. Datos, foto, estado y roles de grupos de cada persona enlazada. Los grupos solo se leen si algún grupo da roles
+        //    o alguien tiene roles de un grupo (una consulta a Graph por persona).
+        var leerGrupos = await plataforma.MapeosGrupoEntra.AnyAsync(ct)
+            || await plataforma.AsignacionesRol.AnyAsync(a => a.Origen == OrigenAsignacion.GrupoEntra, ct);
+        var conRolesCambiados = new List<Guid>();
         var activasEnlazadas = porOid.Values.Count(p => p.Estado == EstadoPersona.Activa);
         var porDeshabilitar = new List<Persona>();
         foreach (var (oid, persona) in porOid)
@@ -278,6 +312,11 @@ public sealed partial class SincronizadorPersonas(
                 if (usuario.Habilitada)
                 {
                     cambio |= await ActualizarFotoAsync(persona, config.TamanoMaximoFoto, ahora, ct);
+                    if (leerGrupos && persona.Estado != EstadoPersona.Suspendida && await RolesDeGruposEntra.SincronizarAsync(plataforma,
+                        persona.Id, persona.OrganizacionId, await directorio.ObtenerGruposAsync(oid, ct), ahora, ct))
+                    {
+                        conRolesCambiados.Add(persona.Id);
+                    }
                 }
             }
             persona.SincronizadaEn = ahora;
@@ -332,7 +371,7 @@ public sealed partial class SincronizadorPersonas(
         await using var transaccion = await plataforma.Database.BeginTransactionAsync(ct);
         await plataforma.SaveChangesAsync(ct);
         await transaccion.CommitAsync(ct);
-        return deshabilitar;
+        return (deshabilitar, [.. conRolesCambiados.Except(deshabilitar)], sinVincular);
     }
 
     /// <summary>Nombre, cargo, área y teléfono como los tiene Entra; <c>true</c> si alguno cambió.</summary>

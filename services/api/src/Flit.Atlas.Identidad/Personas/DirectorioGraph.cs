@@ -34,6 +34,12 @@ public interface IDirectorioEntra
 
     /// <summary>Foto de perfil; <c>null</c> si no tiene, si no es una imagen o si pasa de <paramref name="tamanoMaximo"/>.</summary>
     Task<FotoEntra?> ObtenerFotoAsync(Guid oid, int tamanoMaximo, CancellationToken ct);
+
+    /// <summary>
+    /// Ids de los grupos de Entra del usuario, directos y anidados (<c>transitiveMemberOf</c>), para recalcular los roles
+    /// que vienen de grupos (ATLAS-ADR-0049). Cualquier falla lanza: la corrida no cambia roles con datos a medias.
+    /// </summary>
+    Task<IReadOnlyCollection<Guid>> ObtenerGruposAsync(Guid oid, CancellationToken ct);
 }
 
 /// <summary>
@@ -112,6 +118,22 @@ public sealed class DirectorioGraph(HttpClient http, IAuthorizationHeaderProvide
         return null;
     }
 
+    public async Task<IReadOnlyCollection<Guid>> ObtenerGruposAsync(Guid oid, CancellationToken ct)
+    {
+        // La misma consulta que el ingreso (PerfilGraph), con el mismo permiso GroupMember.Read.All.
+        var grupos = new List<Guid>();
+        string? siguiente = $"v1.0/users/{oid}/transitiveMemberOf/microsoft.graph.group?$select=id&$top=999";
+        while (siguiente is not null)
+        {
+            using var respuesta = await EnviarAsync(siguiente, ct);
+            respuesta.EnsureSuccessStatusCode();
+            var pagina = await respuesta.Content.ReadFromJsonAsync<PaginaGrupos>(ct);
+            grupos.AddRange(pagina?.Valores.Select(g => g.Id) ?? []);
+            siguiente = pagina?.Siguiente;
+        }
+        return grupos;
+    }
+
     private async Task<HttpResponseMessage> EnviarAsync(
         string ruta, CancellationToken ct, HttpCompletionOption completar = HttpCompletionOption.ResponseContentRead)
     {
@@ -173,6 +195,12 @@ public sealed class DirectorioGraph(HttpClient http, IAuthorizationHeaderProvide
         private static string? Limpio(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
     }
 
+    private sealed record GrupoGraph([property: JsonPropertyName("id")] Guid Id);
+
+    private sealed record PaginaGrupos(
+        [property: JsonPropertyName("value")] List<GrupoGraph> Valores,
+        [property: JsonPropertyName("@odata.nextLink")] string? Siguiente);
+
     private sealed record PaginaUsuarios(
         [property: JsonPropertyName("value")] List<UsuarioGraph> Valores,
         [property: JsonPropertyName("@odata.nextLink")] string? Siguiente);
@@ -193,4 +221,6 @@ public sealed class SinDirectorioEntra : IDirectorioEntra
     public Task<UsuarioEntra?> ObtenerAsync(Guid oid, CancellationToken ct) => Task.FromResult<UsuarioEntra?>(null);
 
     public Task<FotoEntra?> ObtenerFotoAsync(Guid oid, int tamanoMaximo, CancellationToken ct) => Task.FromResult<FotoEntra?>(null);
+
+    public Task<IReadOnlyCollection<Guid>> ObtenerGruposAsync(Guid oid, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<Guid>>([]);
 }

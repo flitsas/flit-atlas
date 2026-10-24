@@ -150,7 +150,7 @@ public static class EndpointsTokens
     /// <summary><c>/connect/token</c>: código, refresh y client_credentials.</summary>
     private static async Task<IResult> EmitirAsync(
         HttpContext http, IOptions<OpcionesTokens> opciones, UserManager<UsuarioAtlas> usuarios, PlataformaDbContext plataforma,
-        IOpenIddictTokenManager tokens, TimeProvider reloj, CancellationToken ct)
+        IOpenIddictTokenManager tokens, OpcionesSesion sesion, TimeProvider reloj, CancellationToken ct)
     {
         var solicitud = http.GetOpenIddictServerRequest() ?? throw new InvalidOperationException("Falta la solicitud de OpenIddict.");
         if (!opciones.Value.Clientes.TryGetValue(solicitud.ClientId ?? string.Empty, out var cliente))
@@ -189,10 +189,14 @@ public static class EndpointsTokens
         var concedidoEn = long.TryParse(original.GetClaim(ClaimConcedidoEn), NumberStyles.Integer, CultureInfo.InvariantCulture, out var segundos)
             ? DateTimeOffset.FromUnixTimeSeconds(segundos)
             : (DateTimeOffset?)null;
+        // Un externo no estira su acceso con refresh más allá del tope absoluto de su sesión (24 h, F4-SEC-19, ATLAS-ADR-0049).
+        var maximaConcesion = titular?.Persona.Tipo == TipoPersona.Externo && sesion.AbsolutaExternos < opciones.Value.DuracionMaximaConcesion
+            ? sesion.AbsolutaExternos
+            : opciones.Value.DuracionMaximaConcesion;
         var motivo = titular is null ? "cuenta_inactiva"
             // El sello cambia al suspender, cambiar roles o cerrar todo desde la administración (ATLAS-ADR-0022).
             : !string.Equals(original.GetClaim(ClaimsAtlas.SelloSeguridad), titular.Value.Usuario.SecurityStamp, StringComparison.Ordinal) ? "sello_de_seguridad"
-            : concedidoEn is null || ahora - concedidoEn > opciones.Value.DuracionMaximaConcesion ? "concesion_vencida"
+            : concedidoEn is null || ahora - concedidoEn > maximaConcesion ? "concesion_vencida"
             : null;
         if (motivo is not null)
         {

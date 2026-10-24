@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text;
 using Flit.Atlas.Identidad.Datos;
+using Flit.Atlas.Identidad.Seguridad;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using QRCoder;
@@ -47,7 +48,8 @@ public sealed class FactoresExternos(
     UserManager<UsuarioAtlas> usuarios,
     IUserStore<UsuarioAtlas> almacen,
     IPasskeyHandler<UsuarioAtlas> passkeys,
-    PasosTemporales pasos)
+    PasosTemporales pasos,
+    VerificadorContrasena verificador)
 {
     public const string Emisor = "Flit Atlas";
     public const int CodigosRecuperacion = 10;
@@ -151,8 +153,11 @@ public sealed class FactoresExternos(
                 }
                 await ((IUserAuthenticatorKeyStore<UsuarioAtlas>)almacen).SetAuthenticatorKeyAsync(usuario, contrasena.ClaveTotp, CancellationToken.None);
                 Exigir(await usuarios.UpdateAsync(usuario));
-                var codigo = contrasena.Codigo.Replace(" ", string.Empty, StringComparison.Ordinal);
-                if (!await usuarios.VerifyTwoFactorTokenAsync(usuario, TokenOptions.DefaultAuthenticatorProvider, codigo))
+                // El mismo formato que al entrar, y el paso de tiempo del código queda como usado (ATLAS-ADR-0049): el
+                // código con que se confirmó la clave no sirve después para entrar.
+                var codigo = CodigosTotp.Normalizar(contrasena.Codigo);
+                if (codigo is null || !await usuarios.VerifyTwoFactorTokenAsync(usuario, TokenOptions.DefaultAuthenticatorProvider, codigo)
+                    || !await verificador.MarcarCodigoTotpAsync(usuario, codigo, claveNueva: true))
                 {
                     return new ErrorFactor("codigo_invalido", "El código no coincide. Revisa la hora del teléfono y escribe el código actual.");
                 }
@@ -171,7 +176,10 @@ public sealed class FactoresExternos(
     public async Task<IReadOnlyList<string>> NuevosCodigosAsync(UsuarioAtlas usuario) =>
         [.. await usuarios.GenerateNewTwoFactorRecoveryCodesAsync(usuario, CodigosRecuperacion) ?? []];
 
-    /// <summary>Quita todos los factores: passkeys, contraseña, clave TOTP y códigos de recuperación.</summary>
+    /// <summary>
+    /// Quita todos los factores: passkeys, contraseña, clave TOTP y códigos de recuperación; los contadores de fallos de
+    /// la contraseña y del segundo factor vuelven a cero (ATLAS-ADR-0049).
+    /// </summary>
     public async Task<IReadOnlyList<string>> RetirarTodosAsync(UsuarioAtlas usuario)
     {
         var retirados = new List<string>();
@@ -192,6 +200,7 @@ public sealed class FactoresExternos(
         }
         Exigir(await usuarios.RemoveAuthenticationTokenAsync(usuario, "[AspNetUserStore]", "RecoveryCodes"));
         Exigir(await usuarios.SetTwoFactorEnabledAsync(usuario, false));
+        await verificador.IngresoCompletadoAsync(usuario);
         return [.. retirados.Distinct()];
     }
 

@@ -31,6 +31,14 @@ public sealed record CuentaEmpleado(
 
 public sealed class CorreoEnUsoException(string mensaje) : InvalidOperationException(mensaje);
 
+/// <summary>
+/// Una cuenta de Entra con un <c>oid</c> que Atlas no conoce trae el correo de una persona que ya existe (F4-SEC-07,
+/// ATLAS-ADR-0049): no se enlaza por correo ni hereda sus roles. Queda un evento de seguridad y la persona ve un mensaje
+/// para pedir que la vinculen.
+/// </summary>
+public sealed class CuentaPorVincularException()
+    : InvalidOperationException("La cuenta de Entra no está enlazada y su correo ya es de otra persona de Atlas.");
+
 /// <summary>La persona no puede entrar: inactiva, suspendida o con la cuenta bloqueada.</summary>
 public sealed class IngresoNoPermitidoException(string motivo)
     : UnauthorizedAccessException($"Ingreso no permitido: {motivo}.")
@@ -38,6 +46,9 @@ public sealed class IngresoNoPermitidoException(string motivo)
     public const string PersonaInactiva = "persona_inactiva";
     public const string PersonaSuspendida = "persona_suspendida";
     public const string CuentaBloqueada = "cuenta_bloqueada";
+
+    /// <summary>Se pidió reautenticar, pero Entra no confirmó un ingreso reciente (<c>auth_time</c>, F4-SEC-18).</summary>
+    public const string ReautenticacionNoVerificada = "reautenticacion_no_verificada";
 
     public string Motivo { get; } = motivo;
 }
@@ -56,6 +67,12 @@ public sealed class AprovisionadorEmpleados(
     public const string NombreOrganizacionInterna = "FLIT S.A.S.";
     public const string ProveedorEntra = "entra";
     public const string ProveedorSimulado = "simulado";
+
+    /// <summary>
+    /// Antigüedad máxima del <c>auth_time</c> de Entra en una reautenticación (ATLAS-ADR-0049): con <c>prompt=login</c> y
+    /// <c>max_age=0</c> el ingreso acaba de pasar; se tolera el desfase de reloj.
+    /// </summary>
+    public static readonly TimeSpan AntiguedadMaximaReautenticacion = TimeSpan.FromMinutes(5);
 
     public async Task<ClaimsPrincipal> AprovisionarAsync(CuentaEmpleado cuenta, CancellationToken ct = default)
     {
@@ -94,6 +111,13 @@ public sealed class AprovisionadorEmpleados(
     private async Task<ClaimsPrincipal> IntentarAsync(CuentaEmpleado cuenta, CancellationToken ct)
     {
         var ahora = reloj.GetUtcNow();
+        // Una reautenticación con Entra solo vale si Entra dice cuándo se ingresó y fue hace nada (F4-SEC-18): sin
+        // auth_time, el ingreso pudo ser silencioso (SSO) y no prueba que la persona volvió a poner sus credenciales.
+        if (cuenta.Reautenticacion && cuenta.Proveedor == ProveedorEntra
+            && (cuenta.AutenticadoEn is not { } autenticado || (ahora - autenticado).Duration() > AntiguedadMaximaReautenticacion))
+        {
+            throw new IngresoNoPermitidoException(IngresoNoPermitidoException.ReautenticacionNoVerificada);
+        }
 
         var organizacion = await OrganizacionInternaAsync(ct);
         var usuario = await usuarios.FindByLoginAsync(cuenta.Proveedor, cuenta.IdExterno);
@@ -114,7 +138,7 @@ public sealed class AprovisionadorEmpleados(
 
         if (cuenta.Grupos is not null)
         {
-            await SincronizarRolesDeGruposAsync(persona.Id, organizacion.Id, cuenta.Grupos, ahora, ct);
+            await RolesDeGruposEntra.SincronizarAsync(plataforma, persona.Id, organizacion.Id, cuenta.Grupos, ahora, ct);
         }
         await plataforma.SaveChangesAsync(ct);
 
@@ -175,24 +199,35 @@ public sealed class AprovisionadorEmpleados(
             persona = await plataforma.Personas.FirstOrDefaultAsync(p => p.EntraOid == oid, ct);
         }
 
-        // Solo una cuenta de Entra (correo del tenant de FLIT) puede enlazar una persona que ya existía por correo,
-        // por ejemplo, cargada desde el reparto de responsables. El proveedor simulado nunca enlaza personas reales.
-        if (persona is null && cuenta.Proveedor == ProveedorEntra)
-        {
-            // La cuenta de emergencia nunca se enlaza a Entra (ATLAS-ADR-0027), aunque alguien tuviera su correo.
-            persona = await plataforma.Personas.FirstOrDefaultAsync(
-                p => p.Correo == correo && p.EntraOid == null && p.Tipo == TipoPersona.Empleado
-                    && !plataforma.AsignacionesRol.Any(a => a.PersonaId == p.Id && a.Origen == OrigenAsignacion.Emergencia), ct);
-        }
-
         if (persona is not null)
         {
             return persona;
         }
 
-        if (await plataforma.Personas.AnyAsync(p => p.Correo == correo, ct))
+        // Solo se enlaza por oid (F4-SEC-07, ATLAS-ADR-0049): el correo del token (email, preferred_username o upn) es un
+        // atributo que cambia y se recicla. Las personas que ya existían sin oid las enlaza la sincronización con Graph
+        // (ATLAS-ADR-0030) antes del primer ingreso; si el correo es de otra persona, no se hereda nada.
+        var existente = await plataforma.Personas.AsNoTracking().Where(p => p.Correo == correo)
+            .Select(p => new { p.Id, p.Tipo, ConOid = p.EntraOid != null }).FirstOrDefaultAsync(ct);
+        if (existente is not null)
         {
-            throw new CorreoEnUsoException("El correo ya pertenece a otra persona de Atlas.");
+            if (cuenta.Proveedor != ProveedorEntra)
+            {
+                throw new CorreoEnUsoException("El correo ya pertenece a otra persona de Atlas.");
+            }
+            await registro.RegistrarAsync(TiposEventoSeguridad.VinculoPorCorreoRechazado, new DatosEventoSeguridad
+            {
+                // La persona cuyo correo traía la cuenta (la que se habría heredado).
+                PersonaId = existente.Id,
+                OrganizacionId = organizacionId,
+                Detalle = new
+                {
+                    proveedor = cuenta.Proveedor,
+                    tipo_persona = existente.Tipo.ToString().ToLowerInvariant(),
+                    persona_con_oid = existente.ConOid,
+                },
+            }, ct);
+            throw new CuentaPorVincularException();
         }
 
         persona = new Persona
@@ -241,52 +276,6 @@ public sealed class AprovisionadorEmpleados(
         }
         return usuario!;
     }
-
-    private async Task SincronizarRolesDeGruposAsync(
-        Guid personaId, Guid organizacionId, IReadOnlyCollection<Guid> grupos, DateTimeOffset ahora, CancellationToken ct)
-    {
-        var rolesDeGrupos = await plataforma.MapeosGrupoEntra
-            .Where(m => grupos.Contains(m.GrupoId))
-            .Select(m => m.RolId)
-            .Distinct()
-            .ToListAsync(ct);
-
-        var actuales = await plataforma.AsignacionesRol
-            .Where(a => a.PersonaId == personaId && a.Origen == OrigenAsignacion.GrupoEntra)
-            .ToListAsync(ct);
-
-        var sobrantes = actuales.Where(a => !rolesDeGrupos.Contains(a.RolId)).ToList();
-        var nuevas = rolesDeGrupos.Where(r => actuales.All(a => a.RolId != r)).Select(rolId => new AsignacionRol
-        {
-            PersonaId = personaId,
-            RolId = rolId,
-            OrganizacionId = organizacionId,
-            VigenteDesde = ahora,
-            Origen = OrigenAsignacion.GrupoEntra,
-        }).ToList();
-        if (sobrantes.Count == 0 && nuevas.Count == 0)
-        {
-            return;
-        }
-
-        // Los cambios que vienen de Entra también quedan en la auditoría (HU 1.4), con el sistema como actor.
-        var ids = sobrantes.Concat(nuevas).Select(a => a.RolId).ToList();
-        var codigos = await plataforma.Roles.Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Codigo, ct);
-        foreach (var sobrante in sobrantes)
-        {
-            plataforma.AsignacionesRol.Remove(sobrante);
-            plataforma.Auditoria.Add(EventoGrupo(AccionesAuditoriaRoles.AsignacionRetirada, sobrante, codigos, ahora));
-        }
-        foreach (var nueva in nuevas)
-        {
-            plataforma.AsignacionesRol.Add(nueva);
-            plataforma.Auditoria.Add(EventoGrupo(AccionesAuditoriaRoles.AsignacionCreada, nueva, codigos, ahora));
-        }
-    }
-
-    private static EventoAuditoria EventoGrupo(string accion, AsignacionRol asignacion, Dictionary<Guid, string> codigos, DateTimeOffset ahora) =>
-        AdministracionRoles.CrearEvento(ahora, accion, "asignacion_rol", asignacion.Id, asignacion.OrganizacionId, null,
-            AdministracionRoles.DatosAsignacion(asignacion, codigos.GetValueOrDefault(asignacion.RolId, "?")));
 
     private Task<List<string>> RolesVigentesAsync(Guid personaId, DateTimeOffset ahora, CancellationToken ct) =>
         plataforma.AsignacionesRol

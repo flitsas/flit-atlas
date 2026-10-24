@@ -105,6 +105,7 @@ public static class ExtensionesIdentidad
         servicios.AddScoped<RegistroSeguridad>();
         servicios.AddScoped<IInvalidadorSesiones, InvalidadorSesiones>();
         servicios.AddScoped<VerificadorContrasena>();
+        servicios.AddScoped<LimiteIngresoPorCuenta>();
         LimitacionTasa.Agregar(servicios);
         servicios.AddSingleton(new ProveedoresHabilitados(entraHabilitado, simulado));
         AgregarAutorizacion(servicios);
@@ -229,6 +230,9 @@ public static class ExtensionesIdentidad
         });
         servicios.AddSingleton<PasosTemporales>();
         servicios.AddScoped<CorreosExternos>();
+        // La recuperación pedida por la persona y los avisos de seguridad salen fuera de la petición (ATLAS-ADR-0049).
+        servicios.AddSingleton<ColaCorreosIdentidad>();
+        servicios.AddHostedService<TrabajoCorreosIdentidad>();
         servicios.AddScoped<DocumentosLegales>();
         servicios.AddScoped<FactoresExternos>();
         servicios.AddScoped<SesionExterna>();

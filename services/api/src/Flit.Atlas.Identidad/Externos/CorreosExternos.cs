@@ -41,7 +41,11 @@ public sealed partial class CorreosExternos(IEnviadorCorreo enviador, IConfigura
         return await EnviarAsync(new MensajeCorreo(invitacion.Correo, invitacion.Nombre, "Te invitaron a Flit Atlas", html, texto), ct);
     }
 
-    public async Task<bool> EnviarRecuperacionAsync(string correo, string nombre, string enlaceToken, DateTimeOffset vence, bool forzada, HttpContext? http, CancellationToken ct)
+    public Task<bool> EnviarRecuperacionAsync(string correo, string nombre, string enlaceToken, DateTimeOffset vence, bool forzada, HttpContext? http, CancellationToken ct) =>
+        EnviarAsync(Recuperacion(correo, nombre, enlaceToken, vence, forzada, http), ct);
+
+    /// <summary>El correo con el enlace de recuperación, sin enviarlo (la recuperación pedida por la persona va a la cola).</summary>
+    public MensajeCorreo Recuperacion(string correo, string nombre, string enlaceToken, DateTimeOffset vence, bool forzada, HttpContext? http)
     {
         var enlace = $"{UrlPublica(http)}{RutaRecuperacion}#{enlaceToken}";
         var (html, texto) = PlantillaCorreo.Armar(
@@ -59,10 +63,34 @@ public sealed partial class CorreosExternos(IEnviadorCorreo enviador, IConfigura
                 $"El enlace sirve una sola vez y vence el {Fecha(vence)} (hora de Colombia).",
                 forzada ? string.Empty : "Si no fuiste tú, ignora este correo: tu cuenta sigue igual.",
             ]);
-        return await EnviarAsync(new MensajeCorreo(correo, nombre, "Recupera tu cuenta de Flit Atlas", html, texto), ct);
+        return new MensajeCorreo(correo, nombre, "Recupera tu cuenta de Flit Atlas", html, texto);
     }
 
-    private async Task<bool> EnviarAsync(MensajeCorreo mensaje, CancellationToken ct)
+    /// <summary>
+    /// Aviso al titular de que su cuenta se recuperó (F4-SEC-06, ATLAS-ADR-0049): qué cambió y qué hacer si no fue él. Sin
+    /// botón ni enlaces: nada que se pueda deshacer con un GET, ni un enlace que imitar en un correo falso.
+    /// </summary>
+    public static MensajeCorreo AvisoRecuperacion(string correo, string nombre, string metodo, DateTimeOffset momento)
+    {
+        var factor = metodo == MetodosExternos.Passkey ? "una passkey" : "una contraseña con aplicación de autenticación";
+        var (html, texto) = PlantillaCorreo.Armar(
+            "Se recuperó tu cuenta de Flit Atlas",
+            [
+                $"Hola, {nombre}.",
+                $"El {Fecha(momento)} (hora de Colombia) se recuperó tu cuenta de Flit Atlas con el enlace que enviamos a este correo y se registró un factor nuevo: {factor}.",
+                "Los factores anteriores y los códigos de recuperación dejaron de servir, y se cerraron todas tus sesiones y los accesos de las aplicaciones conectadas.",
+            ],
+            null,
+            null,
+            [
+                "Si fuiste tú, no tienes que hacer nada.",
+                "Si no fuiste tú, alguien pudo entrar a tu buzón de correo: cambia ya la contraseña de tu correo y escribe a quien te invitó a Atlas o al equipo de FLIT para que bloqueen tu acceso y restablezcan tu cuenta.",
+            ]);
+        return new MensajeCorreo(correo, nombre, "Se recuperó tu cuenta de Flit Atlas", html, texto);
+    }
+
+    /// <summary>Envía el mensaje; <c>false</c> si el ambiente no tiene correo o el servidor no lo aceptó.</summary>
+    public async Task<bool> EnviarAsync(MensajeCorreo mensaje, CancellationToken ct)
     {
         if (!enviador.Habilitado)
         {

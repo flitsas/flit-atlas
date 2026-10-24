@@ -73,7 +73,7 @@ public class SeguridadTests(EntornoApi entorno)
     }
 
     [Fact]
-    public async Task El_bloqueo_es_progresivo_y_un_ingreso_correcto_reinicia_el_conteo()
+    public async Task El_bloqueo_es_progresivo_y_el_conteo_se_reinicia_al_terminar_el_ingreso_no_con_la_contrasena()
     {
         await using var api = entorno.Api();
         await using var alcance = api.Services.CreateAsyncScope();
@@ -81,12 +81,15 @@ public class SeguridadTests(EntornoApi entorno)
         var usuarios = alcance.ServiceProvider.GetRequiredService<UserManager<UsuarioAtlas>>();
         var (usuario, clave) = await CuentaLocalAsync(alcance.ServiceProvider);
 
-        // Nueve fallos y un acierto: el conteo vuelve a cero.
+        // Nueve fallos y la contraseña correcta: el conteo sigue (F4-SEC-01, ATLAS-ADR-0049); vuelve a cero solo al terminar
+        // el ingreso con el segundo factor.
         for (var i = 0; i < 9; i++)
         {
             await verificador.VerificarAsync(usuario, "mal", Ct);
         }
         Assert.Equal(ResultadoVerificacion.Valida, await verificador.VerificarAsync(usuario, clave, Ct));
+        Assert.Equal(9, await usuarios.GetAccessFailedCountAsync(usuario));
+        await verificador.IngresoCompletadoAsync(usuario, Ct);
         Assert.Equal(0, await usuarios.GetAccessFailedCountAsync(usuario));
 
         for (var i = 0; i < 10; i++)
@@ -321,6 +324,7 @@ public class SeguridadTests(EntornoApi entorno)
             // punta, con su auditoría, en CuentasExternasTests y EmergenciaTests.
             .Except(CuentasExternasTests.TiposDeEventoProbados)
             .Except(EmergenciaTests.TiposDeEventoProbados)
+            .Except(PentestSesionesTests.TiposDeEventoProbados)
             .ToHashSet();
 
         // Ocurrieron todos los tipos de evento…

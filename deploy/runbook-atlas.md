@@ -69,6 +69,13 @@ flowchart LR
 `…__EndpointPublico`, `…__Bucket`, `…__Region`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`.
 `Identidad__Simulado__Habilitado` **nunca** en qa ni pdn (atlas-api no arranca con él).
 
+`Atlas__Proxy__RedesConfiables` es **obligatoria en qa y pdn** (ATLAS-ADR-0049, F4-SEC-13): las redes CIDR, separadas por
+coma, de los proxies que ponen `X-Forwarded-For` (nginx del host y la red de pods de atlas-web). Sin ella atlas-api **no
+arranca** y el error nombra la variable; con un valor equivocado arranca, pero todas las peticiones parecen venir del
+proxy: los límites por IP (§9) se vuelven uno solo para todo el mundo (20 ingresos por minuto en total) y la auditoría
+guarda la IP del pod. Para comprobarla tras un despliegue: un ingreso desde fuera debe dejar en
+`identidad_evento_seguridad.ip` la IP pública del cliente, no una del clúster. En local y dev basta el loopback.
+
 Ajustes de operación con buenos valores por defecto (solo si hace falta): `Identidad__LimiteTasa__*` (§9),
 `Contratos__Exportaciones__MaximoEnCursoPorOrganizacion`, `…__MaximoEnCursoPorPersona`, `…__Retencion` (7 días),
 `…__TiempoMaximo` (2 h), `Plataforma__Mensajeria__Consumo__MaximoIntentos` (5).
@@ -127,7 +134,9 @@ Para el arranque de un ambiente o si Entra ID no responde: el procedimiento est�
 administrador de emergencia»). Resumen: `kubectl -n atlas-<ambiente> exec -it deploy/atlas-api -- dotnet Flit.Atlas.Api.dll
 emergencia activar`, abrir el enlace de un solo uso (1 h) de inmediato, registrar passkey o contraseña con TOTP, hacer
 solo lo necesario y cerrar la sesión. Cada uso deja `identidad.emergencia.*` en la auditoría y una advertencia en el log
-(alerta en §11). Volver a correr el comando invalida el enlace anterior y deja la cuenta sin factores.
+(alerta en §12): también los dos eventos del comando (`identidad.emergencia.cuenta_creada` y `…enlace_emitido`), que el
+comando exporta por OpenTelemetry con solo el tipo y el id (ATLAS-ADR-0049; la consola del `kubectl exec` solo muestra la
+salida del comando). Volver a correr el comando invalida el enlace anterior y deja la cuenta sin factores.
 
 ## 8. Rotaciones
 
@@ -150,8 +159,11 @@ Por réplica y por minuto; 429 con `Retry-After` y problem+json en español; el 
 auditoría una vez por cliente y ventana. Por defecto: identidad 20 ingresos/IP, 120/IP y 60/usuario; resto de la API 600
 por empleado, 240 por externo, 600 por organización en el portal, 300 por IP sin sesión; exportaciones 5 solicitudes por
 persona y 10 por organización, y a lo sumo **2 en curso** por persona y por organización; sandbox 60 por llave y 120 por
-IP; informes de CSP 30/IP y 300 en total. Si una organización legítima choca con un límite, sube el valor del ambiente
-en el ConfigMap (`Identidad__LimiteTasa__<Nombre>`), no lo quites.
+IP; informes de CSP 30/IP y 300 en total. Además, el ingreso local (contraseña y segundo factor) tiene un límite **por
+cuenta atacada** en Redis, compartido por las réplicas: 20 intentos por correo cada 15 minutos
+(`Identidad__LimiteTasa__IngresoPorCuenta` y `…__VentanaPorCuenta`, ATLAS-ADR-0049), que cuenta exista o no la cuenta.
+Si una organización legítima choca con un límite, sube el valor del ambiente en el ConfigMap
+(`Identidad__LimiteTasa__<Nombre>`), no lo quites.
 
 ## 10. Colas, reintentos y reprocesos
 
@@ -229,4 +241,23 @@ FLIT) y a qué canal llegan.
 ### Ataque de fuerza bruta o abuso
 
 Los límites de tasa responden 429 y dejan `identidad.limite_tasa`; el bloqueo progresivo de las cuentas locales duplica
-la espera por cada bloqueo de las últimas 24 h. Si una IP insiste, bloquearla en el nginx del host.
+la espera por cada bloqueo de las últimas 24 h (10 fallos de contraseña, o 10 del segundo factor, que la contraseña
+correcta no reinicia; tras 5 códigos errados hay que volver a poner la contraseña). Si una IP insiste, bloquearla en el
+nginx del host.
+
+### Recuperación de cuenta que el titular no pidió
+
+El titular recibe el correo «Se recuperó tu cuenta de Flit Atlas» (sin enlaces) cada vez que alguien completa la
+recuperación con el enlace de su buzón (ATLAS-ADR-0049: riesgo aceptado, solo el buzón). Si escribe que no fue él:
+suspender a la persona (`POST /api/v1/identidad/admin/personas/{id}/suspender`, corta sesiones y tokens), pedirle que
+asegure su correo, revisar en la auditoría lo que hizo la sesión abierta con la recuperación y, ya con el buzón seguro,
+`…/restablecer` para que registre un factor nuevo.
+
+### Empleado que no puede entrar: «cuenta por vincular»
+
+El ingreso con Microsoft solo enlaza por `oid` (ATLAS-ADR-0049). Si el `oid` es nuevo y su correo ya es de otra persona
+de Atlas, se niega y queda `identidad.vinculo_por_correo_rechazado`. Lo normal es que la sincronización con Graph
+(ATLAS-ADR-0030) enlace a las personas precargadas antes del primer ingreso; no lo hace si la persona precargada ya
+tiene roles (queda el mismo evento). Para vincularla: confirmar con el directorio que la cuenta de Entra es de esa
+persona, retirar sus asignaciones manuales, «Sincronizar ahora» (con el origen `grupo` o `tenant` la enlaza por correo)
+y volver a asignarlas.

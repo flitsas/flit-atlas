@@ -292,6 +292,11 @@ public sealed partial class ServicioInvitaciones(
         {
             return prohibido;
         }
+        if (actor.Externo && await SuspensionAjenaAsync(invitacion, actor, ct))
+        {
+            return new ErrorAdministracion(TipoError.Prohibido, "suspension_de_flit",
+                "Esta persona la suspendió FLIT: solo FLIT puede reactivarla.");
+        }
 
         invitacion.AccesoVenceEn = vence;
         invitacion.EstadoCambiadoEn = ahora;
@@ -329,6 +334,21 @@ public sealed partial class ServicioInvitaciones(
     }
 
     public const string AccionAsignacionRenovada = "plataforma.asignacion_renovada";
+
+    /// <summary>
+    /// ¿Renovar desharía una suspensión que no hizo la organización del administrador externo (F4-SEC-14)? La invitación
+    /// suspendida por alguien de otra organización (FLIT), o la persona suspendida desde la administración de FLIT.
+    /// </summary>
+    private async Task<bool> SuspensionAjenaAsync(Invitacion invitacion, ActorInvitaciones actor, CancellationToken ct)
+    {
+        if (invitacion.Estado == EstadoInvitacion.Suspendida)
+        {
+            var suspendio = invitacion.EstadoCambiadoPor;
+            return suspendio is null || !await plataforma.Personas.AnyAsync(p => p.Id == suspendio && p.OrganizacionId == actor.OrganizacionId, ct);
+        }
+        return invitacion.PersonaId is { } personaId
+            && await plataforma.Personas.AnyAsync(p => p.Id == personaId && p.Estado == EstadoPersona.Suspendida, ct);
+    }
 
     /// <summary>Definitivo. Si se había aceptado, retira las asignaciones de la invitación (eso cierra las sesiones).</summary>
     public async Task<Resultado<InvitacionVista>> RevocarAsync(Guid id, ActorInvitaciones actor, CancellationToken ct)

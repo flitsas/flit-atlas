@@ -541,7 +541,7 @@ paths:
       tags:
         - Identidad
       summary: Ingreso de externos con contraseña (paso 1)
-      description: Verifica correo y contraseña con bloqueo progresivo y responde el paso del TOTP; nunca abre sesión solo con la contraseña. 401 genérico si no coinciden o la cuenta está bloqueada; 403 mfa_requerido si la cuenta no tiene segundo factor. No requiere sesión.
+      description: 'Verifica correo y contraseña con bloqueo progresivo y responde el paso del TOTP; nunca abre sesión solo con la contraseña, y la contraseña correcta no reinicia los fallos del segundo factor. 401 genérico si no coinciden, si la cuenta está bloqueada o si no tiene contraseña (solo passkey: no suma al bloqueo); 403 mfa_requerido si la cuenta no tiene segundo factor; 429 si la cuenta recibió demasiados intentos (por correo, exista o no). No requiere sesión.'
       operationId: EntrarConContrasena
       requestBody:
         description: Correo y contraseña.
@@ -578,7 +578,7 @@ paths:
       tags:
         - Identidad
       summary: 'Ingreso de externos con contraseña (paso 2: TOTP)'
-      description: Código TOTP (o un código de recuperación) del paso anterior. Los fallos suman al bloqueo progresivo y un código no se acepta dos veces. 204 abre la sesión; 409 terminos_pendientes si hay versiones nuevas de los documentos. No requiere sesión.
+      description: 'Código TOTP de 6 dígitos (o un código de recuperación) del paso anterior. Los fallos tienen su propio contador, que suma al bloqueo progresivo y que la contraseña no reinicia; tras 5 fallos el paso deja de servir (401 paso_vencido) y hay que volver a la contraseña. Un código TOTP, o uno de un paso de tiempo anterior, no se acepta dos veces. 204 abre la sesión; 409 terminos_pendientes si hay versiones nuevas de los documentos. No requiere sesión.'
       operationId: EntrarConSegundoFactor
       requestBody:
         description: Paso del ingreso y código TOTP o de recuperación.
@@ -1875,7 +1875,7 @@ paths:
       tags:
         - Invitaciones
       summary: Invitar a una persona externa
-      description: 'Crea la invitación (organización, rol externo, alcance, vencimiento y permisos extra) y envía el correo con un enlace de un solo uso que vence en 72 h (en la base solo queda su hash). Un proveedor exige vencimiento y alcance. Requiere atlas.invitaciones.gestionar; un administrador de organización, solo en la suya y dentro de su alcance (403 si no).'
+      description: 'Crea la invitación (organización, rol externo, alcance, vencimiento y permisos extra) y envía el correo con un enlace de un solo uso que vence en 72 h (en la base solo queda su hash). Un proveedor exige vencimiento y alcance. Requiere atlas.invitaciones.gestionar y reautenticación; un administrador de organización, solo en la suya y dentro de su alcance (403 si no).'
       operationId: CrearInvitacion
       requestBody:
         description: 'Correo, organización, rol, alcance, vencimiento y permisos extra.'
@@ -1904,7 +1904,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorExternos'
         '401':
-          description: No hay una sesión activa o venció.
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
         '429':
@@ -1988,7 +1988,7 @@ paths:
       tags:
         - Invitaciones
       summary: Suspender una invitación
-      description: 'Pendiente: el enlace deja de servir. Aceptada: la persona queda suspendida y sus sesiones se cierran. Se deshace renovándola. Requiere atlas.invitaciones.gestionar.'
+      description: 'Pendiente: el enlace deja de servir. Aceptada: la persona queda suspendida y sus sesiones se cierran. Se deshace renovándola. Requiere atlas.invitaciones.gestionar y reautenticación.'
       operationId: SuspenderInvitacion
       parameters:
         - name: id
@@ -2018,7 +2018,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorExternos'
         '401':
-          description: No hay una sesión activa o venció.
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
         '429':
@@ -2033,7 +2033,7 @@ paths:
       tags:
         - Invitaciones
       summary: Renovar una invitación
-      description: 'Vencimiento nuevo del acceso. Si ya se aceptó, extiende sus asignaciones y reactiva a la persona; si no, vuelve a pendiente con un enlace nuevo. Requiere atlas.invitaciones.gestionar.'
+      description: 'Vencimiento nuevo del acceso. Si ya se aceptó, extiende sus asignaciones y reactiva a la persona; si no, vuelve a pendiente con un enlace nuevo. Un administrador de organización no reactiva lo que suspendió FLIT (403). Requiere atlas.invitaciones.gestionar y reautenticación.'
       operationId: RenovarInvitacion
       parameters:
         - name: id
@@ -2076,7 +2076,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorExternos'
         '401':
-          description: No hay una sesión activa o venció.
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
         '429':
@@ -2091,7 +2091,7 @@ paths:
       tags:
         - Invitaciones
       summary: Revocar una invitación
-      description: 'Definitivo: el enlace deja de servir y, si se había aceptado, se retiran sus roles y se cierran sus sesiones. Requiere atlas.invitaciones.gestionar.'
+      description: 'Definitivo: el enlace deja de servir y, si se había aceptado, se retiran sus roles y se cierran sus sesiones. Requiere atlas.invitaciones.gestionar y reautenticación.'
       operationId: RevocarInvitacion
       parameters:
         - name: id
@@ -2115,7 +2115,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorExternos'
         '401':
-          description: No hay una sesión activa o venció.
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
         '429':
