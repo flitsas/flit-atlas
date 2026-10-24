@@ -12,9 +12,14 @@
 > `services/api/tests/Flit.Atlas.Api.Tests/Seguridad/`; las que demuestran un hallazgo de severidad media o mayor
 > quedan omitidas con `Skip = "Hallazgo F4-SEC-NN"` (se verificó que fallan al quitar el `Skip`) y se quitan al corregir.
 >
-> **Resumen:** 33 controles: **15 cumplen, 17 parciales, 0 no cumplen, 1 no aplica**. 34 hallazgos: **1 alto, 12
+> **Resumen:** 33 controles: **18 cumplen, 14 parciales, 0 no cumplen, 1 no aplica** (tras las correcciones de datos y
+> servicios; eran 15 y 17). 34 hallazgos: **1 alto, 12
 > medios, 19 bajos y 2 informativos** (el F4-SEC-33 y el `re.fullmatch` del F4-SEC-34 se corrigieron aquí).
 > **No se recomienda abrir el acceso a externos en pdn** hasta cerrar lo que pide la §8.
+>
+> **Correcciones de datos y servicios (24/10/2026, rama `f4/seguridad-datos`, commit `ca7dadc`):** F4-SEC-09, F4-SEC-10,
+> F4-SEC-11 y F4-SEC-12 (medios) y los bajos F4-SEC-22, F4-SEC-23, F4-SEC-25, F4-SEC-26, F4-SEC-29 y F4-SEC-30, cada uno
+> con su prueba (las omitidas ya no tienen `Skip`). El detalle está en cada hallazgo de la §6.
 
 ## 1. Alcance
 
@@ -77,16 +82,16 @@ Rutas relativas a `services/api/src/` salvo que se diga otra cosa. «Pentest» =
 | Sección | Control en Atlas | Dónde | Pruebas | Estado |
 |---|---|---|---|---|
 | V8.1 Documentación | Matriz rol × permiso generada desde el código | `docs/permisos/matriz-rol-permiso.md`, `Plataforma/Permisos/` | `MatrizPermisosTests` | **Cumple.** `Plataforma/Permisos/ManifiestosNucleo.cs:70-91`; `MatrizPermisosTests.La_matriz_versionada_coincide_con_la_del_codigo`. |
-| V8.2 Diseño | Permiso por endpoint (`RequierePermiso`), predicado obligatorio por organización en EF Core y RLS en las tablas con organización | `Plataforma/Permisos/Autorizacion.cs`, `Plataforma/Datos/` | `AutorizacionTests`, `Flit.Atlas.Plataforma.Tests/AislamientoTests` | **Parcial.** Cumple: `RequierePermiso` en todo endpoint con lista de públicos (`Autorizacion.cs:84-88`, `AutorizacionTests.Publicos`), predicado de EF (`Datos/ContextoAtlas.cs:51-79`), RLS FORCE en las tablas con `organizacion_id`. Falla: una petición sin sesión recibe el alcance del sistema y el rol de la app es dueño de las tablas, así que RLS no es segunda barrera en los endpoints anónimos; las pruebas de la API corren como superusuario (**F4-SEC-10**). El rol implícito por propiedad no exige que la persona sea empleada (F4-SEC-24). |
-| V8.3 Por operación | El portal parte de las comparticiones de la organización de la sesión en cada petición (`AccesoPortal`); lo ajeno es 404; spec podado y verificado; exportaciones y descargas revisan el acceso otra vez | `Contratos/Portal/AccesoPortal.cs`, `Portal/SpecsDelPortal.cs`, `Exportaciones/EndpointsExportaciones.cs` | `AislamientoPortalTests` (bloquea el release), `PortalContratosTests`, `ExportacionesTests`, `Flit.Atlas.Modulos.Contratos.Tests/PortalTests` | **Parcial.** No se encontró IDOR entre organizaciones en portal, exportaciones (`PropiaAsync`), favoritos, comparticiones (`(Id, PaqueteId)` + `GestionableAsync`) ni sandbox (hash de la llave en tiempo fijo, `(Id, OrganizacionId)`); los 403 solo salen para paquetes ya visibles. Falla: la poda deja salir extensiones `x-flit-*` de procedencia interna (**F4-SEC-09**); la llave del sandbox sigue sirviendo cuando la persona pierde el acceso (F4-SEC-22); el changelog de la exportación nombra contratos fuera del alcance (F4-SEC-23). |
-| V8.4 Otros | Vencimientos de asignaciones y comparticiones sin intervención; auditoría de solo inserción de cada vista, exportación y acceso negado de un externo | `Autorizacion/VigilanteVencimientos.cs`, `Plataforma/Entidades` (auditoría) | `RolesTests`, `Flit.Atlas.Plataforma.Tests/AuditoriaTests` | **Parcial.** Vigencias evaluadas en cada petición (`AccesoPortal.cs:203-205`, `PermisosEfectivos.cs:132-133`). Las negaciones de exportaciones y del proxy del sandbox no se auditan (F4-SEC-25). |
+| V8.2 Diseño | Permiso por endpoint (`RequierePermiso`), predicado obligatorio por organización en EF Core y RLS en las tablas con organización | `Plataforma/Permisos/Autorizacion.cs`, `Plataforma/Datos/` | `AutorizacionTests`, `Flit.Atlas.Plataforma.Tests/AislamientoTests` | **Parcial.** Cumple: `RequierePermiso` en todo endpoint con lista de públicos (`Autorizacion.cs:84-88`, `AutorizacionTests.Publicos`), predicado de EF (`Datos/ContextoAtlas.cs:51-79`), RLS FORCE en las tablas con `organizacion_id`. Corregido en `ca7dadc` (F4-SEC-10, ATLAS-ADR-0050): sin sesión el alcance es `Ninguno` y el del sistema se pide por endpoint (`ConAlcanceDelSistemaSinSesion`); la app usa `flit_atlas` sin propiedad ni BYPASSRLS y las pruebas de la API corren con ese rol (`RolesBaseDeDatosTests`, `MatrizPermisosTests`). Falla: El rol implícito por propiedad no exige que la persona sea empleada (F4-SEC-24). |
+| V8.3 Por operación | El portal parte de las comparticiones de la organización de la sesión en cada petición (`AccesoPortal`); lo ajeno es 404; spec podado y verificado; exportaciones y descargas revisan el acceso otra vez | `Contratos/Portal/AccesoPortal.cs`, `Portal/SpecsDelPortal.cs`, `Exportaciones/EndpointsExportaciones.cs` | `AislamientoPortalTests` (bloquea el release), `PortalContratosTests`, `ExportacionesTests`, `Flit.Atlas.Modulos.Contratos.Tests/PortalTests` | **Cumple** (tras `ca7dadc`). No se encontró IDOR entre organizaciones en portal, exportaciones (`PropiaAsync`), favoritos, comparticiones (`(Id, PaqueteId)` + `GestionableAsync`) ni sandbox (hash de la llave en tiempo fijo, `(Id, OrganizacionId)`); los 403 solo salen para paquetes ya visibles. Corregido: lista blanca de extensiones en la poda con `Verificar` cerrado (F4-SEC-09, `PentestPodaTests`, `PodaTests`); la llave del sandbox revisa a quien la activó (F4-SEC-22, `PentestSandboxTests`); el changelog solo nombra los contratos exportados (F4-SEC-23, `ChangelogExportacionTests`). |
+| V8.4 Otros | Vencimientos de asignaciones y comparticiones sin intervención; auditoría de solo inserción de cada vista, exportación y acceso negado de un externo | `Autorizacion/VigilanteVencimientos.cs`, `Plataforma/Entidades` (auditoría) | `RolesTests`, `Flit.Atlas.Plataforma.Tests/AuditoriaTests` | **Cumple** (tras `ca7dadc`). Vigencias evaluadas en cada petición (`AccesoPortal.cs:203-205`, `PermisosEfectivos.cs:132-133`). Las negaciones de exportaciones y del proxy del sandbox ya se auditan (F4-SEC-25, `PentestSandboxTests`). |
 
 ### V1 y V2 · Codificación, validación y lógica de negocio
 
 | Sección | Control en Atlas | Dónde | Pruebas | Estado |
 |---|---|---|---|---|
-| V1 Codificación y sanitización | Markdown de las guías sin HTML (escapado) + DOMPurify con lista blanca; Mermaid estricto (F6); SVG sin scripts (render); páginas HTML de la API codificadas | `apps/web/src/modulos/contratos/guias/Markdown.tsx`, `Tokens/EndpointsTokens.cs` | pruebas de Vitest de `Markdown`, `TokensTests` | **Parcial.** PWA: marked escapa todo HTML y DOMPurify con lista blanca sin `style`/`class`/`img`, enlaces solo http(s)/mailto/ancla (`Markdown.tsx:24-60`), único `dangerouslySetInnerHTML` de la PWA; Mermaid aún no existe. atlas-docs: Jinja con `autoescape` (`exportes/html.py:206`), markdown-it con `html=False`, CSP `default-src 'none'` en el HTML exportado. Falla: inyección de fórmulas en el Excel exportado (**F4-SEC-11**). |
-| V2.2 Validación de entrada | DTO validados en cada endpoint (ValidationProblem en español); topes de tamaño de cuerpo (Kestrel y lectura acotada); specs validados y con tope de 5 MB; alias de YAML acotados | endpoints de cada módulo, `Contratos/Specs/AnalizadorSpec.cs`, `EndpointsErroresCliente.cs`, `EndpointsReportesCsp.cs` | pruebas de cada módulo, `ErroresClienteTests`, `EndurecimientoTests` | **Parcial.** atlas-api: tope propio en publicación (`EndpointsPublicacion.cs:44-46`), spec de 5 MiB (`AnalizadorSpec.cs:50`), cuerpo del sandbox acotado; el resto usa el tope de Kestrel (30 MB). atlas-docs lee y parsea `POST /exportes` antes de validar el token y sin tope (F4-SEC-12) y trata specs patológicos como falla de infraestructura (F4-SEC-30). No se revisó endpoint por endpoint. |
+| V1 Codificación y sanitización | Markdown de las guías sin HTML (escapado) + DOMPurify con lista blanca; Mermaid estricto (F6); SVG sin scripts (render); páginas HTML de la API codificadas | `apps/web/src/modulos/contratos/guias/Markdown.tsx`, `Tokens/EndpointsTokens.cs` | pruebas de Vitest de `Markdown`, `TokensTests` | **Cumple** (tras `ca7dadc`). PWA: marked escapa todo HTML y DOMPurify con lista blanca sin `style`/`class`/`img`, enlaces solo http(s)/mailto/ancla (`Markdown.tsx:24-60`), único `dangerouslySetInnerHTML` de la PWA; Mermaid aún no existe. atlas-docs: Jinja con `autoescape` (`exportes/html.py:206`), markdown-it con `html=False`, CSP `default-src 'none'` en el HTML exportado. Corregido: toda celda del Excel exportado va como texto (F4-SEC-11, `test_seguridad_excel.py` con `=`, `+`, `-`, `@`, tabulador y retorno de carro). |
+| V2.2 Validación de entrada | DTO validados en cada endpoint (ValidationProblem en español); topes de tamaño de cuerpo (Kestrel y lectura acotada); specs validados y con tope de 5 MB; alias de YAML acotados | endpoints de cada módulo, `Contratos/Specs/AnalizadorSpec.cs`, `EndpointsErroresCliente.cs`, `EndpointsReportesCsp.cs` | pruebas de cada módulo, `ErroresClienteTests`, `EndurecimientoTests` | **Parcial.** atlas-api: tope propio en publicación (`EndpointsPublicacion.cs:44-46`), spec de 5 MiB (`AnalizadorSpec.cs:50`), cuerpo del sandbox acotado; el resto usa el tope de Kestrel (30 MB). atlas-docs valida el token antes del cuerpo y le pone tope de 64 MiB (F4-SEC-12) y rechaza los specs patológicos como spec inválido (F4-SEC-30), corregidos en `ca7dadc`. No se revisó endpoint por endpoint. |
 | V2.3 Lógica de negocio | Reglas de paquetes y comparticiones (solo publicados, proveedores con vencimiento, revisión publicable); exportaciones con estados y resultados idempotentes | `Paquetes/ReglasPaquetes.cs`, `Comparticiones/ReglasComparticiones.cs`, `Exportaciones/ManejadorResultadosExportacion.cs` | `PaquetesContratosTests`, `ExportacionesTests` | **Cumple.** Observaciones informativas en F4-SEC-34 (permisos extra no atados a la invitación que los dio; comparticiones de proveedor sin tope de vigencia). |
 | V2.4 Anti-automatización | Límites de tasa por persona, organización, IP y llave de sandbox; tope de exportaciones en curso con candado | `Seguridad/LimitacionTasa.cs`, `Exportaciones/ServicioExportaciones.cs` | `SeguridadTests`, `EndurecimientoTests`, `ExportacionesTests`, prueba de carga (`tests/carga/`) | **Parcial.** Los límites existen (`LimitacionTasa.cs:117-149`) y `CuentasExternasTests.Las_rutas_publicas_de_externos…` los prueba. Faltan límite por cuenta atacada y agrupación IPv6 /64 (F4-SEC-01), contadores distribuidos (por réplica, ATLAS-ADR-0048) y que el arranque falle sin `RedesConfiables` en qa y pdn (F4-SEC-13). |
 
@@ -97,7 +102,7 @@ Rutas relativas a `services/api/src/` salvo que se diga otra cosa. «Pentest» =
 | V4.1 General | Contrato OpenAPI 3.1 generado y versionado, lint con vacuum (OWASP) en el CI; 429 declarado en toda operación; `Content-Type` correcto y `nosniff`; la cookie no sirve en endpoints con scope ni el Bearer en los de la PWA | `contracts/openapi/atlas.v1.yaml`, `contracts/vacuum/`, `Flit.Atlas.Api/ContratoOpenApi.cs` | `ContratoOpenApiTests`, `TokensTests` | **Cumple.** Separación cookie/Bearer (`Tokens/AutorizacionScopes.cs:29-43`); sin CORS en ningún lado (búsqueda); errores no controlados dan 500 sin cuerpo **[supuesto: qa y pdn sin `ASPNETCORE_ENVIRONMENT=Development`]**. |
 | V4.2 Estructura de mensajes | Encabezados de proxy solo desde redes confiables (`Atlas:Proxy:RedesConfiables`, límite de saltos) | `Flit.Atlas.Api/Program.cs` | `ProxyTests` | **Parcial.** Solo `X-Forwarded-For` y `-Proto`, `ForwardLimit` 2, solo redes confiables (`Program.cs:36-47`). Sin `RedesConfiables` en qa o pdn el arranque no falla y los límites por IP se vuelven globales (F4-SEC-13); `ProxyTests` solo prueba la lectura de la configuración; reemplazo de `X-Forwarded-For` en el nginx del host **[por verificar]**. |
 | V4.4 WebSocket | SignalR bajo `/hubs` con la sesión de la PWA y los límites por persona | `Flit.Atlas.Plataforma` | — | **No aplica hoy.** No hay `AddSignalR`, `MapHub` ni `Hub` en `services/api/src`; `/hubs` solo aparece en el limitador. Cuando llegue: validar `Origin` en el handshake (GET, no pasa por la antifalsificación). |
-| Servicio a servicio | atlas-docs valida el JWT (firma con el JWKS, emisor, audiencia, scope, vencimiento); RabbitMQ con usuario por servicio | `services/docs/src/atlas_docs/autenticacion.py` | `services/docs/tests/test_autenticacion.py` | **Parcial.** Lista blanca RS256/PS256/ES256 antes de resolver la llave, `iss`/`aud`/`exp` obligatorios, scope, falla cerrado sin configuración (`autenticacion.py:45-70`; pruebas de `alg none`, HS256, otra llave, audiencia, emisor, vencido, `nbf`, `kid`). Falla: cuerpo leído antes del token y sin tope (F4-SEC-12), caché de llaves sin vencimiento y refresco del JWKS sin límite (F4-SEC-29), sin revisión de `typ` (F4-SEC-34); las pruebas usan un resolvedor falso, no `PyJWKClient`. Usuarios de RabbitMQ y `NetworkPolicy` **[por verificar en flit-gitops]**. |
+| Servicio a servicio | atlas-docs valida el JWT (firma con el JWKS, emisor, audiencia, scope, vencimiento); RabbitMQ con usuario por servicio | `services/docs/src/atlas_docs/autenticacion.py` | `services/docs/tests/test_autenticacion.py` | **Parcial.** Lista blanca RS256/PS256/ES256 antes de resolver la llave, `iss`/`aud`/`exp` obligatorios, scope, falla cerrado sin configuración (`autenticacion.py:45-70`; pruebas de `alg none`, HS256, otra llave, audiencia, emisor, vencido, `nbf`, `kid`). Corregidos en `ca7dadc`: token antes del cuerpo y con tope (F4-SEC-12, `test_guardia.py`), JWKS en caché 5 min sin caché por `kid` y un refresco cada 30 s como máximo, probado con `PyJWKClient` real (F4-SEC-29). Falla: sin revisión de `typ` (F4-SEC-34). Usuarios de RabbitMQ y `NetworkPolicy` **[por verificar en flit-gitops]**. |
 | Publicación desde CI | JWKS de GitHub con caché y espera mínima, audiencia por ambiente, sin `pull_request`, workflow reutilizable fijado, lista blanca | `Plataforma/Publicacion/` | `Flit.Atlas.Plataforma.Tests/PublicacionCiTests`, `ModuloContratosTests` | **Cumple.** Solo RS256 con `kid`, emisor, audiencia por ambiente, vida máxima (`Publicacion/EsquemaGitHubActions.cs:66-118`); `refs/heads/` y `ref_type=branch`; eventos `push` y `workflow_dispatch`; `job_workflow_ref` comparado (`AutorizacionPublicacion.cs:83-87`); lista blanca por repo, rama, workflow, aplicativo y tipo; acciones fijadas por SHA. Observaciones en F4-SEC-27 (tags `v*`, audiencia independiente de la URL, nombre en lugar de id del repo). |
 
 ### V3 · Seguridad del frontend web (cabeceras)
@@ -127,7 +132,7 @@ Rutas relativas a `services/api/src/` salvo que se diga otra cosa. «Pentest» =
 - **PWA** (Vitest y Playwright en escritorio, Pixel 7 e iPhone 14): sanitización del Markdown, visor aislado, CSP y
   cabeceras contra `vite preview` (las mismas de nginx) o la imagen.
 - **atlas-docs** (pytest): validación del JWT y del consumidor de la cola. **Nuevo:**
-  `tests/exportes/test_seguridad_excel.py` (omitida por F4-SEC-11).
+  `tests/exportes/test_seguridad_excel.py` (era omitida por F4-SEC-11; pasa desde `ca7dadc`).
 - **Carga** (`tests/carga/`): 20 personas y 2 exportaciones con los límites de siempre.
 
 Corrida de esta revisión: `dotnet test Flit.Atlas.slnx` sobre `efdce5a` antes de los cambios, todo en verde salvo
@@ -138,6 +143,13 @@ de la máquina; se corrieron todos los proyectos salvo `Flit.Atlas.Api.Tests` co
 `IdentidadTests`, `SesionesTests`, `EndurecimientoTests`, `ProxyTests`, `ErroresClienteTests`, `SandboxMicrocksTests`,
 `PaquetesContratosTests`, `NotificacionesTests`, `AutorizacionTests`, `ModuloContratosTests`, `GuiasContratosTests`:
 148 pruebas, verdes). atlas-docs: `uv run pytest` 135 pasan y 6 omitidas; `ruff check` y `ruff format --check` limpios.
+
+Corrida de las correcciones de datos y servicios (`ca7dadc`): `dotnet test Flit.Atlas.slnx` 777 pruebas, 768 pasan y 8
+omitidas (hallazgos de identidad que corrige otra rama); la única falla de esa corrida, una aserción de la prueba nueva
+`MatrizPermisosTests.Sin_sesion_el_alcance…`, se corrigió y la clase pasa (5/5). La API corre ahora con `flit_atlas`
+sin privilegios, y eso destapó que en `TransaccionCompartida` la plataforma podía consultar sin variables de RLS cuando
+la identidad reabría la conexión compartida (corregido; ver ATLAS-ADR-0050). atlas-docs: `uv run pytest` 155 pasan y 5
+omitidas (PDF sin Pango); `ruff check` y `ruff format --check` limpios.
 
 ## 4. Pendientes que la revisión no pudo cerrar **[por verificar]**
 
@@ -153,6 +165,8 @@ Dependen de `flit-gitops`, de Entra o de qa, que esta revisión no tocó:
 - Si qa y pdn atienden por IPv6 (agrava F4-SEC-01).
 - `ATLAS_S3_PUBLICO`, CORS del bucket y regla de ciclo de vida del bucket (HU 4.6; mitiga F4-SEC-28).
 - Usuarios de RabbitMQ por servicio y `NetworkPolicy` de atlas-docs (ATLAS-ADR-0044; mitiga F4-SEC-12).
+- Roles de base separados en dev, qa y pdn (`flit_atlas_migrador` dueño, `flit_atlas` sin privilegios) y el
+  `atlas-migrador-secrets` en flit-gitops antes de desplegar ATLAS-ADR-0050 (`deploy/runbook-atlas.md` §3).
 - Suite oficial de la OpenID Foundation contra qa.
 - Trusted Types: revisar los informes de qa y decidir cuándo exigirlos (ATLAS-ADR-0048).
 - Política de retención de IPs (Ley 1581, ATLAS-ADR-0022).
@@ -196,9 +210,9 @@ los hallazgos fallar se quitan los `Skip`: 29 pasan y 9 fallan, exactamente las 
 | Token de otra audiencia; `id_token` como Bearer | **Resiste** | `TokensTests.Un_token_para_otra_audiencia…`, `Pentest_el_id_token_no_sirve…` |
 | Token alterado (JWE con texto o etiqueta cambiados) o JWS `alg: none` | **Resiste** | `Pentest_un_token_de_acceso_alterado_o_sin_firma…` |
 | Código de autorización reutilizado, sin PKCE, `redirect_uri` ajena o distinta en el canje | **Resiste** | `TokensTests.Un_codigo_solo_se_canjea…`, `…Sin_PKCE…`, `Pentest_la_redirect_uri_del_canje…` |
-| Spec podado con extensiones internas | **Vulnerable** (F4-SEC-09) | `PentestPodaTests` (omitida) |
-| RLS en una petición anónima | **Débil** (F4-SEC-10) | `Pentest_una_peticion_sin_sesion…` (omitida) |
-| Fórmula en el Excel exportado | **Vulnerable** (F4-SEC-11) | `services/docs/tests/exportes/test_seguridad_excel.py` (omitida) |
+| Spec podado con extensiones internas | **Era vulnerable** (F4-SEC-09); **corregido** en `ca7dadc` | `PentestPodaTests` |
+| RLS en una petición anónima | **Era débil** (F4-SEC-10); **corregido** en `ca7dadc` | `Pentest_una_peticion_sin_sesion…`, `RolesBaseDeDatosTests` |
+| Fórmula en el Excel exportado | **Era vulnerable** (F4-SEC-11); **corregido** en `ca7dadc` | `services/docs/tests/exportes/test_seguridad_excel.py` |
 
 ## 6. Hallazgos
 
@@ -285,6 +299,16 @@ en la aplicación, `GET /api/v1/portal/paquetes/{p}/contratos/{c}/spec`, la expo
 estructura interna a clientes (contra ATLAS-ADR-0038 y §15 del prompt maestro). *Recomendación:* lista blanca de
 extensiones (`x-flit-obligatoriedad`, `x-enum-descriptions`, …) que quite cualquier otra `x-*` en todo nivel, también
 en `Verificar` (fail-closed); revisar las descripciones de `info`.
+- **Estado: corregido en `ca7dadc`.** `Poda/ExtensionesPoda.cs`: solo salen `x-enum-descriptions`, `x-flit-obligatoriedad`,
+  `x-flit-tabla`, `x-flit-decimales` y `x-public`, saneadas (de la matriz se quitan `discriminador`, nota interna, y
+  `columna_excel`; de la tabla, `hoja`); toda otra `x-*` se quita en cualquier nivel salvo en los mapas de nombres del
+  autor (`properties`, cabeceras…) y en los datos (`example`, `enum`…), y `Verificar` falla cerrado si queda una.
+  ATLAS-ADR-0038 y el oráculo de las pruebas de propiedades actualizados. Pruebas: `PentestPodaTests` (sin `Skip`),
+  `PodaTests.Solo_salen_las_extensiones_de_la_lista_blanca…`, `…La_verificacion_falla_cerrado…` y la del ICT real.
+  **Pendiente [por verificar]:** las *descripciones* del contrato del ICT (no son extensiones) aún nombran piezas
+  internas: `info.description` (`services/core-ict`, la HU de origen, `python -m atlas_docs.ict`, rutas de `contracts/`
+  del repo `flit`), la del webhook (`Flit.Ict.Infrastructure/Jobs/WebhookNotificationJob.cs`) y «Esquema `X` de
+  core-ict»; se corrigen en el generador `atlas_docs.ict` y en el contrato de flit.
 
 **F4-SEC-10 · Media, endurecimiento (5.0, `AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N`) · RLS no es segunda barrera en las
 peticiones anónimas.** Sin sesión, `AlcanceDatosDeSesion.De` devuelve `AlcanceDatos.Sistema` (`alcance_total=on`,
@@ -296,6 +320,13 @@ aplica al proxy del sandbox, al feed ICS, al ingreso y a los informes de CSP. Ad
 *Recomendación:* `Ninguno` con `HttpContext` presente y sin autenticar, `Sistema` explícito solo en segundo plano;
 separar el rol dueño (migrador) del de la app; fallar al arrancar si `current_user` es superusuario o `BYPASSRLS`; correr
 `AislamientoPortalTests` con el usuario de servicio.
+- **Estado: corregido en `ca7dadc`** (ATLAS-ADR-0050, propuesto). Sin sesión, `Ninguno`; piden el alcance del sistema, por
+  metadata (`ConAlcanceDelSistemaSinSesion`), el grupo `/api/v1/identidad`, `/connect/*`, el proxy del sandbox y el feed
+  `.ics`, y por código (`AlcanceDelSistema.Abrir`) la devolución de Entra; sin petición HTTP (segundo plano) sigue el del
+  sistema. Dos roles: `flit_atlas_migrador` (dueño, migra y concede) y `flit_atlas` (sin propiedad ni BYPASSRLS, solo
+  datos; auditoría de solo inserción). `/health/ready` no queda listo fuera de local con un rol con privilegios. Las
+  pruebas de la API corren con `flit_atlas` (también `AislamientoPortalTests`). Pruebas: `Pentest_una_peticion_sin_sesion…`
+  (sin `Skip`), `MatrizPermisosTests` (actualizada), `RolesBaseDeDatosTests`. Pasos del DBA en `deploy/runbook-atlas.md` §3.
 
 **F4-SEC-11 · Media (5.4, `AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N`) · Inyección de fórmulas en el Excel exportado.**
 `services/docs/src/atlas_docs/exportes/excel.py:51, 63`: `_limpio` no neutraliza el `=` inicial; openpyxl guarda la celda
@@ -304,6 +335,9 @@ como fórmula. Toca guías completas, descripciones, ejemplos y changelog. *Repr
 (`services/docs/tests/exportes/test_seguridad_excel.py`, omitida). *Impacto:* el libro llega a otra organización con
 enlaces o fórmulas activas. *Recomendación:* forzar `data_type = "s"` cuando openpyxl infiera `"f"` en `_celda` y
 `_encabezado` (o anteponer `'`), y quitar el `skip` de la prueba.
+- **Estado: corregido en `ca7dadc`.** `_como_texto` fija `data_type = "s"` en `_celda` y `_encabezado`; la prueba (sin `skip`)
+  recorre guía, changelog, descripciones, enum y ejemplo con valores que empiezan por `=`, `+`, `-`, `@`, tabulador y
+  retorno de carro, y exige que toda celda sea texto con el valor intacto.
 
 **F4-SEC-12 · Media (6.5, `AV:A/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`; baja con `NetworkPolicy`) · atlas-docs lee el cuerpo de
 `POST /exportes` antes de validar el token y sin tope.** `services/docs/src/atlas_docs/main.py:117, 143-147` (FastAPI
@@ -311,6 +345,11 @@ resuelve el cuerpo antes de las dependencias); uvicorn sin tope; los topes del m
 desde un pod con red hacia atlas-docs, sin token, `POST /exportes` con varios GB o en paralelo. *Impacto:* OOM del pod y
 caída del consumidor de la cola. *Recomendación:* middleware que rechace sin `Content-Length` o por encima del tope (413)
 y valide el token antes del cuerpo; confirmar la `NetworkPolicy` en flit-gitops.
+- **Estado: corregido en `ca7dadc`.** `atlas_docs/guardia.py` (middleware ASGI antes de FastAPI): token y scope sin leer el
+  cuerpo (401/403), `Content-Length` obligatorio (411) y tope de 64 MiB (`MAX_BYTES_ENTRADA`, 413), y corte si llegan
+  más bytes que los anunciados. La cola rechaza sobres de más de 64 KiB y la entrada del S3 se lee con el mismo tope de
+  64 MiB (`ContentLength` y lectura acotada). Pruebas: `tests/test_guardia.py`, `test_cola.py`. La `NetworkPolicy` sigue
+  **[por verificar en flit-gitops]**.
 
 **F4-SEC-13 · Media condicional (5.3, `AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L`) · Sin `RedesConfiables` en qa o pdn el
 arranque sigue y los límites por IP se vuelven globales.** `Flit.Atlas.Api/Program.cs:36-47`. *Impacto:* 20 ingresos
@@ -330,15 +369,15 @@ IP remota no confiable.
 | F4-SEC-19 | 3.5 | Un externo esquiva su sesión de 24 h con refresh de `atlas-cli`/`atlas-mcp` de 30 días (sube con F7) | `Tokens/EndpointsTokens.cs:248-258`, `OpcionesTokens.cs:35` | Concesión de externos limitada a `AbsolutaExternos`, o clientes no disponibles para externos |
 | F4-SEC-20 | 3.1 | Consentimiento implícito y `meta refresh`: un enlace externo obtiene un código sin interacción (hoy solo llega al loopback) | `Tokens/SincronizadorClientes.cs:189`, `EndpointsTokens.cs:146-148` | Pantalla de confirmación para clientes no loopback; botón en lugar de `meta refresh` |
 | F4-SEC-21 | 2.0 | `emergencia.cuenta_creada` y `emergencia.enlace_emitido` no llegan al log ni a Loki (logs apagados en el comando) | `Flit.Atlas.Api/Program.cs:52-56`, `RegistroSeguridad.cs:183-186` | Proveedor de log mínimo en el comando (tipo e id) o alerta sobre `identidad_evento_seguridad` |
-| F4-SEC-22 | 4.3 | La llave del sandbox sigue sirviendo cuando quien la activó pierde el acceso o el contrato deja de ser compartible | `Modulos.Contratos/Sandbox/EndpointsSandbox.cs:246-259`, `ServicioSandbox.cs:293-297, 353` | Evaluar el acceso de `ActivadoPor` en el proxy (caché corta) o apagar la llave en `VigilanteVencimientos` |
-| F4-SEC-23 | 3.1 | El changelog de la exportación del portal nombra contratos fuera del alcance de la persona | `Exportaciones/ArmadorEntrada.cs:182, 220-301` | Changelog solo con los contratos visibles para esa persona |
+| F4-SEC-22 | 4.3 | La llave del sandbox sigue sirviendo cuando quien la activó pierde el acceso o el contrato deja de ser compartible | `Modulos.Contratos/Sandbox/EndpointsSandbox.cs:246-259`, `ServicioSandbox.cs:293-297, 353` | Evaluar el acceso de `ActivadoPor` en el proxy (caché corta) o apagar la llave en `VigilanteVencimientos` · **Corregido en `ca7dadc`:** el proxy revisa en cada llamada (caché de 30 s) que quien activó el sandbox siga viendo el paquete con sandbox (`PentestSandboxTests`) |
+| F4-SEC-23 | 3.1 | El changelog de la exportación del portal nombra contratos fuera del alcance de la persona | `Exportaciones/ArmadorEntrada.cs:182, 220-301` | Changelog solo con los contratos visibles para esa persona · **Corregido en `ca7dadc`:** en el portal el changelog solo cuenta y nombra los contratos exportados (`ChangelogExportacionTests`) |
 | F4-SEC-24 | 2.6 | El rol implícito por propiedad no exige que la persona sea empleada (la restauración del historial no revalida) | `Plataforma/Permisos/PermisosEfectivos.cs:162-168`, `Equipo/Endpoints/EndpointsHistorial.cs:192` | Exigir `Tipo == Empleado` para roles implícitos |
-| F4-SEC-25 | 2.6 | Negaciones de exportaciones del portal y llaves inválidas del sandbox no quedan auditadas (V8.4) | `Exportaciones/EndpointsExportaciones.cs:330, 397`, proxy del sandbox | Auditar con `EndpointsPortal.AccionNegado` |
-| F4-SEC-26 | 3.1 | Proxy a Microcks con `AllowAutoRedirect` y casi todas las cabeceras del mock (incluidas `Location` y CSP) | `ModuloContratos.cs:163`, `EndpointsSandbox.cs:46-51, 314-320` | `AllowAutoRedirect=false`, lista blanca de cabeceras, forzar `nosniff` y `CSP default-src 'none'` |
+| F4-SEC-25 | 2.6 | Negaciones de exportaciones del portal y llaves inválidas del sandbox no quedan auditadas (V8.4) | `Exportaciones/EndpointsExportaciones.cs:330, 397`, proxy del sandbox | Auditar con `EndpointsPortal.AccionNegado` · **Corregido en `ca7dadc`:** negaciones de solicitar y descargar exportaciones (`contratos.portal_acceso_negado`) y del proxy (`contratos.sandbox_acceso_negado`, con motivo y sin la llave) auditadas (`PentestSandboxTests`) |
+| F4-SEC-26 | 3.1 | Proxy a Microcks con `AllowAutoRedirect` y casi todas las cabeceras del mock (incluidas `Location` y CSP) | `ModuloContratos.cs:163`, `EndpointsSandbox.cs:46-51, 314-320` | `AllowAutoRedirect=false`, lista blanca de cabeceras, forzar `nosniff` y `CSP default-src 'none'` · **Corregido en `ca7dadc`:** `AllowAutoRedirect=false`, lista blanca de cabeceras (`EndpointsSandbox.PasaAlCliente`), `nosniff` y `CSP default-src 'none'; frame-ancestors 'none'; sandbox` (`PentestSandboxTests`) |
 | F4-SEC-27 | 3.1 | Publicación: cualquier tag `v*` del workflow vale; la audiencia es independiente de `atlas_url`; identidad por nombre del repo | `Publicacion/OpcionesPublicacion.cs:292`, `AutorizacionPublicacion.cs:96-110`, `.github/workflows/atlas-publicar.yml:545, 706` | Proteger tags o fijar versiones; exigir `audiencia == atlas_url`; validar `repository_id`/`repository_owner_id` |
 | F4-SEC-28 | 2.4 | Entradas huérfanas en el S3 si la transacción falla tras subirlas (para versiones internas, el spec completo) | `Exportaciones/ServicioExportaciones.cs:80-81` | Borrar en el `catch` o barrer prefijos sin fila; regla de ciclo de vida del bucket |
-| F4-SEC-29 | 3.3 | atlas-docs: caché de llaves por `kid` sin vencimiento (una llave retirada sigue valiendo) y refresco del JWKS sin límite por `kid` inventado | `services/docs/src/atlas_docs/autenticacion.py:45` | `cache_keys=False` con `cache_jwk_set=True, lifespan=300`; un refresco cada 30 s como máximo; prueba con `PyJWKClient` real |
-| F4-SEC-30 | 2.7 | atlas-docs: specs patológicos (`RecursionError`, alias) se tratan como fallo de infraestructura y ocupan el tope en curso 2 h | `services/docs/src/atlas_docs/specs.py:64, 76`, `cola.py:320` | Capturar `RecursionError`/`MemoryError` como `SpecInvalidoError`; rechazar alias |
+| F4-SEC-29 | 3.3 | atlas-docs: caché de llaves por `kid` sin vencimiento (una llave retirada sigue valiendo) y refresco del JWKS sin límite por `kid` inventado | `services/docs/src/atlas_docs/autenticacion.py:45` | `cache_keys=False` con `cache_jwk_set=True, lifespan=300`; un refresco cada 30 s como máximo; prueba con `PyJWKClient` real · **Corregido en `ca7dadc`:** `cache_keys=False`, `cache_jwk_set=True`, `lifespan=300`, `cooldown_duration=30` de PyJWT 2.15; pruebas con `PyJWKClient` real (`test_autenticacion.py`) |
+| F4-SEC-30 | 2.7 | atlas-docs: specs patológicos (`RecursionError`, alias) se tratan como fallo de infraestructura y ocupan el tope en curso 2 h | `services/docs/src/atlas_docs/specs.py:64, 76`, `cola.py:320` | Capturar `RecursionError`/`MemoryError` como `SpecInvalidoError`; rechazar alias · **Corregido en `ca7dadc`:** `RecursionError`/`MemoryError` y más de 2.000.000 nodos o 128 niveles al expandir alias son `SpecInvalidoError` (`test_cola.py`) |
 | F4-SEC-31 | 3.7 | Contraseñas: HIBP falla abierto con lista local de 74 entradas; no hay cambio de contraseña ni gestión de factores autenticada; no se avisa al usuario de cambios de factores | `Externos/ValidadorContrasenaFiltrada.cs:101-105`, `Externos/CorreosExternos.cs` | Lista local ≥ 3000 (V6.2.4); endpoints autenticados con reautenticación para cambiar contraseña, regenerar códigos y agregar passkey; correo de aviso |
 | F4-SEC-32 | 3.1 | Dependencias con avisos sin parche que cumpla las 2 semanas (§7) | `services/docs/pyproject.toml` (`pillow<13`, `brotli<1.2.1`), `services/render/go.mod` | Subir `pillow` a 13.0.0 y `brotli` a 1.2.1 desde el 30/10/2026 y 07/11/2026 aprox.; `toolchain go1.26.10` en `go.mod` antes de desplegar atlas-render |
 
@@ -385,10 +424,11 @@ respondía 204. No explotable entre orígenes sin CORS (el preflight lo bloquea)
 **No se recomienda todavía.** Los externos son justamente el modelo de amenaza de las cuentas locales, y hoy:
 
 1. **Bloqueantes** (deben corregirse y su prueba omitida pasar): F4-SEC-01 (fuerza bruta del TOTP), F4-SEC-02, F4-SEC-03,
-   F4-SEC-05, F4-SEC-09 (fuga en la poda: el contrato del ICT ya la tiene), F4-SEC-11 (Excel) y F4-SEC-13 (o la
-   verificación en flit-gitops de `RedesConfiables` y del nginx del host).
-2. **Antes o con riesgo aceptado en un ADR firmado por el líder técnico:** F4-SEC-04, F4-SEC-06, F4-SEC-10, F4-SEC-12
-   (con la `NetworkPolicy` verificada).
+   F4-SEC-05, ~~F4-SEC-09~~ (corregido en `ca7dadc`; quedan las descripciones del ICT, §6), ~~F4-SEC-11~~ (corregido en
+   `ca7dadc`) y F4-SEC-13 (o la verificación en flit-gitops de `RedesConfiables` y del nginx del host).
+2. **Antes o con riesgo aceptado en un ADR firmado por el líder técnico:** F4-SEC-04, F4-SEC-06, ~~F4-SEC-10~~
+   (corregido en `ca7dadc`; falta aceptar ATLAS-ADR-0050 y separar los roles en cada ambiente), ~~F4-SEC-12~~ (corregido en
+   `ca7dadc`; la `NetworkPolicy` sigue por verificar).
 3. **Pueden seguir después del lanzamiento con fecha:** F4-SEC-07 y F4-SEC-08 (internos), los bajos y los informativos.
 
 Con el punto 1 cerrado y el 2 resuelto o aceptado, la siguiente revisión puede ser corta: correr la carpeta
