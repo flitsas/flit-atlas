@@ -238,11 +238,12 @@ internal static class HttpExportaciones
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public static async Task<(Navegador Navegador, Guid PersonaId)> EmpleadoAsync(EntornoApi entorno, WebApplicationFactory<Program> api, string rol)
+    public static async Task<(Navegador Navegador, Guid PersonaId)> EmpleadoAsync(
+        EntornoApi entorno, WebApplicationFactory<Program> api, string rol, string? baseDeDatos = null)
     {
         var navegador = Navegador.De(api);
         navegador.Ip = $"2001:db8::45:{Random.Shared.Next(1, 0xffff):x}";
-        var grupo = await entorno.GrupoConRolAsync(rol);
+        var grupo = await entorno.GrupoConRolAsync(rol, baseDeDatos);
         Assert.Equal(HttpStatusCode.NoContent,
             (await navegador.EntrarSimuladoAsync($"exportaciones.{Guid.NewGuid():N}@ejemplo.com", "Persona Demo Exportaciones", grupo)).StatusCode);
         var yo = await JsonAsync(await navegador.GetAsync("/api/v1/plataforma/yo"));

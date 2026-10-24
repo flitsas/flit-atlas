@@ -26,7 +26,7 @@ public sealed class ExportacionesPuntaAPuntaTests(EntornoApi entorno, Contenedor
         {
             [$"{OpcionesExportaciones.Seccion}:DuracionUrl"] = "00:00:03",
         }));
-        var (navegador, persona) = await EmpleadoAsync(entorno, api, RolExportador);
+        var (navegador, persona) = await EmpleadoAsync(entorno, api, RolExportador, baseDeDatos);
 
         var solicitud = await PostAsync(navegador, "/api/v1/contratos/exportaciones",
             new { paqueteId = paquete.PaqueteId, formatos = new[] { "openapi", "postman", "html", "pdf", "word", "excel" } });

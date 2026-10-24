@@ -8,6 +8,8 @@ import Paquetes from '../paquetes/Paquetes';
 import { type BaseExportaciones, type Exportacion, intervaloSondeo } from './api';
 import { abrirEnLaMismaPestana } from './descarga';
 import { ExportarPaquete } from './ExportarPaquete';
+import { estadoAccion } from '../portal/acciones';
+import { ExportacionDelPortal } from '../portal/ExportacionDelPortal';
 
 /** HU 4.5 (ATLAS-ADR-0042): botón Exportar, estado en vivo y descarga en la misma pestaña, con una API falsa. */
 const sesion = vi.hoisted(() => ({ permisos: ['atlas.contratos.ver_internos', 'atlas.exportaciones.solicitar'] as string[] }));
@@ -248,5 +250,24 @@ describe('Exportar en el paquete', () => {
     apiFalsa([]);
     montarPaquetes('/contratos/paquetes/p1');
     expect(await screen.findByRole('button', { name: /Exportar/ })).toBeInTheDocument();
+  });
+});
+
+describe('exportar desde el portal', () => {
+  it('el botón «Exportar» del paquete abre la hoja con la base del portal y solicita ahí', async () => {
+    const llamadas = apiFalsa([exportacion()]);
+    envolver(<ExportacionDelPortal />, '/portal/paquetes/p1');
+    const accion = estadoAccion('exportar', true);
+    expect(accion.habilitada).toBe(true);
+    act(() => void accion.ejecutar?.('p1'));
+    fireEvent.click(await screen.findByRole('button', { name: /Solicitar exportación/ }));
+    await waitFor(() => expect(llamadas.some((l) => l.metodo === 'POST' && l.ruta === '/api/v1/portal/exportaciones')).toBe(true));
+    expect(llamadas.find((l) => l.metodo === 'POST')?.cuerpo).toMatchObject({ paqueteId: 'p1' });
+  });
+
+  it('el enlace del aviso del portal abre el estado de esa exportación', async () => {
+    apiFalsa([LISTA]);
+    envolver(<ExportacionDelPortal />, '/portal/paquetes/0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d52?exportacion=e1');
+    expect(await screen.findByText('Tu exportación está lista')).toBeInTheDocument();
   });
 });

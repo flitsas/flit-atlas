@@ -1,10 +1,12 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Modulos.Contratos.Datos;
+using Flit.Atlas.Modulos.Contratos.Portal;
 using Flit.Atlas.Plataforma;
 using Flit.Atlas.Plataforma.Almacenamiento;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -18,8 +20,8 @@ namespace Flit.Atlas.Modulos.Contratos.Exportaciones;
 /// <summary>
 /// Exportaciones de contratos (HU 4.5, plan 00 §6.3 y §8.7, ATLAS-ADR-0042). Internas en
 /// <c>/api/v1/contratos/exportaciones</c> (un paquete en una revisión, podado; o una versión completa) y del portal en
-/// <c>/api/v1/portal/exportaciones</c> (solo paquetes compartidos con la organización, según
-/// <see cref="IAutorizacionExportacionPortal"/>). Solicitar exige reautenticación (prompt maestro §6.3), sube la entrada
+/// <c>/api/v1/portal/exportaciones</c> (solo paquetes compartidos con la organización y con exportación permitida, según
+/// <see cref="AccesoPortal.PuedeExportarAsync"/>, con los specs que ve el portal). Solicitar exige reautenticación (prompt maestro §6.3), sube la entrada
 /// al S3 y responde 202 sin esperar la generación: atlas-docs la toma de la cola. Cada persona ve y descarga solo las
 /// suyas; la descarga es una URL firmada de 15 minutos. Solicitar, descargar y fallar quedan en la auditoría.
 /// </summary>
@@ -98,7 +100,7 @@ internal static class EndpointsExportaciones
     {
         grupo.MapPost("/exportaciones", SolicitarAsync)
             .RequierePermiso(PermisosContratos.ExportacionesSolicitar)
-            .ExigeIngresoReciente()
+            .RequiereReautenticacion()
             .WithName("SolicitarExportacionContratos")
             .WithSummary("Solicitar una exportación")
             .WithDescription("Arma el paquete a exportar (specs de la revisión podados a su selección, guías y changelog; o, para una versión, el spec completo), lo deja en el S3 y encola la generación: responde 202 sin esperarla. El estado se consulta en GET /exportaciones/{id} y al terminar llega un aviso. 409 no_exportable si la poda falla o el contrato no se exporta (proto). Requiere atlas.exportaciones.solicitar, atlas.contratos.ver_internos y un ingreso reciente.")
@@ -140,7 +142,7 @@ internal static class EndpointsExportaciones
     {
         grupo.MapPost("/exportaciones", SolicitarPortalAsync)
             .RequierePermiso(PermisosContratos.PortalVer)
-            .ExigeIngresoReciente()
+            .RequiereReautenticacion()
             .WithName("SolicitarExportacionPortal")
             .WithSummary("Solicitar una exportación desde el portal")
             .WithDescription("Exporta un paquete compartido con la organización de la persona, en la revisión que ella ve, con sus specs podados: responde 202 y la generación sigue en la cola. 403 si la compartición no está vigente o no permite exportar. Requiere atlas.portal.ver, la compartición con puede_exportar y un ingreso reciente.")
@@ -177,7 +179,7 @@ internal static class EndpointsExportaciones
     private static async Task<IResult> SolicitarAsync(
         [Description("Qué exportar y en qué formatos.")] SolicitudExportacion solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, IAlmacenObjetos almacen, IPermisosDeSesion permisosDeSesion,
-        IOptions<OpcionesExportaciones> opciones, TimeProvider reloj, CancellationToken ct)
+        ILectorAplicativos lector, IOptions<OpcionesExportaciones> opciones, IOptions<OpcionesPortal> portal, TimeProvider reloj, CancellationToken ct)
     {
         var formatos = FormatosExportacion.Normalizar(solicitud?.Formatos);
         var errores = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -230,7 +232,10 @@ internal static class EndpointsExportaciones
                 {
                     return NoEncontrado("La revisión no existe.");
                 }
-                armada = await ArmadorEntrada.DePaqueteAsync(contexto, paquete, revision, ArmadorEntrada.OrganizacionInterna, ahora, opciones.Value, ct);
+                var slugs = (await lector.ListarAsync(ct)).ToDictionary(a => a.Id, a => a.Slug);
+                var ambiente = opciones.Value.Ambiente;
+                armada = await ArmadorEntrada.DePaqueteAsync(contexto, paquete, revision, ArmadorEntrada.OrganizacionInterna, ahora, ambiente,
+                    c => portal.Value.UrlsDe(slugs.GetValueOrDefault(c.AplicativoId) ?? string.Empty, c.Codigo, ambiente), ct);
                 borrador = Borrador(id, http.User, null, false, OrigenExportacion.Paquete, paqueteId, numero, null, armada, formatos!);
             }
             else
@@ -295,7 +300,7 @@ internal static class EndpointsExportaciones
     private static async Task<IResult> SolicitarPortalAsync(
         [Description("El paquete compartido y los formatos.")] SolicitudExportacionPortal solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, IAlmacenObjetos almacen,
-        IAutorizacionExportacionPortal autorizacion, IOptions<OpcionesExportaciones> opciones, TimeProvider reloj, CancellationToken ct)
+        AccesoPortal acceso, SpecsDelPortal specs, TimeProvider reloj, CancellationToken ct)
     {
         var formatos = FormatosExportacion.Normalizar(solicitud?.Formatos);
         if (formatos is null || solicitud!.PaqueteId == Guid.Empty)
@@ -311,44 +316,47 @@ internal static class EndpointsExportaciones
         {
             return Error(StatusCodes.Status403Forbidden, "sin_permiso", "El portal es para personas de una organización cliente.");
         }
-        // Mismo resultado si el paquete no existe o no está compartido: el portal no revela paquetes ajenos (plan 00 §6.2).
-        var decision = await autorizacion.EvaluarAsync(http.User, solicitud.PaqueteId, ct);
-        if (!decision.Permitida || decision.Revision is not { } numero)
+        // Un paquete que no está compartido con su organización (o fuera de su alcance) es 404, como si no existiera.
+        var decision = await acceso.PuedeExportarAsync(http.User, solicitud.PaqueteId, ct);
+        if (!decision.Permitida || decision.Paquete is null)
         {
-            return Error(StatusCodes.Status403Forbidden, "sin_permiso", decision.Motivo ?? "No puedes exportar este paquete.");
+            return Negada(decision);
         }
         if (!almacen.Disponible)
         {
             return SinAlmacen();
         }
-        var paquete = await contexto.Paquetes.AsNoTracking().FirstOrDefaultAsync(p => p.Id == solicitud.PaqueteId, ct);
-        var revision = paquete is null ? null
-            : await contexto.RevisionesPaquete.AsNoTracking().FirstOrDefaultAsync(r => r.PaqueteId == paquete.Id && r.Numero == numero, ct);
-        if (paquete is null || revision is null)
-        {
-            return Error(StatusCodes.Status403Forbidden, "sin_permiso", "No puedes exportar este paquete.");
-        }
         var organizacion = await plataforma.Organizaciones.AsNoTracking().Where(o => o.Id == organizacionId).Select(o => o.Nombre).FirstOrDefaultAsync(ct);
         if (organizacion is null)
         {
-            return Error(StatusCodes.Status403Forbidden, "sin_permiso", "Tu organización no está disponible.");
+            return NoEncontrado("El paquete no existe.");
         }
 
         var ahora = reloj.GetUtcNow();
         EntradaArmada armada;
         try
         {
-            armada = await ArmadorEntrada.DePaqueteAsync(contexto, paquete, revision, organizacion, ahora, opciones.Value, ct);
+            armada = await ArmadorEntrada.DePortalAsync(contexto, specs, decision.Paquete, organizacion, ahora, ct);
         }
         catch (NoExportableException)
         {
-            // Al cliente no se le detalla qué falló en la poda (nombra contratos y operaciones internas): queda en el log.
+            // Al cliente no se le detalla qué falló en la poda (nombra contratos y operaciones internas).
             return Results.Json(new ErrorExportacion("no_exportable", "Este paquete no se puede exportar en este momento. Avísale a tu contacto en FLIT.", null),
                 statusCode: StatusCodes.Status409Conflict);
         }
-        var borrador = Borrador(Guid.CreateVersion7(), http.User, organizacionId, true, OrigenExportacion.Paquete, paquete.Id, numero, null, armada, formatos);
+        var borrador = Borrador(Guid.CreateVersion7(), http.User, organizacionId, true, OrigenExportacion.Paquete, decision.Paquete.Paquete.Id,
+            decision.Paquete.Revision, null, armada, formatos);
         return await CrearYResponderAsync(http, contexto, plataforma, almacen, borrador, armada, ahora, ExtensionesRutaPortal, ct);
     }
+
+    /// <summary>no_encontrado → 404 sin revelar el paquete; lo demás (solo_resumen, no_permitido_por_comparticion, sin_permiso) → 403.</summary>
+    private static IResult Negada(DecisionPortal decision) => decision.Codigo switch
+    {
+        null or "no_encontrado" => NoEncontrado("El paquete no existe."),
+        "no_permitido_por_comparticion" => Error(StatusCodes.Status403Forbidden, decision.Codigo, "La compartición de este paquete no permite exportarlo."),
+        "solo_resumen" => Error(StatusCodes.Status403Forbidden, decision.Codigo, "Tu acceso a este paquete es solo de resumen."),
+        _ => Error(StatusCodes.Status403Forbidden, decision.Codigo, "No tienes permiso para exportar este paquete."),
+    };
 
     private const string ExtensionesRutaPortal = "/api/v1/portal";
 
@@ -363,7 +371,7 @@ internal static class EndpointsExportaciones
         [Description("Id de la exportación.")] Guid exportacionId,
         [Description("Ruta de un archivo de la exportación; vacío = el ZIP.")] string? archivo,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, IAlmacenObjetos almacen,
-        IAutorizacionExportacionPortal autorizacion, IOptions<OpcionesExportaciones> opciones, TimeProvider reloj, CancellationToken ct)
+        AccesoPortal acceso, IOptions<OpcionesExportaciones> opciones, TimeProvider reloj, CancellationToken ct)
     {
         var exportacion = await PropiaAsync(contexto, exportacionId, http.User, portal: true, ct);
         if (exportacion is null)
@@ -371,10 +379,10 @@ internal static class EndpointsExportaciones
             return NoEncontrado("La exportación no existe.");
         }
         // Una compartición revocada o vencida corta también la descarga de lo ya exportado.
-        var decision = await autorizacion.EvaluarAsync(http.User, exportacion.PaqueteId!.Value, ct);
+        var decision = await acceso.PuedeExportarAsync(http.User, exportacion.PaqueteId!.Value, ct);
         if (!decision.Permitida)
         {
-            return Error(StatusCodes.Status403Forbidden, "sin_permiso", decision.Motivo ?? "Ya no puedes descargar esta exportación.");
+            return Negada(decision);
         }
         return await UrlAsync(http, plataforma, almacen, opciones.Value, reloj, exportacion, archivo, ct);
     }

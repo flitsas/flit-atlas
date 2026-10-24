@@ -85,21 +85,31 @@ export function ExportarPaquete({
   origen,
   exportacionInicial = null,
   etiqueta = 'Exportar',
+  controlada,
 }: {
   base: BaseExportaciones;
   origen: OrigenExportacion;
   /** Exportación que se abre al montar (p. ej. desde el enlace de la notificación «Tu exportación está lista»). */
   exportacionInicial?: string | null;
   etiqueta?: string;
+  /**
+   * Sin botón propio: la hoja la abre quien monta el componente (el botón «Exportar» del portal, `acciones.ts`) y
+   * `alCerrar` le avisa al cerrarla.
+   */
+  controlada?: { alCerrar: () => void };
 }) {
-  const [abierta, setAbierta] = useState(exportacionInicial !== null);
+  const [abiertaPropia, setAbierta] = useState(exportacionInicial !== null);
   const [id, setId] = useState<string | null>(exportacionInicial);
+  const abierta = controlada ? true : abiertaPropia;
+  const cerrar = controlada ? controlada.alCerrar : () => setAbierta(false);
   return (
     <>
-      <Boton variante="secundario" onClick={() => setAbierta(true)}>
-        <FileDown className="size-4" aria-hidden="true" /> {etiqueta}
-      </Boton>
-      <Hoja abierta={abierta} alCerrar={() => setAbierta(false)} titulo="Exportar">
+      {!controlada && (
+        <Boton variante="secundario" onClick={() => setAbierta(true)}>
+          <FileDown className="size-4" aria-hidden="true" /> {etiqueta}
+        </Boton>
+      )}
+      <Hoja abierta={abierta} alCerrar={cerrar} titulo="Exportar">
         <div className="flex flex-col gap-3 px-4 pt-2 pb-5 text-sm">
           {abierta && (id === null ? <Elegir base={base} origen={origen} alSolicitar={setId} /> : <Estado base={base} id={id} alNueva={() => setId(null)} />)}
         </div>

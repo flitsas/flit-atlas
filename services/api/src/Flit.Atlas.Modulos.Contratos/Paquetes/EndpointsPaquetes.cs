@@ -618,7 +618,7 @@ internal static class EndpointsPaquetes
     /// El paquete (con seguimiento) y su revisión objetivo (la última, o <paramref name="numero"/>) si existen y la persona
     /// puede gestionarlo: sobre los contratos de la última revisión y de la objetivo. Si no, 404 o 403.
     /// </summary>
-    private static async Task<(PaqueteContratos? Paquete, RevisionPaquete? Objetivo, IResult? Error)> PaqueteParaGestionarAsync(
+    internal static async Task<(PaqueteContratos? Paquete, RevisionPaquete? Objetivo, IResult? Error)> PaqueteParaGestionarAsync(
         Guid paqueteId, int? numero, ClaimsPrincipal usuario, ContratosDbContext contexto, ILectorAplicativos lector,
         IPermisosDeSesion permisosDeSesion, CancellationToken ct)
     {
@@ -719,7 +719,7 @@ internal static class EndpointsPaquetes
     }
 
     /// <summary>Lo que impide publicar (o fijar) una revisión hoy, en frases; vacío si se puede.</summary>
-    private static async Task<List<string>> ProblemasParaPublicarAsync(ContratosDbContext contexto, IReadOnlyList<EntradaPaquete> definicion, CancellationToken ct)
+    internal static async Task<List<string>> ProblemasParaPublicarAsync(ContratosDbContext contexto, IReadOnlyList<EntradaPaquete> definicion, CancellationToken ct)
     {
         var problemas = new List<string>();
         if (!ReglasPaquetes.TieneAlgoQueCompartir(definicion))

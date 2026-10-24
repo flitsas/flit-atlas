@@ -28,12 +28,15 @@ public sealed class MetadatoModulo(string id)
 public static partial class ExtensionesModulos
 {
     /// <summary>Ids que no puede usar un módulo: son núcleo o rutas que ya existen bajo <c>/api/v1</c>.</summary>
-    private static readonly HashSet<string> Reservados = new(StringComparer.Ordinal) { "plataforma", "identidad", "version" };
+    private static readonly HashSet<string> Reservados = new(StringComparer.Ordinal) { "plataforma", "identidad", "version", "portal" };
+
+    /// <summary>Prefijo de los endpoints del portal de clientes que aportan los módulos (ATLAS-ADR-0043).</summary>
+    public const string RutaPortal = "/api/v1/portal";
+
+    /// <summary>Etiqueta del contrato OpenAPI de los endpoints del portal.</summary>
+    public const string EtiquetaPortal = "Portal de clientes";
 
     public static string Bandera(string id) => $"modulo.{id}";
-
-    /// <summary>Prefijo de los endpoints del portal de clientes (<see cref="IModuloAtlas.MapearEndpointsPortal"/>).</summary>
-    public const string RutaPortal = "/api/v1/portal";
 
     public static string TablaHistorial(string id) => $"__ef_migraciones_{id}";
 
@@ -130,10 +133,9 @@ public static partial class ExtensionesModulos
                 .WithMetadata(new MetadatoModulo(modulo.Id))
                 .AddEndpointFilter(new FiltroBandera(modulo));
             modulo.MapearEndpoints(grupo);
-
-            // Portal de clientes (F4): mismas reglas, bajo /api/v1/portal.
+            // El portal de clientes (ATLAS-ADR-0043): un grupo por módulo con el mismo prefijo, su bandera y sesión.
             var portal = rutas.MapGroup(RutaPortal)
-                .WithTags(modulo.Nombre)
+                .WithTags(EtiquetaPortal)
                 .RequireAuthorization()
                 .WithMetadata(new MetadatoModulo(modulo.Id))
                 .AddEndpointFilter(new FiltroBandera(modulo));

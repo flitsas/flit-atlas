@@ -99,8 +99,8 @@ export function ProveedorSesion({
   const banderas = useQuery({ queryKey: CLAVE_BANDERAS, queryFn: cargarBanderas, staleTime: 5 * 60_000 });
 
   const acceso = useMemo<AccesoUsuario>(
-    () => ({ banderas: banderas.data ?? {}, permisos: estado.yo.permisos }),
-    [banderas.data, estado.yo.permisos],
+    () => ({ banderas: banderas.data ?? {}, permisos: estado.yo.permisos, tipoPrincipal: estado.yo.tipoPrincipal }),
+    [banderas.data, estado.yo.permisos, estado.yo.tipoPrincipal],
   );
   const navegacion = useMemo(() => resolverNavegacion(modulos, acceso), [modulos, acceso]);
 

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Flit.Atlas.Modulos.Contratos.Poda;
 using Microsoft.Extensions.Options;
 
@@ -24,19 +23,12 @@ public sealed class OpcionesExportaciones
     /// <summary>Una exportación pendiente o en proceso más vieja que esto queda fallida (<c>tiempo_agotado</c>).</summary>
     public TimeSpan TiempoMaximo { get; set; } = TimeSpan.FromHours(2);
 
-    /// <summary>Ambiente al que se podan los specs de un paquete (<c>sandbox</c>, <c>qa</c> o <c>pdn</c>, ATLAS-ADR-0038).</summary>
-    public string Ambiente { get; set; } = AmbientesPoda.Qa;
-
     /// <summary>
-    /// URL públicas por código de contrato (o <c>*</c> para todos) que van en <c>servers</c> del spec podado. Sin URL, el
-    /// spec sale sin <c>servers</c>: nunca con los internos (ATLAS-ADR-0038).
+    /// Ambiente al que se podan los specs de una exportación interna (<c>sandbox</c>, <c>qa</c> o <c>pdn</c>,
+    /// ATLAS-ADR-0038), con las URL públicas de <c>Contratos:Portal:Servidores</c> (las mismas del portal). Las del portal
+    /// usan el ambiente del portal (<c>Contratos:Portal:Ambiente</c>).
     /// </summary>
-    public Dictionary<string, List<Uri>> Servidores { get; init; } = new(StringComparer.Ordinal);
-
-    public IReadOnlyList<Uri> ServidoresDe(string contrato) =>
-        Servidores.TryGetValue(contrato, out var propios) ? propios
-        : Servidores.TryGetValue("*", out var todos) ? todos
-        : [];
+    public string Ambiente { get; set; } = AmbientesPoda.Qa;
 }
 
 internal sealed class ValidadorOpcionesExportaciones : IValidateOptions<OpcionesExportaciones>
@@ -63,31 +55,4 @@ internal sealed class ValidadorOpcionesExportaciones : IValidateOptions<Opciones
         }
         return errores.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errores);
     }
-}
-
-/// <summary>¿Puede esta persona del portal exportar este paquete, y en qué revisión?</summary>
-/// <param name="Permitida">Compartición vigente con su organización, con <c>puede_exportar</c>, y el permiso de la persona.</param>
-/// <param name="Revision">La revisión que ve su organización (la fijada en la compartición o la vigente del paquete).</param>
-/// <param name="Motivo">Si no: por qué, en una frase para la persona.</param>
-public sealed record DecisionExportacionPortal(bool Permitida, int? Revision, string? Motivo)
-{
-    public static DecisionExportacionPortal Negada(string motivo) => new(false, null, motivo);
-}
-
-/// <summary>
-/// Consulta de las comparticiones (HU 4.3) para exportar desde el portal (HU 4.4 y 4.5): ¿la organización de la persona
-/// tiene el paquete compartido, vigente y con <c>puede_exportar</c>, y la persona el permiso? La implementa el módulo de
-/// comparticiones; mientras no exista, <see cref="SinExportacionPortal"/> niega todo (falla cerrado). Se evalúa al
-/// solicitar y otra vez al descargar.
-/// </summary>
-public interface IAutorizacionExportacionPortal
-{
-    Task<DecisionExportacionPortal> EvaluarAsync(ClaimsPrincipal usuario, Guid paqueteId, CancellationToken ct);
-}
-
-/// <summary>Sin comparticiones todavía: nadie exporta desde el portal.</summary>
-internal sealed class SinExportacionPortal : IAutorizacionExportacionPortal
-{
-    public Task<DecisionExportacionPortal> EvaluarAsync(ClaimsPrincipal usuario, Guid paqueteId, CancellationToken ct) =>
-        Task.FromResult(DecisionExportacionPortal.Negada("Este paquete no está compartido con tu organización para exportarlo."));
 }

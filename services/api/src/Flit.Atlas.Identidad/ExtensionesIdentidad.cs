@@ -103,8 +103,6 @@ public static class ExtensionesIdentidad
         // HU 1.3b (ATLAS-ADR-0022): eventos de seguridad, sello de seguridad, bloqueo progresivo y límite de tasa.
         servicios.AddHttpContextAccessor();
         servicios.AddScoped<RegistroSeguridad>();
-        // Para los módulos: exigir un ingreso reciente sin referenciar la identidad (ATLAS-ADR-0016).
-        servicios.AddSingleton<IReautenticacion, ReautenticacionDeSesion>();
         servicios.AddScoped<IInvalidadorSesiones, InvalidadorSesiones>();
         servicios.AddScoped<VerificadorContrasena>();
         LimitacionTasa.Agregar(servicios);
@@ -147,6 +145,7 @@ public static class ExtensionesIdentidad
     {
         servicios.AgregarManifiestoPermisos(PermisosIdentidad.Manifiesto);
         servicios.AddScoped<IPermisosDeSesion, PermisosDeSesion>();
+        servicios.AddSingleton<IVerificadorReautenticacion, Seguridad.VerificadorReautenticacion>();
         servicios.Replace(ServiceDescriptor.Scoped<IAlcanceDatos, AlcanceDatosDeSesion>());
         servicios.AddScoped<AdministracionRoles>();
         servicios.AddOptions<OpcionesVencimientos>().BindConfiguration(OpcionesVencimientos.Seccion);

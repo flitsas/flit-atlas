@@ -219,3 +219,24 @@ export function motivoNoRetirable(a: Pick<Asignacion, 'origen'>): string | null 
       return null;
   }
 }
+
+/**
+ * Paquetes de contratos compartidos con una organización (HU 4.3, ATLAS-ADR-0043): lo publica el módulo de contratos en
+ * `/api/v1/contratos/organizaciones/{id}/comparticiones` (exige `atlas.contratos.ver_internos`). Solo lo que esta página
+ * muestra: el paquete, su estado y la vigencia.
+ */
+export interface PaqueteCompartidoConOrganizacion {
+  id: string;
+  paqueteId: string;
+  paqueteNombre: string;
+  estado: 'vigente' | 'programada' | 'vencida' | 'revocada';
+  revisionQueVe: number | null;
+  puedeExportar: boolean;
+  puedeSandbox: boolean;
+  vigenteHasta: string | null;
+}
+
+export async function listarPaquetesCompartidos(organizacionId: string): Promise<PaqueteCompartidoConOrganizacion[]> {
+  const respuesta = await pedir(`/api/v1/contratos/organizaciones/${encodeURIComponent(organizacionId)}/comparticiones`);
+  return ((await respuesta.json()) as { elementos: PaqueteCompartidoConOrganizacion[] }).elementos;
+}

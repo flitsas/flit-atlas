@@ -1,4 +1,4 @@
-import type { AplicativoDeFicha, EntradaNavegacion, ModuloAtlas, PestanaFicha, WidgetInicio } from './contrato';
+import type { AplicativoDeFicha, Audiencia, EntradaNavegacion, ModuloAtlas, PestanaFicha, WidgetInicio } from './contrato';
 
 /**
  * Qué ve cada persona: módulos activos por bandera y entradas filtradas por permiso. Funciones puras, para que el
@@ -15,6 +15,8 @@ export interface AccesoUsuario {
    * (`undefined`), no se filtra por permiso y los módulos se muestran solo según su bandera.
    */
   permisos?: readonly string[];
+  /** Empleado o persona externa (de `/yo`): filtra las entradas y widgets con `audiencia`. Sin él, no se filtra. */
+  tipoPrincipal?: 'empleado' | 'externo';
 }
 
 /** Entradas del núcleo (no son módulos: siempre están). */
@@ -33,6 +35,12 @@ export function banderaActiva(modulo: ModuloAtlas, banderas: AccesoUsuario['band
 export function tienePermiso(permiso: string | undefined, permisos: AccesoUsuario['permisos']): boolean {
   if (!permiso || permisos === undefined) return true;
   return permisos.includes(permiso);
+}
+
+/** ¿La entrada o el widget es para esta persona? Sin audiencia (o sin saber quién es), sí. */
+export function paraAudiencia(audiencia: Audiencia | undefined, tipo: AccesoUsuario['tipoPrincipal']): boolean {
+  if (!audiencia || !tipo) return true;
+  return audiencia === (tipo === 'externo' ? 'externos' : 'empleados');
 }
 
 export interface EntradaResuelta extends EntradaNavegacion {
@@ -70,7 +78,7 @@ export function resolverNavegacion(modulos: readonly ModuloAtlas[], acceso: Acce
   const activos = modulosVisibles(modulos, acceso);
   const deModulos: EntradaResuelta[] = activos.flatMap((m) =>
     m.navegacion
-      .filter((n) => tienePermiso(n.permiso, acceso.permisos))
+      .filter((n) => tienePermiso(n.permiso, acceso.permisos) && paraAudiencia(n.audiencia, acceso.tipoPrincipal))
       .map((n) => ({ ...n, icono: n.icono ?? m.icono, modulo: m })),
   );
   const todas = [...NAVEGACION_NUCLEO, ...deModulos].sort(porOrden);
@@ -82,7 +90,7 @@ export function resolverNavegacion(modulos: readonly ModuloAtlas[], acceso: Acce
 
   const widgets: WidgetResuelto[] = activos
     .flatMap((m) => (m.widgetsInicio ?? []).map((w) => ({ ...w, modulo: m })))
-    .filter((w) => tienePermiso(w.permiso, acceso.permisos))
+    .filter((w) => tienePermiso(w.permiso, acceso.permisos) && paraAudiencia(w.audiencia, acceso.tipoPrincipal))
     .sort(porOrden);
 
   return { modulos: activos, lateral: todas, barraInferior, mas, widgets };

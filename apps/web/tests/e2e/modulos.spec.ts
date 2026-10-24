@@ -596,8 +596,14 @@ test.describe('paquetes de contratos (HU 4.1)', () => {
     await confirmar.getByRole('button', { name: /Fijar la revisión 1/ }).click();
     await expect(page.getByText('Fijada: la revisión 1 es la vigente.')).toBeVisible();
     await expect(historial.getByRole('listitem', { name: 'Revisión 1' }).getByText('Vigente')).toBeVisible();
+    // HU 4.3: «Compartido con» y la hoja para compartir con otra organización.
+    await expect(page.getByRole('list', { name: 'Organizaciones con las que se comparte' })).toContainText('Organismo Demo de Tránsito');
     if (movil) await sinScrollHorizontal(page, 'detalle del paquete a 360 px');
     await sinErroresCriticosDeAxe(page, 'detalle del paquete');
+    await page.getByRole('region', { name: 'Compartido con' }).getByRole('button', { name: /Compartir/ }).click();
+    const compartir = page.getByRole('dialog', { name: 'Compartir con una organización' });
+    await expect(compartir.getByRole('radio', { name: /Proveedor Demo/ })).toBeAttached();
+    await sinErroresCriticosDeAxe(page, 'compartir el paquete');
     expect(violaciones).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ using Flit.Atlas.Modulos.Contratos.Datos;
 using Flit.Atlas.Modulos.Contratos.Guias;
 using Flit.Atlas.Modulos.Contratos.Paquetes;
 using Flit.Atlas.Modulos.Contratos.Poda;
+using Flit.Atlas.Modulos.Contratos.Portal;
 using Flit.Atlas.Modulos.Contratos.Specs;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,7 +60,7 @@ internal static class ArmadorEntrada
     /// <exception cref="NoExportableException"/>
     public static async Task<EntradaArmada> DePaqueteAsync(
         ContratosDbContext contexto, PaqueteContratos paquete, RevisionPaquete revision, string organizacion, DateTimeOffset ahora,
-        OpcionesExportaciones opciones, CancellationToken ct)
+        string ambiente, Func<Contrato, IReadOnlyList<Uri>> servidores, CancellationToken ct)
     {
         var definicion = FotoPaquete.LeerDefinicion(revision.Definicion).Where(e => e.Operaciones.Count > 0).ToList();
         if (definicion.Count == 0)
@@ -93,7 +94,7 @@ internal static class ArmadorEntrada
             }
             try
             {
-                var destino = new DestinoPoda(opciones.Ambiente, opciones.ServidoresDe(contrato.Codigo));
+                var destino = new DestinoPoda(ambiente, servidores(contrato));
                 var podado = podador.Podar(new SolicitudPoda(version.Contenido, e.Operaciones, destino));
                 specs.Add(new SpecEntrada(contrato.Codigo, version.Version, Valores.Texto(contrato.Tipo), podado.Contenido));
             }
@@ -132,6 +133,54 @@ internal static class ArmadorEntrada
         var changelog = await ChangelogPaqueteAsync(contexto, paquete.Id, revision.Numero, ct);
         var metadatos = new MetadatosEntrada(Recortar(revision.Nombre, MaximoTexto), revision.Numero, Recortar(organizacion, MaximoTexto),
             FechaBogota(ahora), changelog);
+        return new EntradaArmada(new EntradaExportacion(metadatos, specs, guias), $"{revision.Nombre} · revisión {revision.Numero}", null);
+    }
+
+    /// <summary>
+    /// Un paquete del portal (HU 4.4 y 4.5): solo lo que la organización ve hoy (<see cref="AccesoPortal"/>): la revisión de
+    /// su compartición, los contratos técnicos y disponibles con su spec podado por <see cref="SpecsDelPortal"/> (el mismo
+    /// que muestra el portal, con su caché) y las guías visibles.
+    /// </summary>
+    /// <exception cref="NoExportableException"/>
+    public static async Task<EntradaArmada> DePortalAsync(
+        ContratosDbContext contexto, SpecsDelPortal specsDelPortal, PaqueteDelPortal paquete, string organizacion, DateTimeOffset ahora, CancellationToken ct)
+    {
+        var contratos = paquete.Contratos.Where(c => c.Tecnico && c.Entrada.Operaciones.Count > 0).OrderBy(c => c.Contrato.Codigo, StringComparer.Ordinal).ToList();
+        if (contratos.Count == 0 || contratos.Count > MaximoSpecs)
+        {
+            throw new NoExportableException("El paquete no tiene contratos que exportar.");
+        }
+        var problemas = new List<string>();
+        var specs = new List<SpecEntrada>();
+        foreach (var c in contratos)
+        {
+            var resultado = await specsDelPortal.PodarAsync(paquete, c, null, ct).ConfigureAwait(false);
+            if (resultado.Spec is null)
+            {
+                problemas.Add($"{c.Contrato.Codigo}: {resultado.Codigo}");
+                continue;
+            }
+            specs.Add(new SpecEntrada(c.Contrato.Codigo, c.Version.Version, Valores.Texto(c.Contrato.Tipo), resultado.Spec.Contenido));
+        }
+        var pedidas = contratos.SelectMany(c => c.Guias).ToList();
+        if (pedidas.Count > MaximoGuias)
+        {
+            problemas.Add($"más de {MaximoGuias} guías");
+        }
+        if (problemas.Count > 0)
+        {
+            throw new NoExportableException($"El paquete no se puede exportar: {problemas[0]}", problemas);
+        }
+        var ids = pedidas.Select(g => g.GuiaId).Distinct().ToList();
+        var cuerpos = (await contexto.RevisionesGuia.AsNoTracking().Where(r => ids.Contains(r.GuiaId)).ToListAsync(ct).ConfigureAwait(false))
+            .ToDictionary(r => (r.GuiaId, r.Numero));
+        var guias = pedidas
+            .Where(g => cuerpos.ContainsKey((g.GuiaId, g.Revision)))
+            .Select(g => new GuiaEntrada(Recortar(g.Titulo, MaximoTexto), cuerpos[(g.GuiaId, g.Revision)].Contenido))
+            .ToList();
+        var revision = paquete.RevisionPaquete;
+        var changelog = await ChangelogPaqueteAsync(contexto, paquete.Paquete.Id, revision.Numero, ct).ConfigureAwait(false);
+        var metadatos = new MetadatosEntrada(Recortar(revision.Nombre, MaximoTexto), revision.Numero, Recortar(organizacion, MaximoTexto), FechaBogota(ahora), changelog);
         return new EntradaArmada(new EntradaExportacion(metadatos, specs, guias), $"{revision.Nombre} · revisión {revision.Numero}", null);
     }
 

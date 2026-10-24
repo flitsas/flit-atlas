@@ -65,6 +65,7 @@ internal sealed partial class ConsumidorEventos(
     ILogger<ConsumidorEventos> log) : BackgroundService
 {
     private readonly List<IChannel> _canales = [];
+    private readonly Lock _cerrojo = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -124,7 +125,10 @@ internal sealed partial class ConsumidorEventos(
     private async Task<IChannel> AbrirAsync(IConnection conexion, IManejadorEventos manejador, CancellationToken ct)
     {
         var canal = await conexion.CreateChannelAsync(cancellationToken: ct).ConfigureAwait(false);
-        _canales.Add(canal);
+        lock (_cerrojo)
+        {
+            _canales.Add(canal);
+        }
         await DeclararAsync(canal, manejador, opciones.Value, ct).ConfigureAwait(false);
         await canal.BasicQosAsync(0, 1, false, ct).ConfigureAwait(false);
         var consumidor = new AsyncEventingBasicConsumer(canal);
@@ -254,7 +258,14 @@ internal sealed partial class ConsumidorEventos(
 
     private async Task CerrarCanalesAsync()
     {
-        foreach (var canal in _canales)
+        IChannel[] canales;
+        // Lo llaman el ciclo y StopAsync a la vez: cada uno cierra lo que alcanzó a sacar de la lista.
+        lock (_cerrojo)
+        {
+            canales = [.. _canales];
+            _canales.Clear();
+        }
+        foreach (var canal in canales)
         {
             try
             {
@@ -266,7 +277,6 @@ internal sealed partial class ConsumidorEventos(
             {
             }
         }
-        _canales.Clear();
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo abrir el consumo de eventos; se reintenta")]

@@ -152,16 +152,39 @@ internal sealed partial class AlmacenS3 : IAlmacenObjetos, IDisposable
     public Uri UrlFirmada(string clave, TimeSpan duracion, string nombreArchivo)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clave);
+        var expira = DateTime.UtcNow + duracion;
+        var url = Firmar(clave, expira, nombreArchivo);
+        // El SDK calcula X-Amz-Expires contra su hora corregida por el desfase con el servidor S3 y redondea: si se pasa de
+        // lo pedido (15 minutos, plan 00 §6.3), se vuelve a firmar restando el exceso.
+        var exceso = SegundosFirmados(url) - (long)duracion.TotalSeconds;
+        return exceso > 0 ? Firmar(clave, expira - TimeSpan.FromSeconds(exceso), nombreArchivo) : url;
+    }
+
+    private Uri Firmar(string clave, DateTime expira, string nombreArchivo)
+    {
         var solicitud = new GetPreSignedUrlRequest
         {
             BucketName = _opciones.Bucket,
             Key = clave,
             Verb = HttpVerb.GET,
-            Expires = DateTime.UtcNow + duracion,
+            Expires = expira,
             Protocol = _publicoEsHttp ? Protocol.HTTP : Protocol.HTTPS,
         };
         solicitud.ResponseHeaderOverrides.ContentDisposition = Adjunto(nombreArchivo);
         return new Uri(_publico.GetPreSignedURL(solicitud));
+    }
+
+    internal static long SegundosFirmados(Uri url)
+    {
+        foreach (var parte in url.Query.TrimStart('?').Split('&'))
+        {
+            if (parte.StartsWith("X-Amz-Expires=", StringComparison.Ordinal)
+                && long.TryParse(parte["X-Amz-Expires=".Length..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var segundos))
+            {
+                return segundos;
+            }
+        }
+        return 0;
     }
 
     public async Task<int> BorrarPrefijoAsync(string prefijo, CancellationToken ct)

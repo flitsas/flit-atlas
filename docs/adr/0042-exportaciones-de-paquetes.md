@@ -9,7 +9,7 @@ elementos: []
 reemplaza: []
 reemplazado_por: []
 alias: []
-fuentes: [prompt maestro A-02, A-06, §5.1, §5.2, §6.3, §7.4, §8.4, §8.5 (exportación), §8.9, §11, §12 y §15, plan 00 §6.2, §6.3, §8.4, §8.7 y §12, HU 4.5, ATLAS-ADR-0003, ATLAS-ADR-0014, ATLAS-ADR-0018, ATLAS-ADR-0020, ATLAS-ADR-0022, ATLAS-ADR-0023, ATLAS-ADR-0024, ATLAS-ADR-0026, ATLAS-ADR-0037, ATLAS-ADR-0038, ATLAS-ADR-0039, ATLAS-ADR-0040, ATLAS-ADR-0041, ATLAS-ADR-0044]
+fuentes: [prompt maestro A-02, A-06, §5.1, §5.2, §6.3, §7.4, §8.4, §8.5 (exportación), §8.9, §11, §12 y §15, plan 00 §6.2, §6.3, §8.4, §8.7 y §12, HU 4.5, ATLAS-ADR-0003, ATLAS-ADR-0014, ATLAS-ADR-0018, ATLAS-ADR-0020, ATLAS-ADR-0022, ATLAS-ADR-0023, ATLAS-ADR-0024, ATLAS-ADR-0026, ATLAS-ADR-0037, ATLAS-ADR-0038, ATLAS-ADR-0039, ATLAS-ADR-0040, ATLAS-ADR-0041, ATLAS-ADR-0043, ATLAS-ADR-0044]
 ---
 
 # ATLAS-ADR-0042 · Exportaciones de paquetes
@@ -164,8 +164,10 @@ Hechos verificados al empezar la ola 2:
 - atlas-api no usaba S3 (solo atlas-docs, con boto3).
 - `ExtensionesModulos.Validar` exige que los eventos que publica un módulo empiecen por `atlas.<id>.`: los nombres
   propuestos en la parte 1 (`atlas.exportacion.*`) no pasan. Se renombran como `atlas.contratos.version_publicada`.
-- Los módulos no referencian la identidad (ATLAS-ADR-0016), donde vivía la reautenticación; el host monta cada módulo
-  solo en `/api/v1/<id>`.
+- Las HU 4.3 y 4.4 (ATLAS-ADR-0043) ya dejan en Plataforma la reautenticación para los módulos
+  (`RequiereReautenticacion`), el grupo `/api/v1/portal` por módulo (`IModuloAtlas.MapearEndpointsPortal`), el acceso del
+  portal (`AccesoPortal.PuedeExportarAsync`: compartición vigente con `puede_exportar`, nivel técnico y el permiso o el
+  extra `exportar` de la invitación) y el spec podado del portal con caché (`SpecsDelPortal`).
 - En la matriz, `atlas.exportaciones.solicitar` lo tienen el líder técnico, desarrollador, negocio y asesor comercial;
   `atlas.contratos.ver_internos`, el líder técnico, desarrollador y soporte; `ext.integrador` tiene `atlas.portal.ver`
   pero no `atlas.exportaciones.solicitar`.
@@ -187,12 +189,16 @@ usuario responde 202 sin esperar la generación.
    `Location`. Si la base falla después de subir, la entrada queda huérfana en el S3 (sin nadie que la lea).
    - **Paquete:** la revisión pedida o, sin ella, la vigente (o la última si nunca se publicó). Por cada contrato con
      operaciones, el spec de la versión fijada **podado** a su selección con `Podadores` (ATLAS-ADR-0038) al ambiente
-     `Contratos:Exportaciones:Ambiente` (`qa` por defecto) con las URL públicas de `Contratos:Exportaciones:Servidores`
-     (por código de contrato o `*`; sin URL, sin `servers`). Si la poda falla, nada se exporta: **409 `no_exportable`**
+     `Contratos:Exportaciones:Ambiente` (`qa` por defecto) con las URL públicas configuradas
+     (sin URL, sin `servers`). Si la poda falla, nada se exporta: **409 `no_exportable`**
      con el detalle (en el portal, sin detalle). Las guías son las revisiones fijadas en el paquete. El changelog se
      **genera** de las definiciones de las revisiones hasta la exportada (contratos que entran o salen, versión que
      cambia, operaciones y guías agregadas o quitadas); la nota de cada revisión no sale (texto libre interno que puede
-     traer datos personales). Topes de atlas-docs: 30 specs, 50 guías y 500 entradas de changelog.
+     traer datos personales). Topes de atlas-docs: 30 specs, 50 guías y 500 entradas de changelog. Las URL públicas son
+     las del portal (`Contratos:Portal:Servidores`).
+   - **Paquete desde el portal:** exactamente lo que la organización ve hoy (`AccesoPortal`): la revisión de su
+     compartición, los contratos técnicos y disponibles con el spec de `SpecsDelPortal` (el mismo que muestra el portal,
+     al ambiente `Contratos:Portal:Ambiente`) y las guías visibles.
    - **Versión** (solo internos): el spec completo tal como se publicó, las guías publicadas que le aplican y el
      changelog de oasdiff de la CI. proto no se exporta (409).
    - **Organización y fecha:** la del externo en el portal (va en la marca de agua); «FLIT S.A.S. · uso interno» en las
@@ -237,15 +243,12 @@ usuario responde 202 sin esperar la generación.
 - **Internos** en `/api/v1/contratos/exportaciones`: `POST` (permiso `atlas.exportaciones.solicitar` más
   `atlas.contratos.ver_internos` dentro, y **reautenticación**, prompt maestro §6.3), `GET` (las últimas 20 de la
   persona, filtrables por paquete o versión), `GET /{id}` y `GET /{id}/descarga` (`atlas.exportaciones.solicitar`).
-- **Portal** en `/api/v1/portal/exportaciones`: `POST` (paquete y formatos; `atlas.portal.ver`, reautenticación y la
-  consulta `IAutorizacionExportacionPortal`, que decide si la compartición está vigente con `puede_exportar` y en qué
-  revisión), `GET /{id}` y `GET /{id}/descarga` (que vuelve a consultar la compartición). La implementación por defecto
-  (`SinExportacionPortal`) **niega todo** hasta que las comparticiones (HU 4.3) registren la suya. El host monta
-  `/api/v1/portal` para cada módulo con la nueva `IModuloAtlas.MapearEndpointsPortal` (sesión, etiqueta y bandera del
-  módulo). Cada persona ve solo lo suyo: interno con interno y portal con portal (404 si no).
-- **Reautenticación para los módulos:** `IReautenticacion` y `ExigeIngresoReciente()` en Plataforma; la identidad las
-  implementa con su `Reautenticacion` (ventana de 10 minutos). `MetadatoReautenticacion` pasa a Plataforma para que el
-  contrato OpenAPI documente el 401 también en los módulos.
+- **Portal** en `/api/v1/portal/exportaciones` (montado con `MapearEndpointsPortal`): `POST` (paquete y formatos;
+  `atlas.portal.ver`, reautenticación y `AccesoPortal.PuedeExportarAsync`: `no_encontrado` → 404 sin revelar el
+  paquete; `solo_resumen`, `no_permitido_por_comparticion` o `sin_permiso` → 403), `GET /{id}` y `GET /{id}/descarga`
+  (que vuelve a consultar el acceso: una compartición revocada corta también la descarga). Cada persona ve solo lo suyo:
+  interno con interno y portal con portal, y una persona de otra organización recibe 404 (sus casos están en
+  `AislamientoPortalTests` y en `ExportacionesTests`).
 - **Auditoría** (`contratos.exportacion_solicitada`, `_descargada`, `_fallida`): ids, origen, formatos, SHA-256 de la
   entrada, contratos y versiones, archivo, bytes y hash del contenido; nunca el contenido del spec, la guía ni la URL.
 
@@ -270,8 +273,9 @@ ambiente sin S3 no tumba el despliegue).
 - **PWA:** botón «Exportar» en el detalle del paquete (con `atlas.exportaciones.solicitar`): hoja inferior con los
   formatos, estado en vivo por sondeo (cada 2 s y, pasados 30 s, cada 5 s), «Tu exportación está lista» con el ZIP y
   los archivos sueltos, y descarga en la misma pestaña. El componente `ExportarPaquete` recibe la base
-  (`/api/v1/contratos` o `/api/v1/portal`) para que el portal lo monte. El aviso enlaza a
-  `/contratos/paquetes?paquete=<id>&exportacion=<id>`.
+  (`/api/v1/contratos` o `/api/v1/portal`); en el portal, `ExportacionDelPortal` lo conecta con
+  `conectarAccionPortal('exportar', …)` y abre la hoja desde el botón del paquete. Los avisos enlazan a
+  `/contratos/paquetes?paquete=<id>&exportacion=<id>` y `/portal/paquetes/<id>?exportacion=<id>`.
 
 ### Pruebas (criterio de aceptación)
 
@@ -281,7 +285,8 @@ ambiente sin S3 no tumba el despliegue).
   de Open XML), comprueba que la URL deja de servir (con `DuracionUrl` de 3 segundos el S3 responde 403) y que la
   solicitud y las descargas quedan auditadas y el aviso enviado.
 - Que la URL por defecto es de 15 minutos (`X-Amz-Expires=900`), permisos, reautenticación, validación, poda en la
-  entrada, portal (niega por defecto; con la compartición, solo la organización de la persona), resultados repetidos o
+  entrada, portal (sin `puede_exportar`, 403; un paquete de otra organización, 404; con la compartición, la marca de su
+  organización y nadie de otra la ve ni la descarga), resultados repetidos o
   ajenos, retención y corte por tiempo: `ExportacionesTests` (atlas-api con RustFS). RLS de la tabla con el usuario del
   servicio: `Flit.Atlas.Modulos.Contratos.Tests`. Reintentos y cola de errores del consumidor con RabbitMQ real:
   `ConsumoTests`. El consumidor de atlas-docs y el CA de los siete formatos por la cola: `tests/exportes/test_cola.py`
@@ -339,10 +344,8 @@ ambiente sin S3 no tumba el despliegue).
 - [por verificar] El host público del S3 para firmar (`EndpointPublico`): en pdn el de Contabo; en qa, MinIO o RustFS
   necesita un ingress propio. Y una regla de ciclo de vida del bucket para entradas huérfanas.
 - [por verificar] Con el líder: `ext.integrador` no tiene `atlas.exportaciones.solicitar` en la matriz (§7.3 dice que
-  exporta si la compartición lo permite); la consulta de comparticiones decidirá si exige ese permiso además de
-  `puede_exportar`. No se cambió la matriz (cambiar permisos es de las decisiones que se preguntan).
+  exporta si la compartición lo permite); hoy exporta solo con el extra `exportar` de su invitación (ATLAS-ADR-0043). No
+  se cambió la matriz.
 - [por verificar] Las URL públicas por ambiente y contrato para los `servers` del spec podado
-  (`Contratos:Exportaciones:Servidores`); sin ellas, el spec exportado sale sin `servers` y Postman con `{{baseUrl}}`
+  (`Contratos:Portal:Servidores`); sin ellas, el spec exportado sale sin `servers` y Postman con `{{baseUrl}}`
   vacío.
-- [por verificar] El enlace del aviso del portal (`/portal/paquetes/<id>?exportacion=<id>`) depende de las rutas de la
-  HU 4.4.

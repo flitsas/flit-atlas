@@ -9,6 +9,7 @@ import {
   Hand,
   House,
   type LucideProps,
+  Package,
   Search,
   Settings,
   ShieldCheck,
@@ -35,6 +36,7 @@ const ICONOS: Record<NombreIcono, ComponentType<LucideProps>> = {
   permisos: ShieldCheck,
   ejemplo: Hand,
   administracion: Building2,
+  portal: Package,
 };
 
 export function Icono({ nombre, ...props }: { nombre: NombreIcono } & LucideProps) {

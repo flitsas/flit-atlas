@@ -83,8 +83,11 @@ public static class ManifiestosNucleo
     [
         new("atlas.paquetes.gestionar", "Armar paquetes de contratos y compartirlos con organizaciones.", LiderTecnico, Responsable),
         new("atlas.portal.ver", "Entrar al portal de clientes y ver lo compartido con la organización.", LiderTecnico, Soporte, Integrador, ClienteFuncional, AsesorComercial, Proveedor, AdminOrganizacion),
-        new("atlas.exportaciones.solicitar", "Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP).", LiderTecnico, Desarrollador, Negocio, AsesorComercial),
-        new("atlas.sandbox.usar", "Usar el sandbox de los contratos.", LiderTecnico, Desarrollador, Soporte),
+        // ext.integrador exporta y usa el sandbox «si la compartición lo permite» (§7.3, ATLAS-ADR-0043): el permiso es la
+        // mitad; la otra la pone cada compartición (puede_exportar, puede_sandbox). ext.proveedor y ext.cliente_funcional
+        // solo con el permiso extra de su invitación (§6.2).
+        new("atlas.exportaciones.solicitar", "Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP).", LiderTecnico, Desarrollador, Negocio, AsesorComercial, Integrador),
+        new("atlas.sandbox.usar", "Usar el sandbox de los contratos.", LiderTecnico, Desarrollador, Soporte, Integrador),
     ], [TiposAlcance.Paquete]);
 
     public static ManifiestoPermisos Documentacion { get; } = new("documentacion", "Documentación",

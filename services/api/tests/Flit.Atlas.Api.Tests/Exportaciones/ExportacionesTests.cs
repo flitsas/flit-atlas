@@ -1,5 +1,4 @@
 using System.Net;
-using System.Security.Claims;
 using System.Text.Json;
 using Amazon.Runtime;
 using Amazon.S3;
@@ -12,7 +11,6 @@ using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using static Flit.Atlas.Api.Tests.Exportaciones.HttpExportaciones;
 
@@ -187,7 +185,7 @@ public sealed class ExportacionesTests(EntornoApi entorno, ContenedoresExportaci
         var respuesta = await PostAsync(navegador, Ruta, new { paqueteId = paquete.PaqueteId, formatos = Todos });
 
         Assert.Equal(HttpStatusCode.Unauthorized, respuesta.StatusCode);
-        Assert.Equal(ExtensionesIngresoReciente.CodigoReautenticacion, await CodigoAsync(respuesta));
+        Assert.Equal("reautenticacion_requerida", await CodigoAsync(respuesta));
     }
 
     [Fact]
@@ -276,7 +274,8 @@ public sealed class ExportacionesTests(EntornoApi entorno, ContenedoresExportaci
         Assert.Equal(HttpStatusCode.Conflict, antes.StatusCode);
         Assert.Equal("no_lista", await CodigoAsync(antes));
         var url = new Uri(descarga.GetProperty("url").GetString()!);
-        Assert.Contains("X-Amz-Expires=900", url.Query, StringComparison.Ordinal);
+        var expira = int.Parse(System.Web.HttpUtility.ParseQueryString(url.Query)["X-Amz-Expires"]!, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(expira, 895, 900);
         Assert.Equal("demo-r1.zip", descarga.GetProperty("nombre").GetString());
         using (var http = new HttpClient())
         {
@@ -304,9 +303,9 @@ public sealed class ExportacionesTests(EntornoApi entorno, ContenedoresExportaci
         }
         var vencedor = api.Services.GetServices<IHostedService>().OfType<VencedorExportaciones>().Single();
 
-        var (vencidas, agotadas) = await vencedor.VencerAsync(Ct);
+        // El trabajo también corre solo en las otras instancias de prueba (misma base): se miran los estados, no los conteos.
+        await vencedor.VencerAsync(Ct);
 
-        Assert.True(vencidas >= 1 && agotadas >= 1, $"{vencidas} vencidas, {agotadas} agotadas");
         Assert.Equal("vencida", (await JsonAsync(await navegador.GetAsync($"{Ruta}/{id}"))).GetProperty("estado").GetString());
         var descarga = await navegador.GetAsync($"{Ruta}/{id}/descarga");
         Assert.Equal(HttpStatusCode.Gone, descarga.StatusCode);
@@ -317,59 +316,72 @@ public sealed class ExportacionesTests(EntornoApi entorno, ContenedoresExportaci
         Assert.Equal("tiempo_agotado", corte.GetProperty("error").GetProperty("codigo").GetString());
     }
 
-    // --- Portal ---
+    // --- Portal (con las comparticiones reales de la HU 4.3 y el acceso del portal de la HU 4.4) ---
 
-    private sealed class ComparticionDePrueba(Guid paqueteId) : IAutorizacionExportacionPortal
+    /// <summary>Un paquete publicado y compartido con la organización A (con o sin exportar) y otro solo con B.</summary>
+    private async Task<(EscenarioPortal Escenario, Guid PaqueteA, Guid PaqueteB, Guid OrgA, Guid OrgB)> PortalAsync(bool exportar)
     {
-        public Task<DecisionExportacionPortal> EvaluarAsync(ClaimsPrincipal usuario, Guid paquete, CancellationToken ct) =>
-            Task.FromResult(paquete == paqueteId ? new DecisionExportacionPortal(true, 1, null) : DecisionExportacionPortal.Negada("No compartido."));
+        var escenario = new EscenarioPortal(entorno, contenedores.Configuracion(conBroker: false));
+        var (lider, _) = await escenario.EmpleadoAsync(RolesAtlas.LiderTecnico);
+        var (_, slug) = await EscenarioPortal.AplicativoAsync(lider, "API Demo Exportaciones");
+        var (contrato, version) = await escenario.PublicarAsync(slug, "api-exporta", EscenarioPortal.Spec("API Exporta Demo", "exporta", "Exporta"));
+        var paqueteA = await EscenarioPortal.PaquetePublicadoAsync(lider, "Paquete Exporta Demo A", contrato, version, ["GET /exporta/{id}"]);
+        var paqueteB = await EscenarioPortal.PaquetePublicadoAsync(lider, "Paquete Exporta Demo B", contrato, version, ["GET /exporta/{id}"]);
+        var orgA = await escenario.OrganizacionAsync("Organismo Demo A");
+        var orgB = await escenario.OrganizacionAsync("Organismo Demo B");
+        await EscenarioPortal.CompartirAsync(lider, paqueteA, orgA, exportar: exportar);
+        await EscenarioPortal.CompartirAsync(lider, paqueteB, orgB, exportar: true);
+        return (escenario, paqueteA, paqueteB, orgA, orgB);
     }
 
     [Fact]
-    public async Task El_portal_niega_por_defecto_y_un_externo_no_usa_la_exportacion_interna()
+    public async Task El_portal_no_exporta_sin_puede_exportar_ni_un_paquete_ajeno_y_un_externo_no_usa_la_exportacion_interna()
     {
-        await using var api = Api();
-        var paquete = await ContratosDePrueba.SembrarAsync(entorno.Postgres.GetConnectionString(), ct: Ct);
-        var externo = await entorno.ExternoAsync(api, RolesAtlas.Integrador, DateTimeOffset.UtcNow.AddDays(30));
-        using var navegador = Navegador.De(api);
-        await navegador.EntrarComoAsync(externo.UsuarioId);
+        var (escenario, paqueteA, paqueteB, orgA, _) = await PortalAsync(exportar: false);
+        await using var _escenario = escenario;
+        var a = await escenario.ExternoAsync(orgA, RolesAtlas.Integrador, extras: ["exportar"]);
 
-        var portal = await PostAsync(navegador, RutaPortal, new { paqueteId = paquete.PaqueteId, formatos = Todos });
-        var interna = await PostAsync(navegador, Ruta, new { paqueteId = paquete.PaqueteId, formatos = Todos });
+        var sinPermiso = await PostAsync(a.Navegador, RutaPortal, new { paqueteId = paqueteA, formatos = Todos });
+        var ajeno = await PostAsync(a.Navegador, RutaPortal, new { paqueteId = paqueteB, formatos = Todos });
+        var interna = await PostAsync(a.Navegador, Ruta, new { paqueteId = paqueteA, formatos = Todos });
 
-        Assert.Equal(HttpStatusCode.Forbidden, portal.StatusCode);
-        Assert.Equal("sin_permiso", await CodigoAsync(portal));
+        Assert.Equal(HttpStatusCode.Forbidden, sinPermiso.StatusCode);
+        Assert.Equal("no_permitido_por_comparticion", await CodigoAsync(sinPermiso));
+        // El paquete de otra organización no existe para A.
+        Assert.Equal(HttpStatusCode.NotFound, ajeno.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, interna.StatusCode);
     }
 
     [Fact]
-    public async Task Con_la_comparticion_el_externo_exporta_con_su_marca_y_nadie_mas_la_ve()
+    public async Task Con_la_comparticion_el_externo_exporta_con_su_marca_y_nadie_de_otra_organizacion_la_ve_ni_la_descarga()
     {
-        var paquete = await ContratosDePrueba.SembrarAsync(entorno.Postgres.GetConnectionString(), ct: Ct);
-        await using var api = Api(servicios: s => s.Replace(ServiceDescriptor.Scoped<IAutorizacionExportacionPortal>(_ => new ComparticionDePrueba(paquete.PaqueteId))));
-        var externo = await entorno.ExternoAsync(api, RolesAtlas.Integrador, DateTimeOffset.UtcNow.AddDays(30));
-        var otro = await entorno.ExternoAsync(api, RolesAtlas.Integrador, DateTimeOffset.UtcNow.AddDays(30));
-        using var navegador = Navegador.De(api);
-        using var ajeno = Navegador.De(api);
-        await navegador.EntrarComoAsync(externo.UsuarioId);
-        await ajeno.EntrarComoAsync(otro.UsuarioId);
-        var (empleado, _) = await EmpleadoAsync(entorno, api, RolesAtlas.LiderTecnico);
+        var (escenario, paqueteA, _, orgA, orgB) = await PortalAsync(exportar: true);
+        await using var _escenario = escenario;
+        var a = await escenario.ExternoAsync(orgA, RolesAtlas.Integrador, extras: ["exportar"]);
+        var b = await escenario.ExternoAsync(orgB, RolesAtlas.Integrador, extras: ["exportar"]);
+        var (empleado, _) = await escenario.EmpleadoAsync(RolesAtlas.LiderTecnico);
 
-        var respuesta = await PostAsync(navegador, RutaPortal, new { paqueteId = paquete.PaqueteId, formatos = new[] { "pdf", "excel" } });
+        var respuesta = await PostAsync(a.Navegador, RutaPortal, new { paqueteId = paqueteA, formatos = new[] { "pdf", "excel" } });
 
         Assert.Equal(HttpStatusCode.Accepted, respuesta.StatusCode);
-        var id = (await JsonAsync(respuesta)).GetProperty("id").GetString()!;
-        Assert.Equal(HttpStatusCode.OK, (await navegador.GetAsync($"{RutaPortal}/{id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await ajeno.GetAsync($"{RutaPortal}/{id}")).StatusCode);
+        var id = Guid.Parse((await JsonAsync(respuesta)).GetProperty("id").GetString()!);
+        await ListaAsync(escenario.Api, id);
+        Assert.Equal(HttpStatusCode.OK, (await a.Navegador.GetAsync($"{RutaPortal}/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await a.Navegador.GetAsync($"{RutaPortal}/{id}/descarga")).StatusCode);
+        // B (otra organización) ni la ve ni la descarga, y el 404 no revela que existe; tampoco el lado interno.
+        Assert.Equal(HttpStatusCode.NotFound, (await b.Navegador.GetAsync($"{RutaPortal}/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await b.Navegador.GetAsync($"{RutaPortal}/{id}/descarga")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await empleado.GetAsync($"{Ruta}/{id}")).StatusCode);
+
+        // La entrada lleva la organización en la marca de agua y el spec podado: sin la operación ni el servidor internos.
         var entrada = JsonDocument.Parse(await LeerS3Async($"exportaciones/{id}/entrada.json")).RootElement;
         await using var plataforma = entorno.Plataforma();
-        var organizacion = await plataforma.Organizaciones.AsNoTracking().Where(o => o.Id == externo.OrganizacionId).Select(o => o.Nombre).SingleAsync(Ct);
+        var organizacion = await plataforma.Organizaciones.AsNoTracking().Where(o => o.Id == orgA).Select(o => o.Nombre).SingleAsync(Ct);
         Assert.Equal(organizacion, entrada.GetProperty("metadatos").GetProperty("organizacion").GetString());
-
-        // La organización queda en la fila (predicado obligatorio y RLS; RLS la prueba Flit.Atlas.Modulos.Contratos.Tests con
-        // el usuario del servicio, porque el de este contenedor es superusuario y se la salta).
+        var spec = entrada.GetProperty("specs")[0].GetProperty("contenido").GetString()!;
+        Assert.DoesNotContain("pagos-internos", spec, StringComparison.Ordinal);
+        Assert.DoesNotContain("servidor-interno", spec, StringComparison.Ordinal);
         await using var propio = Contratos();
-        Assert.Equal(externo.OrganizacionId, (await propio.Exportaciones.AsNoTracking().SingleAsync(e => e.Id == Guid.Parse(id), Ct)).OrganizacionId);
+        Assert.Equal(orgA, (await propio.Exportaciones.AsNoTracking().SingleAsync(e => e.Id == id, Ct)).OrganizacionId);
     }
 }

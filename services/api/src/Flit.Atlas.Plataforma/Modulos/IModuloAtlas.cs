@@ -90,11 +90,12 @@ public interface IModuloAtlas
     void MapearEndpoints(RouteGroupBuilder grupo);
 
     /// <summary>
-    /// Sus endpoints del portal de clientes (F4), en un grupo que el host monta en <c>/api/v1/portal</c> con las mismas
-    /// reglas de <see cref="MapearEndpoints"/> (sesión, etiqueta y bandera del módulo). Cada endpoint declara su permiso
-    /// (<c>atlas.portal.ver</c> y lo que exija) y filtra por la organización de la persona. Por defecto, ninguno.
+    /// Sus endpoints del portal de clientes (plan 00 §8.5, ATLAS-ADR-0043), en un grupo que el host monta en
+    /// <c>/api/v1/portal</c> con la etiqueta «Portal de clientes», sesión obligatoria y la bandera del módulo. Son los que
+    /// usan las personas externas: cada uno declara su permiso y tiene su prueba de aislamiento entre organizaciones
+    /// (<c>AislamientoPortalTests</c> falla si falta). Por defecto, ninguno.
     /// </summary>
-    void MapearEndpointsPortal(RouteGroupBuilder grupo)
+    void MapearEndpointsPortal(RouteGroupBuilder portal)
     {
     }
 }

@@ -20,7 +20,14 @@ export type NombreIcono =
   | 'ajustes'
   | 'permisos'
   | 'ejemplo'
-  | 'administracion';
+  | 'administracion'
+  | 'portal';
+
+/**
+ * A quién va una entrada o un widget además de su permiso (ATLAS-ADR-0043): `externos` (portal de clientes) o
+ * `empleados`. Sin audiencia, a todos los que tengan el permiso.
+ */
+export type Audiencia = 'externos' | 'empleados';
 
 /** Carga diferida: cada página y cada widget va en su propio chunk. */
 export type Cargador = () => Promise<{ default: ComponentType }>;
@@ -41,6 +48,7 @@ export interface EntradaNavegacion {
   orden: number;
   icono?: NombreIcono;
   permiso?: string;
+  audiencia?: Audiencia;
 }
 
 export interface WidgetInicio {
@@ -49,6 +57,7 @@ export interface WidgetInicio {
   /** Orden en Inicio; los del núcleo usan 0–9. */
   orden: number;
   permiso?: string;
+  audiencia?: Audiencia;
   /** Ancho en la cuadrícula de escritorio. */
   ancho?: 'normal' | 'doble';
   cargar: Cargador;
