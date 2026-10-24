@@ -215,7 +215,8 @@ jobs:
           #   4. declarar seguridad en toda operación pública, salvo la que entrega el token (`x-flit-sin-autenticacion`);
           #   5. cumplir lo mismo que exige contracts/vacuum/openapi.yaml a los contratos propios (operationId, etiquetas,
           #      descripciones, solo HTTPS, nada sensible en la URL).
-          # Se corre sobre contracts/legado/*.yaml en el job «contratos» de ci.yml, con la misma versión de vacuum (0.32.0).
+          # Se corre sobre contracts/ict/core-ict.enriquecido.v1.yaml y contracts/ict/propuesta-flit/core-ict.v1.yaml en el job
+          # «contratos» de ci.yml, con la misma versión de vacuum (0.32.0).
           extends:
             - [spectral:oas, recommended]
             - [vacuum:owasp, all]
@@ -249,7 +250,7 @@ jobs:
             owasp-constrained-additionalProperties: info
             owasp-define-error-responses-401: info
             description-duplication: off
-            # Las operaciones internas de los legados (x-internal) no siempre declaran seguridad: el informe las lista y la
+            # Las operaciones internas (x-internal) no siempre declaran seguridad: el informe las lista y la
             # poda las quita antes de compartir. Para las públicas manda flit-publica-con-seguridad.
             owasp-protection-global-unsafe: warn
             owasp-protection-global-unsafe-strict: warn

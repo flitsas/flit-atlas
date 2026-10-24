@@ -22,14 +22,16 @@ uv run pytest
 uv run uvicorn --factory atlas_docs.main:crear_app --port 4035
 ```
 
-## Conversión del legado ICT (HU 3.8, ATLAS-ADR-0037)
+## Contrato de ICT de FLIT 2 enriquecido con el Excel (HU 3.8, ATLAS-ADR-0037)
 
-`atlas_docs.legado` toma el `swagger.json` de tsoa de cada `BackApiExternal*` y el Excel de contratos ICT (todas las
-hojas) y escribe en `contracts/legado/` un OpenAPI 3.1 enriquecido por repo, el informe de inconsistencias, la
-trazabilidad de cada campo del Excel y los PR propuestos para los repos legados. Ver `contracts/legado/README.md`.
+`atlas_docs.ict` toma `contracts/openapi/core-ict.v1.yaml` del repo `flit` (FLIT 2) y los hosts públicos que su
+Gateway YARP enruta a core-ict, lo enriquece con el Excel de contratos ICT (todas las hojas) y escribe en
+`contracts/ict/` un solo OpenAPI 3.1 con una URL base por ambiente, el informe de inconsistencias, la trazabilidad de
+cada campo del Excel y la propuesta para el repo `flit`. Ver `contracts/ict/README.md`.
 
 ```bash
-uv run python -m atlas_docs.legado --excel <ruta del Excel> --repos <carpeta con los BackApiExternal*>
+uv run python -m atlas_docs.ict --excel <ruta del Excel> --base-flit <ruta del repo flit>
 ```
 
-Las pruebas (`tests/legado/`) usan un swagger mínimo y un xlsx ficticio que arma la propia prueba; nunca el Excel real.
+Las pruebas (`tests/ict/`) usan un repo `flit` mínimo (contrato de core-ict y Gateway) y un xlsx ficticio que arma
+la propia prueba; nunca el Excel real.
