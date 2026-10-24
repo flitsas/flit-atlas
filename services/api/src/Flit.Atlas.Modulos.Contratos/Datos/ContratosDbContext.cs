@@ -351,6 +351,39 @@ public sealed class RevisionPaquete : Entidad
 }
 
 /// <summary>
+/// Un paquete compartido con una organización cliente o proveedora (plan 00 §6.2 y §8.4, HU 4.3, ATLAS-ADR-0043): con
+/// qué revisión (fijada o la vigente del paquete), si puede exportar y usar el sandbox, y su vigencia. Tiene
+/// <c>organizacion_id</c>: la filtra el predicado obligatorio y, en la base, RLS (ATLAS-ADR-0023). Es la única entrada del
+/// portal a los paquetes: un externo solo llega a un paquete por una fila de su organización. Una por paquete y
+/// organización; revocar la deja con <see cref="RevocadoEn"/> (la historia queda) y compartir otra vez la reactiva.
+/// </summary>
+public sealed class ComparticionPaquete : Entidad
+{
+    public required Guid PaqueteId { get; init; }
+
+    public required Guid OrganizacionId { get; init; }
+
+    /// <summary>Revisión del paquete que ve la organización; vacío = sigue la vigente (publicada o fijada) del paquete.</summary>
+    public int? RevisionFijada { get; set; }
+
+    public bool PuedeExportar { get; set; }
+
+    public bool PuedeSandbox { get; set; }
+
+    public required DateTimeOffset VigenteDesde { get; set; }
+
+    /// <summary>Al pasar, el acceso se corta sin intervención (se calcula en cada petición); vacío = sin vencimiento.</summary>
+    public DateTimeOffset? VigenteHasta { get; set; }
+
+    /// <summary>Persona que compartió (o reactivó) el paquete.</summary>
+    public required Guid OtorgadoPor { get; set; }
+
+    public DateTimeOffset? RevocadoEn { get; set; }
+
+    public Guid? RevocadoPor { get; set; }
+}
+
+/// <summary>
 /// Qué versión de un contrato corre hoy en un ambiente (plan 00 §8.1 y §8.2, regla 5; HU 3.4 y ATLAS-ADR-0035 §8): una
 /// fila por contrato y ambiente, que mueve el CD con <c>PUT /api/v1/contratos/canales/{ambiente}</c>. Cada cambio deja
 /// una fila en <see cref="HistorialCanal"/>.
@@ -453,6 +486,8 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
     public DbSet<PaqueteContratos> Paquetes => Set<PaqueteContratos>();
 
     public DbSet<RevisionPaquete> RevisionesPaquete => Set<RevisionPaquete>();
+
+    public DbSet<ComparticionPaquete> Comparticiones => Set<ComparticionPaquete>();
 
     public const int LargoAmbiente = 20;
 
@@ -638,12 +673,30 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
             e.HasIndex(r => new { r.PaqueteId, r.Numero }).IsUnique();
         });
 
+        modelBuilder.Entity<ComparticionPaquete>(e =>
+        {
+            e.ToTable(Prefijo + "comparticion", t =>
+            {
+                t.HasComment("Paquetes compartidos con organizaciones: revisión fijada, exportar, sandbox y vigencia (HU 4.3, ATLAS-ADR-0043).");
+                t.HasCheckConstraint("ck_contratos_comparticion_revision", "revision_fijada IS NULL OR revision_fijada >= 1");
+                t.HasCheckConstraint("ck_contratos_comparticion_vigencia", "vigente_hasta IS NULL OR vigente_hasta > vigente_desde");
+                t.HasCheckConstraint("ck_contratos_comparticion_revocada", "(revocado_en IS NULL) = (revocado_por IS NULL)");
+            });
+            e.Property(c => c.Id).ValueGeneratedNever();
+            e.HasOne<PaqueteContratos>().WithMany().HasForeignKey(c => c.PaqueteId).OnDelete(DeleteBehavior.Restrict);
+            // Una por paquete y organización: compartir otra vez una revocada la reactiva.
+            e.HasIndex(c => new { c.PaqueteId, c.OrganizacionId }).IsUnique();
+            // El portal parte siempre de las comparticiones de la organización de la sesión.
+            e.HasIndex(c => c.OrganizacionId);
+        });
+
         // translate() y lower() para la búsqueda sin tildes, como en el catálogo.
         modelBuilder.HasDbFunction(typeof(FuncionesSql).GetMethod(nameof(FuncionesSql.Traducir))!).HasName("translate").IsBuiltIn();
         modelBuilder.HasDbFunction(typeof(FuncionesSql).GetMethod(nameof(FuncionesSql.Minusculas))!).HasName("lower").IsBuiltIn();
 
-        // Ninguna entidad tiene OrganizacionId (los contratos son internos; lo compartido irá por paquetes, F4), pero se
-        // aplica igual: si una tabla futura lo lleva, queda filtrada.
+        // Predicado obligatorio: contratos_comparticion (HU 4.3) solo devuelve filas de las organizaciones del alcance de la
+        // petición. Los contratos, versiones, guías y paquetes son internos: el portal llega a ellos solo desde una
+        // compartición de la organización de la sesión (ATLAS-ADR-0043).
         AplicarPredicadoDeOrganizacion(modelBuilder);
     }
 

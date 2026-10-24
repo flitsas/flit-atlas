@@ -33,6 +33,15 @@ public static class PermisosContratos
     /// </summary>
     public const string PaquetesGestionar = "atlas.paquetes.gestionar";
 
+    /// <summary>Entrar al portal de clientes (HU 4.4, ATLAS-ADR-0043); lo que ve lo recorta <see cref="Portal.AccesoPortal"/>. Del manifiesto «portal».</summary>
+    public const string PortalVer = "atlas.portal.ver";
+
+    /// <summary>Exportar (HU 4.5); en el portal, además, la compartición con <c>puede_exportar</c>. Del manifiesto «portal».</summary>
+    public const string ExportacionesSolicitar = "atlas.exportaciones.solicitar";
+
+    /// <summary>Sandbox (HU 4.7); en el portal, además, la compartición con <c>puede_sandbox</c>. Del manifiesto «portal».</summary>
+    public const string SandboxUsar = "atlas.sandbox.usar";
+
     public static ManifiestoPermisos Manifiesto { get; } =
         new(ModuloContratos.IdModulo, ManifiestosNucleo.Contratos.Nombre, [.. ManifiestosNucleo.Contratos.Permisos]);
 }
@@ -60,7 +69,8 @@ public static class EventosContratos
 /// los canales por ambiente que mueve el CD (con historial) y el Consolidado. HU 3.7: guías con revisiones inmutables,
 /// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). HU 4.1: paquetes con revisiones inmutables,
 /// publicación y fijación de una revisión anterior (ATLAS-ADR-0041). HU 4.2: la poda de specs para clientes
-/// (<see cref="Poda.Podadores"/>, ATLAS-ADR-0038). Comparticiones y portal llegan en las HU siguientes. Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
+/// (<see cref="Poda.Podadores"/>, ATLAS-ADR-0038). HU 4.3 y 4.4: comparticiones de paquetes con organizaciones y el portal
+/// de clientes en <c>/api/v1/portal</c> (ATLAS-ADR-0043). Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
 /// </summary>
 public sealed class ModuloContratos : IModuloAtlas
 {
@@ -88,6 +98,12 @@ public sealed class ModuloContratos : IModuloAtlas
     {
         servicios.AgregarProveedorBusqueda<BusquedaContratos>();
         servicios.AddOptions<OpcionesCanales>().BindConfiguration(OpcionesCanales.Seccion).PostConfigure(o => o.Normalizar());
+        // Portal de clientes (HU 4.3 y 4.4, ATLAS-ADR-0043): el acceso se calcula por petición; la caché de specs podados
+        // es del proceso y tiene tope de tamaño.
+        servicios.AddOptions<Portal.OpcionesPortal>().BindConfiguration(Portal.OpcionesPortal.Seccion);
+        servicios.AddSingleton<Portal.CachePodas>();
+        servicios.AddScoped<Portal.AccesoPortal>();
+        servicios.AddScoped<Portal.SpecsDelPortal>();
     }
 
     public void MapearEndpoints(RouteGroupBuilder grupo)
@@ -99,5 +115,8 @@ public sealed class ModuloContratos : IModuloAtlas
         Guias.EndpointsGuias.Mapear(grupo);
         EndpointsVistaContrato.Mapear(grupo);
         Paquetes.EndpointsPaquetes.Mapear(grupo);
+        Comparticiones.EndpointsComparticiones.Mapear(grupo);
     }
+
+    public void MapearEndpointsPortal(RouteGroupBuilder portal) => Portal.EndpointsPortal.Mapear(portal);
 }

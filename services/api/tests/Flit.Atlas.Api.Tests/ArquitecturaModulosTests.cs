@@ -137,8 +137,15 @@ public class ArquitecturaModulosTests(EntornoApi entorno)
             Assert.NotEmpty(propios);
             Assert.All(propios, e =>
             {
+                var etiquetas = e.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.ITagsMetadata>()?.Tags ?? [];
+                // Los del portal de clientes (ATLAS-ADR-0043) viven en /api/v1/portal con su etiqueta; los demás, bajo el id.
+                if (e.RoutePattern.RawText?.StartsWith(ExtensionesModulos.RutaPortal + "/", StringComparison.Ordinal) == true)
+                {
+                    Assert.Contains(ExtensionesModulos.EtiquetaPortal, etiquetas);
+                    return;
+                }
                 Assert.StartsWith($"/api/v1/{modulo.Id}", e.RoutePattern.RawText, StringComparison.Ordinal);
-                Assert.Contains(modulo.Nombre, e.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.ITagsMetadata>()?.Tags ?? []);
+                Assert.Contains(modulo.Nombre, etiquetas);
             });
             // Nadie más monta rutas en el espacio del módulo.
             Assert.All(endpoints.Where(e => e.RoutePattern.RawText?.StartsWith($"/api/v1/{modulo.Id}/", StringComparison.Ordinal) == true), e =>

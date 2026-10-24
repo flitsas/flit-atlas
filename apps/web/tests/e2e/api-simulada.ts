@@ -504,6 +504,28 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         if (metodo === 'GET' && numero) return json(route, detalleRevision(Number(numero)));
         return json(route, detalle, metodo === 'POST' && url.pathname.endsWith('/revisiones') ? 201 : 200);
       }
+      // «Compartido con» (HU 4.3): una organización con la que ya se comparte y las que se pueden elegir.
+      case '/api/v1/contratos/paquetes/p1/comparticiones':
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        return json(route, {
+          puedeCompartir: opciones.permisos.includes('atlas.paquetes.gestionar') && vigentePaquete !== null,
+          elementos: [
+            {
+              id: 'k1', paqueteId: 'p1', paqueteNombre: 'Paquete Integradores Demo', paqueteEstado: 'publicado',
+              organizacion: { id: 'o2', nombre: 'Organismo Demo de Tránsito con un nombre largo', tipo: 'cliente', estado: 'activa' },
+              revisionFijada: null, revisionQueVe: vigentePaquete, puedeExportar: true, puedeSandbox: false,
+              vigenteDesde: '2026-10-24T15:00:00Z', vigenteHasta: '2027-01-31T23:59:59-05:00', estado: 'vigente',
+              otorgadoPor: { id: 'p1', nombre: 'Empleada Demo' }, creadaEn: '2026-10-24T15:00:00Z', actualizadaEn: '2026-10-24T15:00:00Z',
+              revocadaEn: null, puedeGestionar: opciones.permisos.includes('atlas.paquetes.gestionar'),
+            },
+          ],
+        });
+      case '/api/v1/contratos/comparticiones/organizaciones':
+        if (!opciones.permisos.includes('atlas.paquetes.gestionar')) return route.fulfill({ status: 403 });
+        return json(route, [
+          { id: 'o2', nombre: 'Organismo Demo de Tránsito con un nombre largo', tipo: 'cliente' },
+          { id: 'o3', nombre: 'Proveedor Demo', tipo: 'proveedor' },
+        ]);
       // Responsables (HU 2.3 a 2.5).
       case '/api/v1/equipo/responsabilidades':
         if (!opciones.permisos.includes('atlas.equipo.ver')) return route.fulfill({ status: 403 });

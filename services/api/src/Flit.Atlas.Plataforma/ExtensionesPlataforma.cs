@@ -74,6 +74,8 @@ public static class ExtensionesPlataforma
         servicios.TryAddScoped<Modulos.ILectorAplicativos, Modulos.SinAplicativos>();
         servicios.TryAddScoped<Modulos.ISoporteDeTurno, Modulos.SinSoporteDeTurno>();
         servicios.TryAddScoped<Modulos.IFuentesPublicacion, Modulos.SinFuentesPublicacion>();
+        // Documentación funcional del portal de clientes (ATLAS-ADR-0043): la registra el módulo de documentación (F5).
+        servicios.TryAddScoped<Modulos.IDocumentacionDelPortal, Modulos.SinDocumentacionDelPortal>();
 
         // Publicación desde la CI con el token OIDC de GitHub Actions, para todas las fuentes (ATLAS-ADR-0035).
         servicios.AgregarPublicacionCi();

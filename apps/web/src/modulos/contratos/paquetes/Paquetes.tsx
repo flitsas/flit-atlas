@@ -23,6 +23,7 @@ import {
   usePaquetes,
   useRevisionPaquete,
 } from './api';
+import { Comparticiones } from './Comparticiones';
 import { avisoDeError, InsigniasPaquete, Opciones } from './componentes';
 import { type EstadoAsistente, estadoDesde, solicitudDe, tieneAlgoQueCompartir, VACIO } from './reglas';
 
@@ -32,7 +33,7 @@ const Asistente = lazy(() => import('./Asistente'));
 /**
  * Paquetes de contratos (HU 4.1, plan 00 §8.9 «Paquetes», ATLAS-ADR-0041): `/contratos/paquetes` (lista),
  * `/contratos/paquetes/nuevo` (asistente) y `/contratos/paquetes/<id>` (detalle con la última revisión, publicar, el
- * historial con «Fijar esta» y archivar). Compartir con organizaciones llega en la HU 4.3.
+ * historial con «Fijar esta» y archivar) y, desde la HU 4.3, «Compartido con» (ATLAS-ADR-0043).
  */
 export default function Paquetes() {
   return (
@@ -261,6 +262,8 @@ function Detalle() {
           Para publicar, la revisión {p.revisionActual} necesita al menos un contrato con una operación.
         </p>
       )}
+
+      {p.estado !== 'borrador' && <Comparticiones paqueteId={p.id} revisiones={revisiones.map((x) => x.numero).sort((a, b) => a - b)} vigente={p.revisionPublicada} />}
 
       <Tarjeta titulo={`Revisión ${r.numero}${r.vigente ? ' · vigente' : ''}`}>
         <p className="mb-3 text-xs text-atlas-texto-suave">

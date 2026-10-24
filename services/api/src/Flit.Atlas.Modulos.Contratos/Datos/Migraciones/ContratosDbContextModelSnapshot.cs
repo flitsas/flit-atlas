@@ -91,6 +91,82 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.ComparticionPaquete", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid>("OrganizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organizacion_id");
+
+                    b.Property<Guid>("OtorgadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("otorgado_por");
+
+                    b.Property<Guid>("PaqueteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paquete_id");
+
+                    b.Property<bool>("PuedeExportar")
+                        .HasColumnType("boolean")
+                        .HasColumnName("puede_exportar");
+
+                    b.Property<bool>("PuedeSandbox")
+                        .HasColumnType("boolean")
+                        .HasColumnName("puede_sandbox");
+
+                    b.Property<int?>("RevisionFijada")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_fijada");
+
+                    b.Property<DateTimeOffset?>("RevocadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revocado_en");
+
+                    b.Property<Guid?>("RevocadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revocado_por");
+
+                    b.Property<DateTimeOffset>("VigenteDesde")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("vigente_desde");
+
+                    b.Property<DateTimeOffset?>("VigenteHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("vigente_hasta");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_comparticion");
+
+                    b.HasIndex("OrganizacionId")
+                        .HasDatabaseName("ix_contratos_comparticion_organizacion_id");
+
+                    b.HasIndex("PaqueteId", "OrganizacionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contratos_comparticion_paquete_id_organizacion_id");
+
+                    b.ToTable("contratos_comparticion", "atlas", t =>
+                        {
+                            t.HasComment("Paquetes compartidos con organizaciones: revisión fijada, exportar, sandbox y vigencia (HU 4.3, ATLAS-ADR-0043).");
+
+                            t.HasCheckConstraint("ck_contratos_comparticion_revision", "revision_fijada IS NULL OR revision_fijada >= 1");
+
+                            t.HasCheckConstraint("ck_contratos_comparticion_revocada", "(revocado_en IS NULL) = (revocado_por IS NULL)");
+
+                            t.HasCheckConstraint("ck_contratos_comparticion_vigencia", "vigente_hasta IS NULL OR vigente_hasta > vigente_desde");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.Contrato", b =>
                 {
                     b.Property<Guid>("Id")
@@ -834,6 +910,16 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_contratos_canal_contratos_version_version_id");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.ComparticionPaquete", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.PaqueteContratos", null)
+                        .WithMany()
+                        .HasForeignKey("PaqueteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_comparticion_contratos_paquete_paquete_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.GuiaContrato", b =>
