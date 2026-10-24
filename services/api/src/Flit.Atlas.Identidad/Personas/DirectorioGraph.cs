@@ -115,7 +115,7 @@ public sealed class DirectorioGraph(HttpClient http, IAuthorizationHeaderProvide
     private async Task<HttpResponseMessage> EnviarAsync(
         string ruta, CancellationToken ct, HttpCompletionOption completar = HttpCompletionOption.ResponseContentRead)
     {
-        var cabecera = await autorizacion.CreateAuthorizationHeaderForAppAsync(PerfilGraph.ScopeGraph, cancellationToken: ct);
+        var cabecera = await autorizacion.CabeceraAplicacionAsync(PerfilGraph.ScopeGraph, ct);
         using var peticion = new HttpRequestMessage(HttpMethod.Get, ruta);
         peticion.Headers.Authorization = AuthenticationHeaderValue.Parse(cabecera);
         // Los filtros y los cast de OData sobre el directorio pueden exigir la consulta avanzada.

@@ -27,7 +27,7 @@ public sealed class EnviadorGraph(HttpClient http, IAuthorizationHeaderProvider 
         limite.CancelAfter(o.Tiempo);
         try
         {
-            var cabecera = await autorizacion.CreateAuthorizationHeaderForAppAsync(PerfilGraph.ScopeGraph, cancellationToken: limite.Token).ConfigureAwait(false);
+            var cabecera = await autorizacion.CabeceraAplicacionAsync(PerfilGraph.ScopeGraph, limite.Token).ConfigureAwait(false);
             using var peticion = new HttpRequestMessage(HttpMethod.Post, new Uri($"v1.0/users/{Uri.EscapeDataString(buzon)}/sendMail", UriKind.Relative))
             {
                 Content = JsonContent.Create(new

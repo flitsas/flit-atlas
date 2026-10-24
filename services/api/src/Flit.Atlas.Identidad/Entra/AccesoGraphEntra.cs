@@ -12,5 +12,5 @@ internal sealed class AccesoGraphEntra(IAuthorizationHeaderProvider autorizacion
     public bool Disponible => true;
 
     public Task<string> CabeceraAsync(CancellationToken ct = default) =>
-        autorizacion.CreateAuthorizationHeaderForAppAsync(ClienteGraph.ScopeAplicacion, cancellationToken: ct);
+        autorizacion.CabeceraAplicacionAsync(ClienteGraph.ScopeAplicacion, ct);
 }
