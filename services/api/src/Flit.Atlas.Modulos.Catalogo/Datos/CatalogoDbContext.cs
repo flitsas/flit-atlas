@@ -82,6 +82,32 @@ public sealed class Aplicativo : Entidad
 }
 
 /// <summary>
+/// Una fila de la lista blanca de publicación desde la CI (HU 3.1, ATLAS-ADR-0035): el repo que puede publicar fuentes de
+/// un aplicativo con el token OIDC de GitHub Actions, desde qué ramas, con qué workflow y de qué tipos. Revocar es borrar
+/// la fila. La leen los módulos que reciben publicaciones (contratos, documentación, arquitectura) con
+/// <c>IFuentesPublicacion</c>.
+/// </summary>
+public sealed class FuentePublicacion : Entidad
+{
+    public required Guid AplicativoId { get; set; }
+
+    /// <summary><c>dueño/nombre</c>, en minúsculas (GitHub no distingue mayúsculas).</summary>
+    public required string Repositorio { get; set; }
+
+    /// <summary>Ramas exactas o con <c>*</c> (<c>release</c>, <c>hotfix/*</c>).</summary>
+    public List<string> Ramas { get; set; } = [];
+
+    /// <summary>Ruta del workflow que llama (<c>.github/workflows/ci.yml</c>); vacío: cualquiera del repo.</summary>
+    public string? Workflow { get; set; }
+
+    /// <summary><c>openapi</c>, <c>asyncapi</c>, <c>proto</c>, <c>likec4</c> o <c>docs</c>.</summary>
+    public List<string> Tipos { get; set; } = [];
+
+    /// <summary>Por qué existe la fila (quién la pidió, para qué).</summary>
+    public string? Nota { get; set; }
+}
+
+/// <summary>
 /// Registro de las entradas de la semilla ya aplicadas, por su slug. La semilla solo crea las que nunca aplicó: así
 /// correrla otra vez no duplica nada, no pisa lo que se editó en Atlas y no revive lo que alguien eliminó (ATLAS-ADR-0028).
 /// </summary>
@@ -115,6 +141,16 @@ public sealed class CatalogoDbContext(DbContextOptions<CatalogoDbContext> opcion
     public DbSet<Aplicativo> Aplicativos => Set<Aplicativo>();
 
     public DbSet<SemillaAplicada> SemillaAplicada => Set<SemillaAplicada>();
+
+    public DbSet<FuentePublicacion> FuentesPublicacion => Set<FuentePublicacion>();
+
+    public const int LargoWorkflow = 200;
+    public const int LargoRama = 100;
+    public const int LargoNota = 500;
+    public const int MaximoRamas = 10;
+
+    /// <summary>Tipos de fuente que se publican desde la CI (prompt maestro A-08): contratos, LikeC4 y documentación.</summary>
+    public static readonly IReadOnlyList<string> TiposFuente = ["openapi", "asyncapi", "proto", "likec4", "docs"];
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion) =>
         ConfigurarOpciones(opciones, cadenaConexion, TablaHistorial);
@@ -155,6 +191,26 @@ public sealed class CatalogoDbContext(DbContextOptions<CatalogoDbContext> opcion
             e.Property(s => s.Id).ValueGeneratedNever();
             e.Property(s => s.Slug).HasMaxLength(LargoSlug);
             e.HasIndex(s => s.Slug).IsUnique();
+        });
+
+        modelBuilder.Entity<FuentePublicacion>(e =>
+        {
+            e.ToTable(Prefijo + "fuente_publicacion", t =>
+            {
+                t.HasComment("Lista blanca de publicación desde la CI con el OIDC de GitHub Actions (ATLAS-ADR-0035).");
+                t.HasCheckConstraint("ck_catalogo_fuente_publicacion_repositorio", "repositorio ~ '^[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$'");
+                t.HasCheckConstraint("ck_catalogo_fuente_publicacion_ramas", "cardinality(ramas) > 0");
+                t.HasCheckConstraint("ck_catalogo_fuente_publicacion_tipos",
+                    $"cardinality(tipos) > 0 AND tipos <@ ARRAY[{string.Join(", ", TiposFuente.Select(t => $"'{t}'"))}]::text[]");
+            });
+            e.Property(f => f.Id).ValueGeneratedNever();
+            e.Property(f => f.Repositorio).HasMaxLength(LargoRepo);
+            e.Property(f => f.Workflow).HasMaxLength(LargoWorkflow);
+            e.Property(f => f.Nota).HasMaxLength(LargoNota);
+            // Borrar un aplicativo revoca sus fuentes.
+            e.HasOne<Aplicativo>().WithMany().HasForeignKey(f => f.AplicativoId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(f => new { f.AplicativoId, f.Repositorio, f.Workflow }).IsUnique().AreNullsDistinct(false);
+            e.HasIndex(f => f.Repositorio);
         });
 
         // translate() y lower() para la búsqueda sin tildes (no cambian el esquema), como en el núcleo.

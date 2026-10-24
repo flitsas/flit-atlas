@@ -20,6 +20,10 @@
     <Compile Include="..\Flit.Atlas.Modulos.Soporte.Tests\ExcelFicticio.cs" Link="Soporte\ExcelFicticio.cs" />
     <!-- Graph (calendario) y el flujo de Teams simulados de la HU 2.10, los mismos de las pruebas del módulo. -->
     <Compile Include="..\Flit.Atlas.Modulos.Soporte.Tests\M365Simulado.cs" Link="Soporte\M365Simulado.cs" />
+    <!-- GitHub Actions (OIDC y JWKS) simulado y los specs ficticios de la HU 3.1 y 3.2, los mismos de las pruebas de
+         Plataforma y del módulo. -->
+    <Compile Include="..\Flit.Atlas.Plataforma.Tests\GitHubActionsSimulado.cs" Link="Contratos\GitHubActionsSimulado.cs" />
+    <Compile Include="..\Flit.Atlas.Modulos.Contratos.Tests\SpecsDeEjemplo.cs" Link="Contratos\SpecsDeEjemplo.cs" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

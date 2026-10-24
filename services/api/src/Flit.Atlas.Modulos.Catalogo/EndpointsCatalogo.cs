@@ -106,7 +106,7 @@ internal static class EndpointsCatalogo
 
     [Description("Error del catálogo con un código estable.")]
     public sealed record ErrorCatalogo(
-        [property: Description("slug_en_uso, tiene_hijos o requiere_permiso (falta el permiso sobre este aplicativo).")] string Codigo,
+        [property: Description("slug_en_uso, tiene_hijos, fuente_repetida o requiere_permiso (falta el permiso sobre este aplicativo).")] string Codigo,
         string Mensaje);
 
     public static void Mapear(RouteGroupBuilder grupo)

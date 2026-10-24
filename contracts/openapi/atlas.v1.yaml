@@ -1,7 +1,7 @@
 openapi: '3.1.1'
 info:
   title: Flit Atlas
-  description: 'API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie `__Host-atlas` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado exigen además la cabecera `X-Atlas-Csrf` y el mismo origen. Los clientes que no son el navegador (atlas-cli, MCP, servicios internos) usan tokens Bearer del servidor OpenIddict de Atlas solo en las operaciones que declaran el esquema `tokenAtlas`; el protocolo (`/connect/*`) se describe en `/.well-known/openid-configuration` (ATLAS-ADR-0024). Este archivo se genera desde el código: no se edita a mano.'
+  description: 'API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie `__Host-atlas` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado exigen además la cabecera `X-Atlas-Csrf` y el mismo origen. Los clientes que no son el navegador (atlas-cli, MCP, servicios internos) usan tokens Bearer del servidor OpenIddict de Atlas solo en las operaciones que declaran el esquema `tokenAtlas`; el protocolo (`/connect/*`) se describe en `/.well-known/openid-configuration` (ATLAS-ADR-0024). La CI de cada repo publica con el token OIDC de GitHub Actions solo en las operaciones que declaran `githubActions` (ATLAS-ADR-0035). Este archivo se genera desde el código: no se edita a mano.'
   version: 1.0.0
 servers:
   - url: https://atlas.flitsas.com
@@ -3308,6 +3308,382 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.catalogo.gestionar
+  /api/v1/catalogo/fuentes-publicacion:
+    get:
+      tags:
+        - Catálogo
+      summary: Lista blanca de publicación desde la CI
+      description: 'Repos que pueden publicar contratos, documentación o LikeC4 de cada aplicativo con el token OIDC de GitHub Actions, con sus ramas, su workflow y sus tipos (ATLAS-ADR-0035). Ordenada por repo y aplicativo. Requiere atlas.catalogo.gestionar.'
+      operationId: ListarFuentesPublicacion
+      parameters:
+        - name: aplicativo
+          in: query
+          description: Solo las del aplicativo con este slug.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FuentePublicacionDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.catalogo.gestionar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.gestionar
+    post:
+      tags:
+        - Catálogo
+      summary: Agregar una fuente a la lista blanca
+      description: 'Autoriza a un repo a publicar fuentes de un aplicativo desde la CI. 409 si ya hay una para el mismo aplicativo, repo y workflow. Queda en la auditoría. Requiere atlas.catalogo.gestionar.'
+      operationId: CrearFuentePublicacion
+      requestBody:
+        description: La fuente nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudFuentePublicacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuentePublicacionDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.catalogo.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.gestionar
+  '/api/v1/catalogo/fuentes-publicacion/{id}':
+    put:
+      tags:
+        - Catálogo
+      summary: Editar una fuente de la lista blanca
+      description: Reemplaza sus datos. Queda en la auditoría con los campos cambiados. Requiere atlas.catalogo.gestionar.
+      operationId: ActualizarFuentePublicacion
+      parameters:
+        - name: id
+          in: path
+          description: Id de la fuente.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Todos los datos de la fuente, con los cambios.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudFuentePublicacion'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuentePublicacionDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.catalogo).'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCatalogo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.catalogo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.gestionar
+    delete:
+      tags:
+        - Catálogo
+      summary: Revocar una fuente de la lista blanca
+      description: Desde ese momento el repo ya no publica para ese aplicativo; lo ya publicado no cambia. La semilla no la revive. Queda en la auditoría. Requiere atlas.catalogo.gestionar.
+      operationId: EliminarFuentePublicacion
+      parameters:
+        - name: id
+          in: path
+          description: Id de la fuente.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.catalogo).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.catalogo.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.catalogo.gestionar
+  /api/v1/contratos/publicaciones:
+    post:
+      tags:
+        - Contratos
+      summary: Publicar una versión de contrato desde la CI
+      description: 'Solo con el token OIDC de GitHub Actions del workflow reutilizable oficial (Authorization: Bearer, audiencia del ambiente), desde un repo, rama y workflow de la lista blanca del catálogo para ese aplicativo y tipo. Valida el spec (OpenAPI 3.x, AsyncAPI 2.x/3.x o proto), lo guarda inmutable con su SHA-256 y su procedencia (repo, rama, workflow, commit y ejecución del token) y arma el índice de operaciones. 201 si es nueva; 200 si la misma versión ya existe con el mismo hash (idempotente); 409 si existe con otro hash (sube la versión); 422 si el spec no es válido. La cookie de la PWA no sirve aquí.'
+      operationId: PublicarVersionContrato
+      requestBody:
+        description: La versión a publicar.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPublicacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionPublicada'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionPublicada'
+        '403':
+          description: 'El dueño del repo, el evento o el workflow reutilizable no están permitidos (sin cuerpo), o el repo, la rama, el workflow, el aplicativo o el tipo no están en la lista blanca (con el código).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacion'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - githubActions: [ ]
+  /api/v1/contratos:
+    get:
+      tags:
+        - Contratos
+      summary: Contratos de todos los aplicativos
+      description: 'El consolidado interno: contratos con su aplicativo, su última versión y su última estable, filtrados por aplicativo, tipo y texto (nombre, código o descripción, sin distinguir tildes ni mayúsculas). Máximo 500. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarContratos
+      parameters:
+        - name: aplicativo
+          in: query
+          description: Slug del aplicativo.
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          description: 'openapi, asyncapi o proto.'
+          schema:
+            type: string
+        - name: texto
+          in: query
+          description: 'Texto a buscar en el nombre, el código o la descripción.'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoContratos'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/{id}/versiones':
+    get:
+      tags:
+        - Contratos
+      summary: Versiones de un contrato
+      description: 'Todas las versiones publicadas, de la más reciente a la más antigua, con su hash y su procedencia (repo, rama, commit, workflow y ejecución). 404 si el contrato no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarVersionesContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VersionResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/{id}/versiones/{version}/spec':
+    get:
+      tags:
+        - Contratos
+      summary: Spec de una versión
+      description: 'El spec completo tal como se publicó (JSON, YAML o proto), inmutable; el ETag es su SHA-256. Solo para uso interno: lo compartible con clientes irá podado (F4). 404 si no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ObtenerSpecVersionContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: path
+          description: 'Versión semántica (3.3.0, 3.4.0-dev.828c9fe).'
+          required: true
+          schema:
+            type: string
+      responses:
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+            application/yaml:
+              schema:
+                type: string
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
+  '/api/v1/contratos/{id}/versiones/{version}/operaciones':
+    get:
+      tags:
+        - Contratos
+      summary: Índice de operaciones de una versión
+      description: 'Operaciones y webhooks (OpenAPI), canales y operaciones (AsyncAPI) o rpc (proto) de la versión, ordenados por clave. 404 si no existe. Requiere atlas.contratos.ver_internos.'
+      operationId: ListarOperacionesVersionContrato
+      parameters:
+        - name: id
+          in: path
+          description: Id del contrato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: path
+          description: Versión semántica.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OperacionDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.contratos).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.contratos.ver_internos
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -6333,6 +6709,27 @@ components:
             - string
           description: Id del recurso; vacío si es global.
       description: 'Alcance de una asignación: global o un recurso (organizacion, aplicativo, paquete, documento, ambiente…).'
+    AplicativoDelContrato:
+      required:
+        - id
+        - slug
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type:
+            - 'null'
+            - string
+          description: Slug del aplicativo; vacío si ya no está en el catálogo.
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: Nombre del aplicativo; vacío si ya no está en el catálogo.
+      description: Aplicativo del catálogo al que pertenece el contrato.
     AplicativoRefDto:
       required:
         - id
@@ -7287,6 +7684,63 @@ components:
             - string
           description: 'Huella de la vista previa: si algo cambió desde entonces, la confirmación se rechaza.'
       description: 'Confirmación de una vista previa: el mismo equipo, la misma ventana y la huella que devolvió.'
+    ContratoResumen:
+      required:
+        - id
+        - codigo
+        - nombre
+        - descripcion
+        - tipo
+        - visibilidad
+        - aplicativo
+        - repositorio
+        - versiones
+        - ultimaVersion
+        - ultimaEstable
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+          description: Código del contrato dentro del aplicativo.
+        nombre:
+          type: string
+          description: 'info.title de la última versión, o el paquete en proto.'
+        descripcion:
+          type:
+            - 'null'
+            - string
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        visibilidad:
+          type: string
+          description: interna o compartible.
+        aplicativo:
+          $ref: '#/components/schemas/AplicativoDelContrato'
+        repositorio:
+          type: string
+          description: Repositorio de la última publicación.
+        versiones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántas versiones tiene.
+          format: int32
+        ultimaVersion:
+          oneOf:
+            - type: 'null'
+            - description: La última publicada (por fecha).
+              $ref: '#/components/schemas/VersionResumen'
+        ultimaEstable:
+          oneOf:
+            - type: 'null'
+            - description: 'La última estable, si la hay.'
+              $ref: '#/components/schemas/VersionResumen'
+      description: Contrato de un aplicativo con su última versión publicada.
     CorridaRecordatoriosDto:
       required:
         - fecha
@@ -7620,7 +8074,7 @@ components:
       properties:
         codigo:
           type: string
-          description: 'slug_en_uso, tiene_hijos o requiere_permiso (falta el permiso sobre este aplicativo).'
+          description: 'slug_en_uso, tiene_hijos, fuente_repetida o requiere_permiso (falta el permiso sobre este aplicativo).'
         mensaje:
           type: string
       description: Error del catálogo con un código estable.
@@ -7657,6 +8111,26 @@ components:
         mensaje:
           type: string
       description: Error de una operación de invitaciones o de cuentas externas.
+    ErrorPublicacion:
+      required:
+        - codigo
+        - mensaje
+        - errores
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'fuente_no_autorizada, aplicativo_no_autorizado, tipo_no_autorizado (403); spec_invalida, version_invalida, version_distinta_del_spec, version_no_permitida_en_rama (422); version_existente, tipo_distinto (409).'
+        mensaje:
+          type: string
+        errores:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Detalle de la validación del spec (422), si lo hay.'
+      description: 'Por qué no se publicó, con un código estable.'
     ErrorRoles:
       required:
         - error
@@ -8288,6 +8762,54 @@ components:
           description: Dedicación orientativa.
           format: int32
       description: Una fila de la vista previa.
+    FuentePublicacionDto:
+      required:
+        - id
+        - aplicativo
+        - repositorio
+        - ramas
+        - workflow
+        - tipos
+        - nota
+        - creadoEn
+        - actualizadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        aplicativo:
+          description: Aplicativo del catálogo al que pertenece lo publicado.
+          $ref: '#/components/schemas/ReferenciaAplicativo'
+        repositorio:
+          type: string
+          description: 'Repositorio de GitHub como dueño/nombre, en minúsculas.'
+        ramas:
+          type: array
+          items:
+            type: string
+          description: 'Ramas que pueden publicar, exactas o con * (release, hotfix/*).'
+        workflow:
+          type:
+            - 'null'
+            - string
+          description: 'Ruta del workflow que llama (.github/workflows/<nombre>.yml); vacío: cualquiera del repo.'
+        tipos:
+          type: array
+          items:
+            type: string
+          description: 'openapi, asyncapi, proto, likec4 o docs.'
+        nota:
+          type:
+            - 'null'
+            - string
+        creadoEn:
+          type: string
+          format: date-time
+        actualizadoEn:
+          type: string
+          format: date-time
+      description: 'Fuente de la lista blanca: qué repo puede publicar qué tipos de fuente de un aplicativo desde la CI.'
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -8642,6 +9164,24 @@ components:
           items:
             $ref: '#/components/schemas/AplicativoResumen'
       description: 'Listado del catálogo filtrado, ordenado por grupo y por la ruta en la jerarquía.'
+    ListadoContratos:
+      required:
+        - total
+        - elementos
+      type: object
+      properties:
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Cuántos cumplen el filtro (el listado trae a lo sumo 500).
+          format: int32
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContratoResumen'
+      description: 'Contratos que cumplen el filtro, ordenados por aplicativo y código.'
     MapaCargaDto:
       required:
         - media
@@ -9040,6 +9580,50 @@ components:
           type: string
           description: 'PublicKeyCredentialCreationOptionsJSON o PublicKeyCredentialRequestOptionsJSON (WebAuthn nivel 3), como texto JSON.'
       description: Opciones para que el navegador cree o use una passkey (WebAuthn) y el id del paso que las acompaña.
+    OperacionDto:
+      required:
+        - clave
+        - clase
+        - metodo
+        - ruta
+        - operationId
+        - resumen
+        - etiquetas
+        - publica
+      type: object
+      properties:
+        clave:
+          type: string
+          description: 'GET /ruta, POST webhook:<nombre>, send <canal> o rpc:<paquete>.<Servicio>/<Método>.'
+        clase:
+          type: string
+          description: 'operacion, webhook, canal o rpc.'
+        metodo:
+          type:
+            - 'null'
+            - string
+          description: 'Método HTTP, acción de AsyncAPI o rpc.'
+        ruta:
+          type:
+            - 'null'
+            - string
+          description: 'Ruta, webhook, dirección del canal o servicio.'
+        operationId:
+          type:
+            - 'null'
+            - string
+        resumen:
+          type:
+            - 'null'
+            - string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        publica:
+          type: boolean
+          description: 'x-public: true o la etiqueta public.'
+      description: 'Operación, webhook, canal o rpc del índice de una versión.'
     OrdenParticipantes:
       required:
         - participantes
@@ -10839,6 +11423,49 @@ components:
           description: Equipo del feed de equipo.
           format: uuid
       description: Feed .ics que se crea o se regenera.
+    SolicitudFuentePublicacion:
+      required:
+        - aplicativo
+        - repositorio
+        - ramas
+        - workflow
+        - tipos
+        - nota
+      type: object
+      properties:
+        aplicativo:
+          maxLength: 80
+          minLength: 1
+          type: string
+          description: Slug del aplicativo del catálogo.
+        repositorio:
+          maxLength: 200
+          minLength: 1
+          type: string
+          description: Repositorio de GitHub como dueño/nombre (flitsas/flit).
+        ramas:
+          type: array
+          items:
+            type: string
+          description: 'Ramas que pueden publicar (1 a 10), exactas o con *.'
+        workflow:
+          maxLength: 200
+          type:
+            - 'null'
+            - string
+          description: Ruta del workflow que llama; vacío para aceptar cualquiera del repo (el workflow reutilizable oficial se exige siempre).
+        tipos:
+          type: array
+          items:
+            type: string
+          description: 'Tipos que puede publicar: openapi, asyncapi, proto, likec4, docs.'
+        nota:
+          maxLength: 500
+          type:
+            - 'null'
+            - string
+          description: Por qué existe (hasta 500).
+      description: Datos de una fuente de publicación (al editar se reemplazan todos).
     SolicitudGeneracion:
       required:
         - equipoId
@@ -11011,6 +11638,39 @@ components:
           type: string
           description: 'PublicKeyCredential.toJSON() de navigator.credentials.get(), como texto JSON.'
       description: Respuesta del autenticador para entrar con passkey.
+    SolicitudPublicacion:
+      required:
+        - aplicativo
+        - contrato
+        - tipo
+        - version
+        - spec
+        - changelog
+      type: object
+      properties:
+        aplicativo:
+          type: string
+          description: Slug del aplicativo del catálogo al que pertenece el contrato (flit2-core-api).
+        contrato:
+          type: string
+          description: 'Código del contrato dentro del aplicativo: minúsculas, números y guiones (external-api).'
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        version:
+          type:
+            - 'null'
+            - string
+          description: 'Versión semántica sin +metadatos. En OpenAPI y AsyncAPI, por defecto info.version; si se manda, debe ser info.version o info.version-<prerelease>. En proto es obligatoria y su MAJOR debe ser la del paquete (v1 → 1). release publica X.Y.Z; develop, X.Y.Z-dev.<sha7>; staging, X.Y.Z-rc.<sha7>.'
+        spec:
+          type: string
+          description: 'El spec completo tal como está en el repo (JSON o YAML; proto en texto), hasta 5 MB. Su SHA-256 decide la idempotencia.'
+        changelog:
+          type:
+            - 'null'
+            - string
+          description: 'Salida JSON de «oasdiff changelog» contra la versión de pdn (texto con un arreglo), hasta 1 MB; vacío si no hay base.'
+      description: Una versión de contrato publicada desde la CI de su repo.
     SolicitudRenovacion:
       required:
         - accesoVenceEn
@@ -11379,6 +12039,148 @@ components:
           description: Sus tablas en Markdown.
           $ref: '#/components/schemas/TablasRepartoDto'
       description: Una versión del reparto con su foto completa y sus tablas.
+    VersionPublicada:
+      required:
+        - contratoId
+        - versionId
+        - aplicativo
+        - contrato
+        - tipo
+        - version
+        - esEstable
+        - sha256
+        - operaciones
+        - tieneBreaking
+        - advertencias
+        - publicadoEn
+        - creada
+      type: object
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+        versionId:
+          type: string
+          format: uuid
+        aplicativo:
+          type: string
+          description: Slug del aplicativo.
+        contrato:
+          type: string
+          description: Código del contrato.
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        version:
+          type: string
+        esEstable:
+          type: boolean
+        sha256:
+          type: string
+          description: SHA-256 del spec (hexadecimal).
+        operaciones:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Operaciones, webhooks, canales o rpc del índice.'
+          format: int32
+        tieneBreaking:
+          type: boolean
+          description: Si el changelog trae cambios que rompen compatibilidad (nivel 3 de oasdiff).
+        advertencias:
+          type: array
+          items:
+            type: string
+          description: Avisos de la validación que no impiden publicar (p. ej. imports de otros archivos en proto).
+        publicadoEn:
+          type: string
+          format: date-time
+        creada:
+          type: boolean
+          description: true si esta petición la creó (201); false si ya existía con el mismo hash (200).
+      description: La versión publicada (o la que ya existía con el mismo hash).
+    VersionResumen:
+      required:
+        - id
+        - version
+        - esEstable
+        - sha256
+        - formato
+        - tamano
+        - repositorio
+        - rama
+        - commit
+        - workflow
+        - workflowDelJob
+        - ejecucion
+        - publicadoPor
+        - publicadoEn
+        - tieneBreaking
+        - estado
+        - retiroEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        esEstable:
+          type: boolean
+        sha256:
+          type: string
+          description: SHA-256 del spec (hexadecimal).
+        formato:
+          type: string
+          description: 'json, yaml o proto.'
+        tamano:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Bytes del spec.
+          format: int32
+        repositorio:
+          type: string
+          description: Repositorio de GitHub (dueño/nombre).
+        rama:
+          type: string
+        commit:
+          type: string
+          description: Commit del que salió.
+        workflow:
+          type:
+            - 'null'
+            - string
+          description: 'Workflow que llamó (.github/workflows/<nombre>.yml), si se conoce.'
+        workflowDelJob:
+          type: string
+          description: 'Workflow reutilizable que publicó, con su referencia (job_workflow_ref).'
+        ejecucion:
+          type:
+            - 'null'
+            - string
+          description: run_id de GitHub Actions.
+        publicadoPor:
+          type: string
+          description: github:dueño/repo@rama.
+        publicadoEn:
+          type: string
+          format: date-time
+        tieneBreaking:
+          type: boolean
+          description: Si el changelog de la CI trae cambios que rompen compatibilidad.
+        estado:
+          type: string
+          description: 'vigente, deprecada o retirada.'
+        retiroEn:
+          type:
+            - 'null'
+            - string
+          description: 'Fecha de retiro, si está deprecada.'
+          format: date
+      description: Resumen de una versión.
     VersionResumenDto:
       required:
         - numero
@@ -11713,6 +12515,10 @@ components:
             atlas.mcp: Usar el servidor MCP de Atlas con los permisos de la persona.
             atlas.publicar: 'Publicar contratos, documentación y modelos en Atlas.'
             atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.
+    githubActions:
+      type: openIdConnect
+      description: 'Token OIDC de GitHub Actions (ATLAS-ADR-0009 y ATLAS-ADR-0035) en «Authorization: Bearer», pedido por el workflow reutilizable oficial con la audiencia del ambiente (la URL pública de Atlas). Atlas valida la firma (RS256, JWKS de GitHub), el emisor, la audiencia y la vigencia, y luego el dueño, el evento, la rama, el workflow y la lista blanca del catálogo. Sin secretos en los repos. La cookie de la PWA no sirve en estas operaciones.'
+      openIdConnectUrl: https://token.actions.githubusercontent.com/.well-known/openid-configuration
 tags:
   - name: Identidad
     description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022), tokens para clientes que no son el navegador (ATLAS-ADR-0024), y las cuentas locales de externos: aceptar invitación, passkey, contraseña con TOTP y recuperación (ATLAS-ADR-0025).'
@@ -11728,6 +12534,8 @@ tags:
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
   - name: Catálogo
     description: 'Catálogo de aplicativos de FLIT: productos, módulos y servicios con su repo, tecnología, ambientes, criticidad, datos personales, estado y etiquetas, y la ficha de cada uno.'
+  - name: Contratos
+    description: 'Contratos de integración (OpenAPI, AsyncAPI y proto) publicados desde la CI de cada repo con el token OIDC de GitHub Actions y la lista blanca del catálogo: versiones semánticas inmutables con su hash y su procedencia, el spec de cada versión y el índice de operaciones, webhooks, canales y rpc.'
   - name: Equipo
     description: 'Responsables principal y secundario de cada producto y módulo: reparto importado del documento, vistas por persona y por aplicativo, mapa de carga, historial versionado, traspasos, revisión trimestral, CODEOWNERS y «¿A quién llamo?».'
   - name: Hola

@@ -6,6 +6,7 @@ using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Tokens;
 using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Permisos;
+using Flit.Atlas.Plataforma.Publicacion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -101,8 +102,13 @@ public class AutorizacionTests(EntornoApi entorno)
     /// Scopes que exige si solo acepta tokens Bearer (<c>RequiereScope</c>, ATLAS-ADR-0024). Con la cookie, cualquier rol
     /// recibe 401: el scope cuenta como su declaración.
     /// </param>
+    /// <param name="PublicacionCi">
+    /// Si solo acepta el token OIDC de GitHub Actions (<c>RequierePublicacionCi</c>, ATLAS-ADR-0035): con la cookie, cualquier
+    /// rol recibe 401, y esa es su declaración (<c>ModuloContratosTests</c> prueba el acceso con token).
+    /// </param>
     public sealed record EndpointDescubierto(
-        string Clave, string Metodo, string Patron, bool ExigeSesion, IReadOnlyList<string> Permisos, IReadOnlyList<string> Scopes);
+        string Clave, string Metodo, string Patron, bool ExigeSesion, IReadOnlyList<string> Permisos, IReadOnlyList<string> Scopes,
+        bool PublicacionCi = false);
 
     /// <summary>Todos los endpoints de la API, con lo que exige cada uno según su metadata y sus políticas.</summary>
     public static async Task<List<EndpointDescubierto>> DescubrirAsync(WebApplicationFactory<Program> api)
@@ -125,7 +131,7 @@ public class AutorizacionTests(EntornoApi entorno)
             foreach (var metodo in endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? ["*"])
             {
                 lista.Add(new EndpointDescubierto($"{metodo} {patron}", metodo, patron, exige, [.. permisos],
-                    endpoint.Metadata.GetMetadata<MetadatoScope>()?.Scopes ?? []));
+                    endpoint.Metadata.GetMetadata<MetadatoScope>()?.Scopes ?? [], endpoint.Metadata.GetMetadata<MetadatoPublicacionCi>() is not null));
             }
         }
         return lista;
@@ -133,7 +139,7 @@ public class AutorizacionTests(EntornoApi entorno)
 
     private static List<string> ProblemasDeDeclaracion(IEnumerable<EndpointDescubierto> endpoints) =>
     [
-        .. endpoints.Select(e => (e.ExigeSesion, e.Permisos.Count > 0 || e.Scopes.Count > 0, Publicos.Contains(e.Clave), SoloSesion.Contains(e.Clave)) switch
+        .. endpoints.Select(e => (e.ExigeSesion, e.Permisos.Count > 0 || e.Scopes.Count > 0 || e.PublicacionCi, Publicos.Contains(e.Clave), SoloSesion.Contains(e.Clave)) switch
         {
             (false, _, true, _) => null,
             (false, _, false, _) => $"{e.Clave}: no exige sesión y no está en la lista de públicos",
@@ -163,6 +169,7 @@ public class AutorizacionTests(EntornoApi entorno)
         // Hay endpoints protegidos por permiso: si no, la prueba de roles no probaría nada.
         Assert.Contains(endpoints, e => e.Permisos.Contains(PermisosPlataforma.RolesGestionar));
         Assert.Contains(endpoints, e => e.Permisos.Contains(Identidad.Autorizacion.PermisosIdentidad.Administrar));
+        Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "POST /api/v1/contratos/publicaciones");
     }
 
     /// <summary>Todos los roles asignables del §7 más <c>atlas.lector</c> (empleado sin asignaciones).</summary>
@@ -209,6 +216,15 @@ public class AutorizacionTests(EntornoApi entorno)
         foreach (var endpoint in (await DescubrirAsync(api)).Where(e => e.ExigeSesion))
         {
             var estado = (await LlamarAsync(navegador, endpoint)).StatusCode;
+            if (endpoint.PublicacionCi)
+            {
+                // Solo el token de GitHub Actions: la cookie de ningún rol basta.
+                if (estado != HttpStatusCode.Unauthorized)
+                {
+                    fallas.Add($"{endpoint.Clave} [GitHub Actions]: {(int)estado}, se esperaba 401 con la cookie");
+                }
+                continue;
+            }
             if (endpoint.Scopes.Count > 0)
             {
                 // Solo Bearer: la cookie de ningún rol basta (TokensTests prueba el acceso con token).

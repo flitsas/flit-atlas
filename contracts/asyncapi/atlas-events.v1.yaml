@@ -45,6 +45,8 @@ channels:
     messages:
       sobreEvento:
         $ref: '#/components/messages/sobreEvento'
+      contratosVersionPublicadaV1:
+        $ref: '#/components/messages/contratosVersionPublicadaV1'
     bindings:
       amqp:
         is: routingKey
@@ -67,6 +69,7 @@ operations:
       $ref: '#/channels/flitAtlas'
     messages:
       - $ref: '#/components/messages/sobreEvento'
+      - $ref: '#/components/messages/contratosVersionPublicadaV1'
     bindings:
       amqp:
         deliveryMode: 2
@@ -111,6 +114,55 @@ components:
             correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
             data:
               nombre: Organismo Demo
+
+    contratosVersionPublicadaV1:
+      name: atlas.contratos.version_publicada
+      x-atlas-tipo: atlas.contratos.version_publicada
+      x-atlas-version: 1
+      title: Versión de contrato publicada
+      summary: La CI de un repo publicó una versión nueva de un contrato (HU 3.2, ATLAS-ADR-0035).
+      description: |
+        Se emite una vez por versión nueva, en la misma transacción que la guarda; la respuesta idempotente (200) no lo
+        repite. Lo consumirán el asistente (reindexar), el sandbox (importar a Microcks si es estable y compartible) y las
+        notificaciones (plan 00 §12). Es interno: `tenantId` va en ceros.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.contratos.version_publicada
+              version:
+                const: 1
+              data:
+                $ref: '#/components/schemas/ContratosVersionPublicadaV1'
+      examples:
+        - name: versionDeDesarrollo
+          summary: Versión de desarrollo de un contrato ficticio.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d2f
+            type: atlas.contratos.version_publicada
+            version: 1
+            occurredAt: '2026-10-23T15:30:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              contratoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d30
+              versionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d31
+              aplicativoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d32
+              aplicativo: api-demo
+              contrato: api-externa
+              tipo: openapi
+              version: 1.2.0-dev.a1b2c3d
+              esEstable: false
+              sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+              repositorio: flitsas-demo/api-demo
+              rama: develop
+              commit: 0123456789abcdef0123456789abcdef01234567
+              tieneBreaking: false
+              operaciones: 3
 
   schemas:
     SobreEvento:
@@ -159,8 +211,77 @@ components:
           type: object
           description: Contenido del evento; su esquema depende de `type` y `version`.
 
-# Eventos publicados: hoy ninguno. Atlas aún no tiene módulos funcionales que publiquen (F2 en adelante). Cada evento
-# nuevo se agrega en el mismo PR que su TipoEvento, así:
+    ContratosVersionPublicadaV1:
+      type: object
+      description: '`data` de atlas.contratos.version_publicada v1: qué se publicó, desde dónde y con qué hash.'
+      additionalProperties: false
+      required:
+        - contratoId
+        - versionId
+        - aplicativoId
+        - aplicativo
+        - contrato
+        - tipo
+        - version
+        - esEstable
+        - sha256
+        - repositorio
+        - rama
+        - commit
+        - tieneBreaking
+        - operaciones
+      properties:
+        contratoId:
+          type: string
+          format: uuid
+          description: Id del contrato en Atlas.
+        versionId:
+          type: string
+          format: uuid
+          description: Id de la versión publicada.
+        aplicativoId:
+          type: string
+          format: uuid
+          description: Id del aplicativo del catálogo.
+        aplicativo:
+          type: string
+          description: Slug del aplicativo del catálogo.
+        contrato:
+          type: string
+          description: Código del contrato dentro del aplicativo.
+        tipo:
+          type: string
+          enum: [openapi, asyncapi, proto]
+          description: Tipo de contrato.
+        version:
+          type: string
+          description: Versión semántica publicada (sin metadatos de compilación).
+        esEstable:
+          type: boolean
+          description: Si no tiene prerelease (solo las estables van en paquetes de clientes).
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 del spec tal como llegó.
+        repositorio:
+          type: string
+          description: Repositorio de GitHub (dueño/nombre) del token OIDC.
+        rama:
+          type: string
+          description: Rama del token OIDC.
+        commit:
+          type: string
+          description: Commit del token OIDC.
+        tieneBreaking:
+          type: boolean
+          description: Si el changelog de la CI trae cambios que rompen compatibilidad.
+        operaciones:
+          type: integer
+          minimum: 0
+          description: Cuántas operaciones, webhooks, canales o rpc trae el índice.
+
+# Eventos publicados: atlas.contratos.version_publicada (HU 3.2). Cada evento nuevo se agrega en el mismo PR que su
+# TipoEvento, así:
 #
 #   components:
 #     messages:

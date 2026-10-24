@@ -164,6 +164,33 @@ const REF_FLITO = { id: 'a6', slug: 'flito', nombre: 'FLITO', tipo: 'producto' }
 const PRINCIPAL_FLITO = responsableSimulado('r5', 'principal', { ...PERSONA_CORTA, id: 'p9', nombre: 'Principal De Flito Demo', telefono: TELEFONO_FICTICIO });
 const SECUNDARIO_FLITO = responsableSimulado('r6', 'secundario', { ...PERSONA_CORTA, id: 'p10', nombre: 'Secundaria De Flito Demo' });
 
+/** Una versión de contrato ficticia (HU 3.2): repos y workflows `flitsas-demo`. */
+function versionSimulada(version: string, estable: boolean, publicadoEn: string) {
+  const rama = estable ? 'release' : 'develop';
+  return {
+    id: `v-${version}`, version, esEstable: estable, sha256: 'a'.repeat(64), formato: 'yaml', tamano: 1200,
+    repositorio: 'flitsas-demo/api-demo-con-un-nombre-de-repositorio-largo', rama,
+    commit: '0123456789abcdef0123456789abcdef01234567', workflow: '.github/workflows/ci.yml',
+    workflowDelJob: 'flitsas-demo/plantillas/.github/workflows/atlas-publicar.yml@refs/tags/v1', ejecucion: '1234567890',
+    publicadoPor: `github:flitsas-demo/api-demo@${rama}`, publicadoEn, tieneBreaking: !estable, estado: 'vigente', retiroEn: null,
+  };
+}
+
+const VERSIONES_CONTRATO = [versionSimulada('1.3.0-dev.a1b2c3d', false, '2026-10-23T16:00:00Z'), versionSimulada('1.2.0', true, '2026-10-23T15:00:00Z')];
+
+const CONTRATOS = [
+  {
+    id: 'c1', codigo: 'api-externa', nombre: 'API Externa Demo de Trámites con un nombre largo', descripcion: 'Contrato ficticio de prueba.',
+    tipo: 'openapi', visibilidad: 'interna', aplicativo: { id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0' },
+    repositorio: 'flitsas-demo/api-demo', versiones: 2, ultimaVersion: VERSIONES_CONTRATO[0], ultimaEstable: VERSIONES_CONTRATO[1],
+  },
+  {
+    id: 'c2', codigo: 'eventos', nombre: 'Eventos Demo', descripcion: null, tipo: 'asyncapi', visibilidad: 'interna',
+    aplicativo: { id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0' }, repositorio: 'flitsas-demo/api-demo', versiones: 1,
+    ultimaVersion: VERSIONES_CONTRATO[1], ultimaEstable: VERSIONES_CONTRATO[1],
+  },
+];
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
@@ -220,6 +247,17 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         const elementos = aplicativos.filter((a) => !grupo || a.grupo === grupo);
         return json(route, { total: elementos.length, elementos });
       }
+      // Contratos (HU 3.2).
+      case '/api/v1/contratos': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        const tipo = url.searchParams.get('tipo');
+        const elementos = CONTRATOS.filter((c) => !tipo || c.tipo === tipo);
+        return json(route, { total: elementos.length, elementos });
+      }
+      case '/api/v1/contratos/c1/versiones':
+      case '/api/v1/contratos/c2/versiones':
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        return json(route, url.pathname.includes('/c1/') ? VERSIONES_CONTRATO : [VERSIONES_CONTRATO[1]]);
       // Responsables (HU 2.3 a 2.5).
       case '/api/v1/equipo/responsabilidades':
         if (!opciones.permisos.includes('atlas.equipo.ver')) return route.fulfill({ status: 403 });

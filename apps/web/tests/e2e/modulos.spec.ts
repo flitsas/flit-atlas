@@ -198,6 +198,32 @@ test.describe('catálogo de aplicativos (HU 2.1)', () => {
   });
 });
 
+test.describe('contratos de integración (HU 3.2)', () => {
+  test('lista de contratos y versiones: accesible, sin scroll horizontal a 360 px y sin violar la CSP', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.contratos.ver_internos'] });
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Contratos publicados' }).getByText('API Externa Demo de Trámites con un nombre largo')).toBeVisible();
+
+    await abrirDesdeNavegacion(page, esMovil(info), 'Contratos');
+    await expect(page).toHaveURL(/\/contratos$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Contratos de integración' })).toBeVisible();
+    await expect(page.getByText('2 contratos')).toBeVisible();
+    await page.getByText('API Externa Demo de Trámites con un nombre largo').click();
+    await expect(page.getByRole('list', { name: 'Versiones' }).getByRole('listitem')).toHaveCount(2);
+    if (esMovil(info)) {
+      await page.setViewportSize({ width: 360, height: 740 });
+      await sinScrollHorizontal(page, '/contratos a 360 px');
+    }
+    await sinErroresCriticosDeAxe(page, '/contratos');
+
+    await page.getByRole('group', { name: 'Tipo' }).getByText('AsyncAPI', { exact: true }).click();
+    await expect(page).toHaveURL(/tipo=asyncapi/);
+    await expect(page.getByText('1 contrato', { exact: true })).toBeVisible();
+    expect(violaciones).toEqual([]);
+  });
+});
+
 test.describe('soporte de los sábados', () => {
   test('calendario y gestión: lista en el móvil, filtro por equipo, accesible y sin scroll horizontal', async ({ page }, info) => {
     const violaciones = await vigilarCsp(page);

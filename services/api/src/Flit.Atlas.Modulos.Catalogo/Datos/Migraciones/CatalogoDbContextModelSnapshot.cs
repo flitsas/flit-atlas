@@ -135,6 +135,74 @@ namespace Flit.Atlas.Modulos.Catalogo.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Catalogo.Datos.FuentePublicacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid>("AplicativoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("aplicativo_id");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("nota");
+
+                    b.PrimitiveCollection<List<string>>("Ramas")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("ramas");
+
+                    b.Property<string>("Repositorio")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("repositorio");
+
+                    b.PrimitiveCollection<List<string>>("Tipos")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("tipos");
+
+                    b.Property<string>("Workflow")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("workflow");
+
+                    b.HasKey("Id")
+                        .HasName("pk_catalogo_fuente_publicacion");
+
+                    b.HasIndex("Repositorio")
+                        .HasDatabaseName("ix_catalogo_fuente_publicacion_repositorio");
+
+                    b.HasIndex("AplicativoId", "Repositorio", "Workflow")
+                        .IsUnique()
+                        .HasDatabaseName("ix_catalogo_fuente_publicacion_aplicativo_id_repositorio_workf");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("AplicativoId", "Repositorio", "Workflow"), false);
+
+                    b.ToTable("catalogo_fuente_publicacion", "atlas", t =>
+                        {
+                            t.HasComment("Lista blanca de publicación desde la CI con el OIDC de GitHub Actions (ATLAS-ADR-0035).");
+
+                            t.HasCheckConstraint("ck_catalogo_fuente_publicacion_ramas", "cardinality(ramas) > 0");
+
+                            t.HasCheckConstraint("ck_catalogo_fuente_publicacion_repositorio", "repositorio ~ '^[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$'");
+
+                            t.HasCheckConstraint("ck_catalogo_fuente_publicacion_tipos", "cardinality(tipos) > 0 AND tipos <@ ARRAY['openapi', 'asyncapi', 'proto', 'likec4', 'docs']::text[]");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Catalogo.Datos.SemillaAplicada", b =>
                 {
                     b.Property<Guid>("Id")
@@ -179,6 +247,16 @@ namespace Flit.Atlas.Modulos.Catalogo.Datos.Migraciones
                         .HasForeignKey("PadreId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_catalogo_aplicativo_catalogo_aplicativo_padre_id");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Catalogo.Datos.FuentePublicacion", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Catalogo.Datos.Aplicativo", null)
+                        .WithMany()
+                        .HasForeignKey("AplicativoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_catalogo_fuente_publicacion_catalogo_aplicativo_aplicativo_");
                 });
 #pragma warning restore 612, 618
         }

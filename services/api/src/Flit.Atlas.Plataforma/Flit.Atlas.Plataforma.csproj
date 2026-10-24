@@ -9,6 +9,8 @@
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Lib.Net.Http.WebPush" />
     <PackageReference Include="MailKit" />
+    <!-- Firma del token OIDC de GitHub Actions (ATLAS-ADR-0035); la misma versión de Microsoft.Identity.Web. -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
