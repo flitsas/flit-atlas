@@ -19,10 +19,12 @@ from atlas_docs.ict.base import Base
 from atlas_docs.ict.ejemplos import Ejemplo, host, interpretar
 from atlas_docs.ict.esquemas import Esquemas, a_openapi_31, inferir, norma, podar_componentes, romper_ciclos
 from atlas_docs.ict.excel import Campo, Hoja, Libro, Tabla
+from atlas_docs.ict.lenguaje import piezas_internas
 from atlas_docs.ict.saneamiento import buscar_sensibles, sanear_arbol, sanear_ejemplo
 from atlas_docs.ict.tipos import esquema_desde_tipo, familia
 
 COLABORADOR_GENERICO = "Equipo de integraciones de FLIT"
+SIN_NOMBRE = "Sin nombre definido"  # valor de una tabla de referencia sin nombre (el informe pide confirmarlo)
 METODOS = ("get", "put", "post", "delete", "patch", "options", "head")
 _DESCRIPCIONES_GENERICAS = {"", "ok", "bad request", "not found", "forbidden", "conflict", "internal server error"}
 
@@ -49,6 +51,7 @@ TIPOS_INCONSISTENCIA: dict[str, str] = {
     "codigo_respuesta": "Códigos de respuesta",
     "campo_solo_en_codigo": "Campos que exige el contrato y el Excel no documenta",
     "metadatos": "Metadatos del contrato y del Excel",
+    "lenguaje_funcional": "Textos del contrato reescritos en lenguaje funcional",
     "celda_sin_interpretar": "Celdas del Excel sin interpretar",
 }
 
@@ -98,6 +101,19 @@ class Resultado:
 
 def _escapar(segmento: str) -> str:
     return segmento.replace("~", "~0").replace("/", "~1")
+
+
+def _resolver_puntero_existente(documento: object, puntero: str) -> tuple[dict, str]:
+    """Como `_resolver_puntero`, sin crear nada: KeyError si el padre o la clave no existen."""
+    partes = [p.replace("~1", "/").replace("~0", "~") for p in puntero.lstrip("/").split("/")]
+    nodo = documento
+    for parte in partes[:-1]:
+        if not isinstance(nodo, dict) or parte not in nodo:
+            raise KeyError(puntero)
+        nodo = nodo[parte]
+    if not isinstance(nodo, dict) or partes[-1] not in nodo:
+        raise KeyError(puntero)
+    return nodo, partes[-1]
 
 
 def _resolver_puntero(documento: object, puntero: str) -> tuple[dict, str]:
@@ -190,6 +206,7 @@ class _Convertidor:
         self._parametros_en_linea()
         self._operaciones_del_codigo()
         self._corregir_contrato()
+        self._textos_funcionales()
         self._limpiar_contrato()
         hojas = [(d, self.hoja(d)) for d in self.destinos]
         for _, hoja in hojas:
@@ -226,6 +243,10 @@ class _Convertidor:
         texto = json.dumps(self.spec, ensure_ascii=False)
         if hallazgos := buscar_sensibles(texto):
             raise ValueError(f"{self.archivo}: quedan datos sensibles: {sorted({h.tipo for h in hallazgos})}")
+        # Lo que lee el cliente va en lenguaje funcional (F4-SEC-09): la poda no reescribe textos (ATLAS-ADR-0038).
+        if internas := piezas_internas(self.spec):
+            detalle = sorted({f"{p.puntero} ({p.tipo}: {p.muestra})" for p in internas})
+            raise ValueError(f"{self.archivo}: textos de cara al cliente con piezas internas: {detalle[:10]}")
         return self._ordenar()
 
     def _parametros_en_linea(self) -> None:
@@ -274,6 +295,21 @@ class _Convertidor:
             padre[clave] = copy.deepcopy(valor)
             self.agregar("correccion_contrato", motivo)
 
+    def _textos_funcionales(self) -> None:
+        """Reescribe los textos del contrato que nombran piezas internas; el original queda en una `x-flit-*`."""
+        extension = {"description": "x-flit-descripcion-contrato", "summary": "x-flit-resumen-contrato"}
+        for puntero, (texto, motivo) in mapeo.TEXTOS_FUNCIONALES.items():
+            try:
+                padre, clave = _resolver_puntero_existente(self.spec, puntero)
+            except KeyError:
+                continue  # el contrato ya no trae ese texto
+            original = padre.get(clave)
+            if not isinstance(original, str) or original.strip() == texto:
+                continue
+            padre[extension[clave]] = original.strip()
+            padre[clave] = texto
+            self.agregar("lenguaje_funcional", f"`{puntero}`: {motivo}; el original queda en `{extension[clave]}`")
+
     def _limpiar_contrato(self) -> None:
         sin_id = []
         for ruta, metodo, op in self.operaciones():
@@ -284,7 +320,7 @@ class _Convertidor:
                 if isinstance(op.get(texto), str):
                     op[texto] = re.sub(r"\s+\n", "\n", op[texto].replace("\r\n", "\n")).strip()
             if not op.get("description"):
-                op["description"] = op.get("summary") or f"Operación `{op['operationId']}` de core-ict."
+                op["description"] = op.get("summary") or f"Operación `{op['operationId']}`."
             for parametro in op.get("parameters", []):
                 parametro.setdefault("description", f"Parámetro `{parametro.get('name')}` ({parametro.get('in')}).")
         if sin_id:
@@ -338,7 +374,7 @@ class _Convertidor:
         for fila in tabla.filas:
             if fila[0] is None or not fila[0].isdigit():
                 continue
-            documento: dict = {"valor": int(fila[0]), "nombre": fila[1] or "Sin nombre en el Excel (por confirmar)"}
+            documento: dict = {"valor": int(fila[0]), "nombre": fila[1] or SIN_NOMBRE}
             for i, clave in columnas.items():
                 documento[clave] = leyenda.get(fila[i] or "", "no_aplica") if fila[i] else "no_aplica"
             documentos.append(documento)
@@ -380,17 +416,18 @@ class _Convertidor:
             if not nombre:
                 self.agregar(
                     "tabla_referencia",
-                    f"«{tabla.titulo}»: el valor {valor} no tiene nombre en el Excel (se deja como «por confirmar»)",
+                    f"«{tabla.titulo}»: el valor {valor} no tiene nombre en el Excel (se deja como «{SIN_NOMBRE}»; "
+                    "confirmar)",
                     hoja,
                 )
             valores.append(valor)
-            descripciones.append(nombre or "Sin nombre en el Excel (por confirmar)")
+            descripciones.append(nombre or SIN_NOMBRE)
             fila_limpia = {c: v for c, v in zip(tabla.columnas, fila, strict=False) if v is not None}
             fila_limpia[tabla.columnas[indice_valor]] = valor  # el valor que viaja, no lo que traía la celda
             filas.append(fila_limpia)
         return {
             "type": conf["tipo"],
-            "description": f"Valores de la «{tabla.titulo}» del Excel de contratos ICT (hoja «{hoja.nombre}»).",
+            "description": f"Valores de la «{tabla.titulo}».",
             "enum": valores,
             "x-enum-descriptions": descripciones,
             "x-flit-tabla": {"hoja": hoja.nombre, "titulo": tabla.titulo, "columnas": tabla.columnas, "filas": filas},
@@ -508,25 +545,26 @@ class _Convertidor:
         for _, _, op in self.operaciones():
             cuerpo = op.get("requestBody")
             if cuerpo and not cuerpo.get("description"):
-                hoja = op.get("x-flit-hoja-excel")
-                cuerpo["description"] = (
-                    f"Cuerpo de la petición según la hoja «{hoja}» del Excel." if hoja else "Cuerpo de la petición."
-                )
+                cuerpo["description"] = "Cuerpo de la petición."  # la hoja de origen está en `x-flit-hoja-excel`
         cliente = self.spec.get("components", {}).get("securitySchemes", {}).get(mapeo.ESQUEMA_CLIENTE)
         if cliente is not None:
             cliente["description"] = (
                 cliente.get("description", "Token propio del cliente de integración.").rstrip()
                 + " Lo entrega `POST /api/v1/auth/login` y viaja en la cabecera `Authorization: Bearer $TOKEN`."
             )
-        for esquema in self.spec.get("components", {}).get("securitySchemes", {}).values():
-            if esquema.get("bearerFormat") == "JWT" and "RFC8725" not in esquema.get("description", ""):
-                esquema["description"] = (
-                    esquema.get("description", "Token JWT.").rstrip()
-                    + " [por verificar] cumplimiento de RFC8725 en el emisor."
-                )
+        for nombre, esquema in self.spec.get("components", {}).get("securitySchemes", {}).items():
+            if esquema.get("bearerFormat") == "JWT":
+                # vacuum (owasp-jwt-best-practices) pide nombrar RFC8725; el cliente lee la referencia, no la duda:
+                # que el emisor la cumpla es un pendiente del equipo y va al informe.
+                if "RFC8725" not in esquema.get("description", ""):
+                    esquema["description"] = (
+                        esquema.get("description", "Token JWT.").rstrip()
+                        + " Formato JWT; buenas prácticas de referencia: RFC8725."
+                    )
+                self.agregar("seguridad", f"[por verificar] `{nombre}`: cumplimiento de RFC8725 en el emisor del JWT")
         for nombre, esquema in self.spec.get("components", {}).get("schemas", {}).items():
             if isinstance(esquema, dict) and not esquema.get("description"):
-                esquema["description"] = f"Esquema `{nombre}` de core-ict."
+                esquema["description"] = mapeo.DESCRIPCIONES_ESQUEMAS.get(nombre, f"Estructura `{nombre}` de la API.")
 
     def _esquema_cliente(self) -> None:
         esquemas = self.spec.setdefault("components", {}).setdefault("securitySchemes", {})
@@ -639,11 +677,12 @@ class _Convertidor:
                 continue
             padre, nombre, puntero = ubicado
             self._aplicar(campo, padre, nombre, construido, destino, hoja)
-            if motivo := mapeo.CAMPOS_IGNORADOS.get((hoja.servicio, campo.nombre)):
+            if ignorado := mapeo.CAMPOS_IGNORADOS.get((hoja.servicio, campo.nombre)):
+                para_cliente, motivo = ignorado
                 nodo = padre["properties"][nombre]
                 nodo["deprecated"] = True
                 previa = str(nodo.get("description", "")).strip().rstrip(".")
-                nodo["description"] = (f"{previa}. " if previa else "") + f"Obsoleto en core-ict: {motivo}."
+                nodo["description"] = (f"{previa}. " if previa else "") + f"Obsoleto: {para_cliente}."
                 if nombre in padre.get("required", []):
                     padre["required"].remove(nombre)
                     if not padre["required"]:
@@ -870,8 +909,8 @@ class _Convertidor:
         otros = [v for v in tramites if v not in {conf[t]["valor"] for t in tipos}]
         if otros:
             self.esq.componentes["TramiteOtro"] = {
-                "description": "Registro de otros trámites (blindaje, cambios, duplicados, prendas…): el Excel no "
-                "define obligatoriedad propia para ellos.",
+                "description": "Registro de otros trámites (blindaje, cambios, duplicados, prendas…): no tienen "
+                "obligatoriedad propia; aplican los campos obligatorios comunes.",
                 "allOf": [
                     {"$ref": f"#/components/schemas/{base}"},
                     {"type": "object", "properties": {"transaction_type": {"enum": otros}}},
@@ -994,7 +1033,7 @@ class _Convertidor:
         for i, documento in enumerate(documentos, start=1):
             problemas: list[str] = []
             valor = self.esq.ajustar(sanear_ejemplo(documento, cuenta), esquema, "$", problemas)
-            ejemplos[f"excel-{i}"] = {"summary": f"Ejemplo {i} del Excel (saneado)", "value": valor}
+            ejemplos[f"excel-{i}"] = {"summary": f"Ejemplo {i}", "value": valor}
             if problemas:
                 self.agregar("ejemplo_ajustado", f"{contexto}, ejemplo {i}: " + "; ".join(problemas[:8]), hoja)
         cuerpo["contenido"].pop("example", None)
@@ -1040,14 +1079,14 @@ class _Convertidor:
         ejemplos = contenido.setdefault("examples", {})
         if "example" in contenido:
             ejemplos.setdefault("contrato", {"summary": "Ejemplo", "value": contenido.pop("example")})
-        ejemplos[f"excel-{len(ejemplos) + 1}"] = {"summary": "Ejemplo de error del Excel (saneado)", "value": valor}
+        ejemplos[f"excel-{len(ejemplos) + 1}"] = {"summary": "Ejemplo de error", "value": valor}
 
     def _esquema_mensaje(self) -> dict:
         """Cuerpo de error de core-ict: los endpoints responden `Results.Json(new { error })`."""
         if "ErrorIct" not in self.esq.componentes:
             self.esq.componentes["ErrorIct"] = {
                 "type": "object",
-                "description": "Error de core-ict: un código corto (p. ej. `invalid_credentials`, `not_found`).",
+                "description": "Error de la API: un código corto (p. ej. `invalid_credentials`, `not_found`).",
                 "properties": {"error": {"type": "string"}},
                 "required": ["error"],
             }
@@ -1098,12 +1137,8 @@ class _Convertidor:
         self.esq.componentes[componente] = copy.deepcopy(conf["esquema"])
         op: dict = {
             "operationId": f"notificar{titulo}",
-            "summary": f"Notificación «{hoja.servicio}» que FLIT envía al gestor",
-            "description": (
-                "core-ict hace `POST` a la URL que el gestor registró en `url_web_hook` cuando cambia el estado del "
-                "pre-trámite o del trámite. El cuerpo trae los campos v2 (`ictEstado`, `procedureInstanceId`) y los "
-                f"de compatibilidad v1. Fuentes: `{conf['fuente']}` de core-ict y la hoja «{hoja.nombre}» del Excel."
-            ),
+            "summary": conf["summary"],
+            "description": conf["description"],
             "tags": ["Webhooks"],
             # core-ict no autentica la notificación ante el gestor (sin cabecera Authorization); se declara explícito.
             "security": [],
@@ -1116,7 +1151,7 @@ class _Convertidor:
             },
             "responses": {
                 "200": {
-                    "description": "El gestor recibió la notificación (core-ict solo mira que el código sea 2xx).",
+                    "description": conf["respuesta"],
                     "content": {"application/json": {"schema": {}}},
                 }
             },
@@ -1192,19 +1227,13 @@ class _Convertidor:
         version = version_enriquecida(base.get("version"))
         visibles = [op for _, _, op in self.operaciones() if op.get("x-public")]
         fuentes = [h.nombre for _, h in hojas if h is not None]
-        descripcion = str(base.get("description", "")).strip()
-        descripcion += (
-            f"\n\nEnriquecido con el Excel de contratos ICT ({len(fuentes)} hojas: "
-            + (", ".join(f"«{f}»" for f in fuentes) or "ninguna")
-            + "). Una sola URL base por ambiente: todo entra por el host público de core-ict."
-            if fuentes
-            else "\n\nConvertido sin el Excel de contratos ICT: solo el contrato de core-ict."
-        )
-        descripcion += (
-            f"\n\nArchivo generado con `python -m atlas_docs.ict` (ATLAS-ADR-0037) desde `{mapeo.CONTRATO_BASE}` del "
-            "repo `flit`; no se edita a mano. Las operaciones con `x-public` son las que se pueden compartir con "
-            "clientes; las `x-internal` las quita la poda de Atlas."
-        )
+        original = str(base.get("description", "")).strip()
+        if original:
+            self.agregar(
+                "lenguaje_funcional",
+                "`info.description` del contrato nombra el servicio, la feature y el Gateway; se reemplaza por una "
+                "descripción funcional y el original queda en `info.x-flit-fuente.descripcion_contrato`",
+            )
         changelog = []
         for _, hoja in hojas:
             if hoja is not None and (hoja.version or hoja.fecha):
@@ -1233,7 +1262,7 @@ class _Convertidor:
         self.spec["info"] = {
             "title": base.get("title", "FLIT Core ICT API"),
             "version": version,
-            "description": descripcion,
+            "description": mapeo.DESCRIPCION_INFO,
             "contact": {"name": "FLIT S.A.S."},
             "x-flit-visibilidad": "compartible" if visibles else "interna",
             "x-flit-fuente": {
@@ -1243,6 +1272,10 @@ class _Convertidor:
                 "gateway": mapeo.GATEWAY,
                 "excel": self.libro.archivo if self.libro and fuentes else None,
                 "hojas": fuentes,
+                "descripcion_contrato": original or None,
+                "generador": "python -m atlas_docs.ict (ATLAS-ADR-0037); no se edita a mano",
+                "visibilidad": "las operaciones con `x-public` se comparten con clientes; las `x-internal` las quita "
+                "la poda de Atlas",
             },
             "x-flit-changelog": changelog,
         }
@@ -1276,9 +1309,9 @@ class _Convertidor:
             servidores.append(
                 {
                     "url": "https://{host}",
-                    "description": f"{descripcion} URL base única de core-ict (todas las operaciones).",
+                    "description": f"{descripcion} URL base única de la API (todas las operaciones).",
                     "variables": {
-                        "host": {"default": elegido, "description": f"Host público de core-ict en {ambiente}."}
+                        "host": {"default": elegido, "description": f"Host público de la API ICT en {ambiente}."}
                     },
                     "x-flit-ambiente": ambiente,
                 }
