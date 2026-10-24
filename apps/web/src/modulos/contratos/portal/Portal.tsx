@@ -5,6 +5,7 @@ import { Link, Route, Routes, useParams } from 'react-router';
 import { CargandoPagina } from '../../../app/layout/Shell';
 import { NoEncontrada } from '../../../app/paginas/Estados';
 import { useSesionOpcional } from '../../../app/sesion';
+import { BotonCompartir } from '../../../app/ui/Compartir';
 import { Tarjeta } from '../../../app/ui/Tarjeta';
 import { Buscador, Etiqueta } from '../componentes/ui';
 import { Cargando, VistaMarkdown } from '../guias/componentes';
@@ -184,6 +185,7 @@ function PaquetePortal() {
         {p.descripcion && <p className="max-w-3xl text-sm break-words text-white/85">{p.descripcion}</p>}
       </header>
       <Avisos avisos={avisos} />
+      <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(p.id)}`} titulo={p.nombre} que="este paquete" />
       {p.nivel === 'tecnico' ? (
         <AccionesPaquete paquete={p} />
       ) : (
@@ -263,6 +265,7 @@ function GuiaPortal() {
         </p>
         <VistaMarkdown texto={g.contenido} etiqueta={`Contenido de ${g.titulo}`} />
       </Tarjeta>
+      <BotonCompartir className="self-start" ruta={`/portal/paquetes/${encodeURIComponent(paqueteId)}/guias/${encodeURIComponent(guiaId)}`} titulo={g.titulo} que="esta guía" />
     </>
   );
 }

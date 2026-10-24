@@ -7,6 +7,7 @@ import { NoEncontrada } from '../../../app/paginas/Estados';
 import { useSesionOpcional } from '../../../app/sesion';
 import { formatearFechaHora } from '../../../app/ui/formato';
 import { Hoja } from '../../../app/ui/Hoja';
+import { BotonCompartir } from '../../../app/ui/Compartir';
 import { Boton, Tarjeta } from '../../../app/ui/Tarjeta';
 import { Etiqueta } from '../componentes/ui';
 import { ExportarPaquete } from '../exportaciones/ExportarPaquete';
@@ -244,12 +245,19 @@ function Detalle() {
       <InsigniasPaquete paquete={p} />
       <MostrarAviso aviso={aviso} />
 
-      {puedeExportar && (
-        <div className="flex flex-wrap gap-2">
-          {/* Sin revisión, el servidor exporta la vigente o, si nunca se publicó, la última (HU 4.5). */}
-          <ExportarPaquete base="/api/v1/contratos" origen={{ paqueteId: p.id }} exportacionInicial={parametros.get('exportacion')} />
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {/* Sin revisión, el servidor exporta la vigente o, si nunca se publicó, la última (HU 4.5). */}
+        {puedeExportar && (
+          <ExportarPaquete
+            base="/api/v1/contratos"
+            origen={{ paqueteId: p.id }}
+            exportacionInicial={parametros.get('exportacion')}
+            enlace={{ ruta: `/contratos/paquetes/${encodeURIComponent(p.id)}`, titulo: p.nombre, que: 'este paquete', etiqueta: 'Compartir enlace al paquete' }}
+          />
+        )}
+        {/* HU 4.6: el enlace interno del paquete (sin `?exportacion=`, que es de cada persona). */}
+        <BotonCompartir ruta={`/contratos/paquetes/${encodeURIComponent(p.id)}`} titulo={p.nombre} que="este paquete" />
+      </div>
 
       {gestionable && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Acciones del paquete">
