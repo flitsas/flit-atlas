@@ -3,7 +3,10 @@ name: atlas-publicar
 # HU 3.3 · ATLAS-ADR-0035 §7, ATLAS-ADR-0009 y ATLAS-ADR-0010: workflow reutilizable con el que cada repo de FLIT
 # valida y publica UN contrato (OpenAPI, AsyncAPI o proto) en Flit Atlas. Un repo con varios specs lo llama una vez por
 # spec (una matriz). Pasos:
+#   0. AsyncAPI: las $ref a otros archivos del repo (p. ej. ./comun/sobre.v1.yaml#/Sobre) se resuelven en un solo
+#      documento, que es el que se revisa y se publica (Atlas recibe un archivo y no sigue las $ref externas, HU 3.10).
 #   1. vacuum con el ruleset que se indique (por defecto, el de lo compartible si el spec se declara compartible).
+#      AsyncAPI 2.x no tiene lint: vacuum 0.32 solo lee AsyncAPI 3 (Atlas revisa su estructura al publicar).
 #   2. Base de comparación: la versión que corre en pdn, que se baja de Atlas con el token OIDC
 #      (GET /api/v1/contratos/publicaciones/base); si Atlas aún no la tiene (o en un PR, que no puede pedir el token),
 #      el spec de la rama de pdn (release) o de la rama base del PR.
@@ -99,6 +102,13 @@ on:
         type: string
         required: false
         default: error
+      modo_lint:
+        description: >-
+          error (un error de vacuum falla) o advertencia (los errores se ven en el log y como aviso, pero no bloquean la
+          publicación; para un repo que adopta Atlas con contratos que aún no cumplen el ruleset).
+        type: string
+        required: false
+        default: error
       publicar:
         description: false para solo validar. Aunque sea true, solo publica en push o workflow_dispatch.
         type: boolean
@@ -155,6 +165,7 @@ jobs:
       - name: Revisar las entradas
         env:
           MODO_BREAKING: ${{ inputs.modo_breaking }}
+          MODO_LINT: ${{ inputs.modo_lint }}
           AMBIENTE: ${{ inputs.ambiente }}
         run: |
           set -euo pipefail
@@ -164,6 +175,7 @@ jobs:
           [[ "$CONTRATO" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::contrato «$CONTRATO»: minúsculas, números y guiones"; fallo=1; }
           [ -f "$RUTA" ] || { echo "::error::No existe el spec $RUTA"; fallo=1; }
           case "$MODO_BREAKING" in error|advertencia) ;; *) echo "::error::modo_breaking «$MODO_BREAKING»: error o advertencia"; fallo=1 ;; esac
+          case "$MODO_LINT" in error|advertencia) ;; *) echo "::error::modo_lint «$MODO_LINT»: error o advertencia"; fallo=1 ;; esac
           [[ -z "$AMBIENTE" || "$AMBIENTE" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::ambiente «$AMBIENTE» no válido"; fallo=1; }
           if [ -n "$ATLAS_URL" ] && [[ ! "$ATLAS_URL" =~ ^https://[^/]+$ ]]; then
             echo "::error::atlas_url debe ser https://<host>, sin ruta ni barra final"; fallo=1
@@ -189,14 +201,102 @@ jobs:
           rm "$dir/vacuum.tgz" "$dir/oasdiff.tgz"
           echo "$dir" >> "$GITHUB_PATH"
 
+      - name: Resolver las $ref a otros archivos (AsyncAPI)
+        run: |
+          # >>> empaquetar (scripts/atlas-publicar/probar.sh corre este bloque tal cual sobre fixtures ficticias)
+          # Atlas recibe un solo archivo y no sigue las $ref externas: en AsyncAPI, las que apuntan a otro archivo del repo
+          # (./comun/sobre.v1.yaml#/Sobre) se reemplazan por su contenido. Las locales (#/...) se quedan. Sin $ref
+          # externas se publica el archivo tal cual (mismo hash). Deja en SPEC la ruta de lo que se revisa y publica.
+          set -euo pipefail
+          entorno="${GITHUB_ENV:-/dev/null}"
+          if [ "$TIPO" != "asyncapi" ]; then
+            echo "SPEC=$RUTA" >> "$entorno"
+            exit 0
+          fi
+          command -v yq > /dev/null || { echo "::error::Falta yq (mikefarah/yq v4, viene en los runners de GitHub)"; exit 1; }
+          temporal="${RUNNER_TEMP:?}/atlas-spec"
+          mkdir -p "$temporal"
+          cat > "$temporal/empaquetar.js" <<'EMPAQUETAR'
+          // node empaquetar.js <spec> <salida.json>: imprime cuántas $ref a otros archivos resolvió.
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const [entrada, salida] = process.argv.slice(2);
+          const repo = process.cwd();
+          const raiz = path.resolve(entrada);
+          const leidos = new Map();
+          const leer = (archivo) => {
+            if (!leidos.has(archivo)) {
+              if (!fs.existsSync(archivo)) throw new Error(`no existe ${path.relative(repo, archivo)}`);
+              leidos.set(archivo, JSON.parse(execFileSync('yq', ['-o=json', '.', archivo], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })));
+            }
+            return leidos.get(archivo);
+          };
+          const apuntar = (documento, fragmento, donde) => {
+            let nodo = documento;
+            for (const parte of fragmento.split('/').filter(Boolean)) {
+              const clave = decodeURIComponent(parte).replace(/~1/g, '/').replace(/~0/g, '~');
+              if (nodo === null || typeof nodo !== 'object' || !Object.hasOwn(nodo, clave)) throw new Error(`${donde}: no apunta a nada`);
+              nodo = nodo[clave];
+            }
+            return nodo;
+          };
+          let externas = 0;
+          // Dentro del contenido de otro archivo también se resuelven sus $ref locales (#/... de ESE archivo).
+          const resolver = (nodo, archivo, pila) => {
+            if (Array.isArray(nodo)) return nodo.map((hijo) => resolver(hijo, archivo, pila));
+            if (nodo === null || typeof nodo !== 'object') return nodo;
+            const ref = nodo.$ref;
+            if (typeof ref === 'string' && (archivo !== raiz || !ref.startsWith('#'))) {
+              const donde = `${path.relative(repo, archivo)}: $ref ${ref}`;
+              if (/^[a-z][a-z0-9+.-]*:/i.test(ref)) throw new Error(`${donde}: las $ref remotas no se resuelven`);
+              if (Object.keys(nodo).length > 1) throw new Error(`${donde}: una $ref a otro archivo no lleva campos al lado`);
+              const corte = ref.indexOf('#');
+              const relativa = corte < 0 ? ref : ref.slice(0, corte);
+              const fragmento = corte < 0 ? '' : ref.slice(corte + 1);
+              const destino = relativa ? path.resolve(path.dirname(archivo), relativa) : archivo;
+              if (!destino.startsWith(repo + path.sep)) throw new Error(`${donde}: sale del repo`);
+              const clave = `${destino}#${fragmento}`;
+              if (pila.includes(clave)) throw new Error(`${donde}: es circular`);
+              if (relativa) externas++;
+              return resolver(apuntar(leer(destino), fragmento, donde), destino, [...pila, clave]);
+            }
+            return Object.fromEntries(Object.entries(nodo).map(([clave, hijo]) => [clave, resolver(hijo, archivo, pila)]));
+          };
+          fs.writeFileSync(salida, JSON.stringify(resolver(leer(raiz), raiz, [])));
+          console.log(externas);
+          EMPAQUETAR
+          externas="$(node "$temporal/empaquetar.js" "$RUTA" "$temporal/empaquetado.json")" || {
+            echo "::error::No se pudieron resolver las \$ref de $RUTA (ver el error de arriba)."; exit 1; }
+          if [ "$externas" = "0" ]; then
+            echo "SPEC=$RUTA" >> "$entorno"
+            echo "Sin \$ref a otros archivos: se publica $RUTA tal cual."
+            exit 0
+          fi
+          spec="$temporal/$(basename "$RUTA")"
+          case "$RUTA" in
+            *.json) cp "$temporal/empaquetado.json" "$spec" ;;
+            *) yq -p=json -o=yaml -P '.' "$temporal/empaquetado.json" > "$spec" ;;
+          esac
+          echo "SPEC=$spec" >> "$entorno"
+          echo "::notice::${RUTA}: ${externas} \$ref a otros archivos resueltas; se revisa y publica un solo documento."
+          # <<< empaquetar
+
       - name: Lint con vacuum
         env:
           RULESET: ${{ inputs.ruleset }}
           EXCEPCIONES: ${{ inputs.excepciones }}
+          MODO_LINT: ${{ inputs.modo_lint }}
         run: |
           set -euo pipefail
           if [ "$TIPO" = "proto" ]; then
             echo "::notice::proto: sin lint en este workflow (buf lint y buf breaking quedan pendientes, ATLAS-ADR-0010)."
+            exit 0
+          fi
+          if [ "$TIPO" = "asyncapi" ] && [[ "$(yq -r '.asyncapi // ""' "$SPEC")" == 2.* ]]; then
+            # vacuum 0.32 rechaza AsyncAPI 2.x («use AsyncAPI 3.0 or later»). Atlas revisa la estructura y las $ref al
+            # publicar; el lint completo queda en la CI del repo (p. ej. @asyncapi/parser) hasta migrar a AsyncAPI 3.
+            echo "::warning::${RUTA} es AsyncAPI 2.x: vacuum 0.32 solo revisa AsyncAPI 3, así que no tiene lint aquí."
             exit 0
           fi
           reglas="$RUNNER_TEMP/atlas-reglas"
@@ -407,7 +507,7 @@ jobs:
           if [ -z "$eleccion" ]; then
             if [ "$TIPO" = "asyncapi" ]; then
               eleccion=asyncapi
-            elif grep -Eq '"?x-flit-visibilidad"?[[:space:]]*:[[:space:]]*"?compartible' "$RUTA"; then
+            elif grep -Eq '"?x-flit-visibilidad"?[[:space:]]*:[[:space:]]*"?compartible' "$SPEC"; then
               eleccion=compartible
             else
               eleccion=interno
@@ -423,7 +523,15 @@ jobs:
             [ -f "$EXCEPCIONES" ] || { echo "::error::No existe el archivo de excepciones $EXCEPCIONES"; exit 1; }
             argumentos+=(--ignore-file "$EXCEPCIONES")
           fi
-          vacuum "${argumentos[@]}" "$RUTA"
+          if vacuum "${argumentos[@]}" "$SPEC"; then
+            exit 0
+          fi
+          if [ "$MODO_LINT" = "advertencia" ]; then
+            echo "::warning::${RUTA} no cumple el ruleset «${eleccion}» (ver el log de vacuum); modo_lint=advertencia, sigue a publicar."
+            exit 0
+          fi
+          echo "::error::${RUTA} no cumple el ruleset «${eleccion}» (ver el log de vacuum)."
+          exit 1
 
       - name: Base de comparación desde Atlas (la versión de pdn)
         id: atlas
@@ -609,7 +717,7 @@ jobs:
             const changelog = fs.existsSync('changelog.json') ? fs.readFileSync('changelog.json', 'utf8') : '';
             const publicacion = await pedir('POST', '/publicaciones', {
               aplicativo: APLICATIVO, contrato: CONTRATO, tipo: TIPO, version: VERSION || null, prerelease: PRERELEASE || null,
-              spec: fs.readFileSync(RUTA, 'utf8'), changelog: changelog || null, changelogBase: BASE_VERSION || null,
+              spec: fs.readFileSync(process.env.SPEC || RUTA, 'utf8'), changelog: changelog || null, changelogBase: BASE_VERSION || null,
             });
             const motivos = {
               401: 'token rechazado (audiencia distinta de la URL de Atlas, vencido o sin id-token: write)',
