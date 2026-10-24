@@ -339,9 +339,9 @@ public class NotificacionesTests(EntornoApi entorno)
         var yo = await (await navegador.GetAsync("/api/v1/plataforma/yo")).Content.ReadFromJsonAsync<EndpointsIdentidad.Yo>(Ct);
         await using (var bd = entorno.Plataforma(baseNueva))
         {
-            // «soporte» y «equipo» ya son módulos registrados: el migrador creó sus filas encendidas (ATLAS-ADR-0029 y
-            // ATLAS-ADR-0031).
-            bd.Modulos.Add(new Modulo { Id = "contratos", Activo = false });
+            // «soporte», «equipo» y «contratos» ya son módulos registrados: el migrador creó sus filas encendidas
+            // (ATLAS-ADR-0029, ATLAS-ADR-0031 y ATLAS-ADR-0035).
+            (await bd.Modulos.SingleAsync(m => m.Id == "contratos", Ct)).Activo = false;
             var equipo = await bd.Modulos.SingleAsync(m => m.Id == "equipo", Ct);
             equipo.OrganizacionesHabilitadas = [yo!.OrganizacionId];
             // El catálogo ya es un módulo registrado (ATLAS-ADR-0028): su fila la creó el migrador, encendida.

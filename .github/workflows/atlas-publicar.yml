@@ -1,0 +1,743 @@
+name: atlas-publicar
+
+# HU 3.3 · ATLAS-ADR-0035 §7, ATLAS-ADR-0009 y ATLAS-ADR-0010: workflow reutilizable con el que cada repo de FLIT
+# valida y publica UN contrato (OpenAPI, AsyncAPI o proto) en Flit Atlas. Un repo con varios specs lo llama una vez por
+# spec (una matriz). Pasos:
+#   0. AsyncAPI: las $ref a otros archivos del repo (p. ej. ./comun/sobre.v1.yaml#/Sobre) se resuelven en un solo
+#      documento, que es el que se revisa y se publica (Atlas recibe un archivo y no sigue las $ref externas, HU 3.10).
+#   1. vacuum con el ruleset que se indique (por defecto, el de lo compartible si el spec se declara compartible).
+#      AsyncAPI 2.x no tiene lint: vacuum 0.32 solo lee AsyncAPI 3 (Atlas revisa su estructura al publicar).
+#   2. Base de comparación: la versión que corre en pdn, que se baja de Atlas con el token OIDC
+#      (GET /api/v1/contratos/publicaciones/base); si Atlas aún no la tiene (o en un PR, que no puede pedir el token),
+#      el spec de la rama de pdn (release) o de la rama base del PR.
+#   3. oasdiff breaking y changelog (solo OpenAPI). Un breaking sin subir la MAJOR falla (modo «error»).
+#   4. En push o workflow_dispatch: POST /api/v1/contratos/publicaciones con el token OIDC (audiencia = la URL de Atlas)
+#      y, si se indica el ambiente, PUT /api/v1/contratos/canales/{ambiente} (el CD lo llama al desplegar).
+#
+# Uso desde otro repo (el job que llama debe conceder id-token: write):
+#   jobs:
+#     contratos:
+#       permissions: { contents: read, id-token: write }
+#       strategy:
+#         matrix:
+#           include:
+#             - { contrato: core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml }
+#             - { contrato: core-eventos, tipo: asyncapi, ruta: contracts/asyncapi/core-events.v1.yaml }
+#       uses: flitsas/flit-atlas/.github/workflows/atlas-publicar.yml@v1
+#       with:
+#         aplicativo: flit2-core-api
+#         contrato: ${{ matrix.contrato }}
+#         tipo: ${{ matrix.tipo }}
+#         ruta: ${{ matrix.ruta }}
+#         atlas_url: ${{ vars.ATLAS_URL }}
+# flit-atlas se llama a sí mismo con «uses: ./.github/workflows/atlas-publicar.yml» (autopublicación desde su rama,
+# Plataforma:Publicacion:AutopublicacionDesdeRama).
+
+on:
+  workflow_call:
+    inputs:
+      aplicativo:
+        description: Slug del aplicativo en el catálogo de Atlas (el de la lista blanca), p. ej. flit2-core-api.
+        type: string
+        required: true
+      contrato:
+        description: Código del contrato dentro del aplicativo (minúsculas, números y guiones), p. ej. external-api.
+        type: string
+        required: true
+      tipo:
+        description: openapi, asyncapi o proto.
+        type: string
+        required: true
+      ruta:
+        description: Ruta del spec en el repo, p. ej. contracts/openapi/external-api.v1.yaml.
+        type: string
+        required: true
+      atlas_url:
+        description: URL pública de Atlas donde se publica (sin /api), p. ej. https://atlas.flitsas.com. Vacía, solo valida.
+        type: string
+        required: false
+        default: ""
+      audiencia:
+        description: Audiencia del token OIDC. Vacía, la URL de Atlas (lo que Atlas espera por defecto).
+        type: string
+        required: false
+        default: ""
+      ruleset:
+        description: >-
+          Reglas de vacuum: compartible, interno o recomendado (embebidos aquí), o la ruta de un ruleset del repo. Vacío:
+          compartible si el spec declara «x-flit-visibilidad: compartible», interno si no; para AsyncAPI, el de Atlas.
+        type: string
+        required: false
+        default: ""
+      excepciones:
+        description: Ruta de un --ignore-file de vacuum en el repo (excepciones decididas en un ADR). Opcional.
+        type: string
+        required: false
+        default: ""
+      version:
+        description: >-
+          Versión X.Y.Z. Obligatoria en proto (MAJOR = la del paquete); en OpenAPI y AsyncAPI, vacía = info.version.
+        type: string
+        required: false
+        default: ""
+      prerelease:
+        description: >-
+          Prerelease que se agrega a la versión. Vacío: según la rama (develop → dev.<sha7>, staging → rc.<sha7>,
+          ramas estables → ninguno, otra rama → <rama>.<sha7>).
+        type: string
+        required: false
+        default: ""
+      ramas_estables:
+        description: Ramas (separadas por espacios) que publican versiones estables, sin prerelease.
+        type: string
+        required: false
+        default: release
+      rama_pdn:
+        description: Rama que corre en pdn; su spec es la base de comparación cuando Atlas aún no tiene una.
+        type: string
+        required: false
+        default: release
+      modo_breaking:
+        description: error (un breaking sin subir la MAJOR falla) o advertencia (solo avisa).
+        type: string
+        required: false
+        default: error
+      modo_lint:
+        description: >-
+          error (un error de vacuum falla) o advertencia (los errores se ven en el log y como aviso, pero no bloquean la
+          publicación; para un repo que adopta Atlas con contratos que aún no cumplen el ruleset).
+        type: string
+        required: false
+        default: error
+      publicar:
+        description: false para solo validar. Aunque sea true, solo publica en push o workflow_dispatch.
+        type: boolean
+        required: false
+        default: true
+      ambiente:
+        description: dev, qa o pdn. Si se indica, después de publicar marca la versión en ese canal (lo usa el CD).
+        type: string
+        required: false
+        default: ""
+      runner:
+        description: Runner del job.
+        type: string
+        required: false
+        default: ubuntu-latest
+    outputs:
+      version:
+        description: Versión publicada (vacía si no se publicó).
+        value: ${{ jobs.publicar.outputs.version }}
+      decision:
+        description: sin_base, compatible, breaking_con_major, breaking_aceptado o no_aplica.
+        value: ${{ jobs.publicar.outputs.decision }}
+
+permissions:
+  contents: read
+
+jobs:
+  publicar:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # Las mismas versiones y sumas que el job «contratos» de ci.yml (y oasdiff, la de atlas-render, ATLAS-ADR-0036).
+      VACUUM_VERSION: 0.32.0
+      VACUUM_SHA256: 4edffd8e543a4320c1f8cbcd9dfdcba33edbb3e527c77e94bd2c72409ccc85e7
+      OASDIFF_VERSION: 1.33.0
+      OASDIFF_SHA256: 43a4e328e2d13ba1552d760aa68d2485c75c5621f309f6ff64ae895188345247
+      APLICATIVO: ${{ inputs.aplicativo }}
+      CONTRATO: ${{ inputs.contrato }}
+      TIPO: ${{ inputs.tipo }}
+      RUTA: ${{ inputs.ruta }}
+      ATLAS_URL: ${{ inputs.atlas_url }}
+      AUDIENCIA: ${{ inputs.audiencia }}
+      PUEDE_PUBLICAR: ${{ inputs.publicar && inputs.atlas_url != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    outputs:
+      version: ${{ steps.publicar.outputs.version }}
+      decision: ${{ steps.decidir.outputs.decision || 'no_aplica' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Revisar las entradas
+        env:
+          MODO_BREAKING: ${{ inputs.modo_breaking }}
+          MODO_LINT: ${{ inputs.modo_lint }}
+          AMBIENTE: ${{ inputs.ambiente }}
+        run: |
+          set -euo pipefail
+          fallo=0
+          case "$TIPO" in openapi|asyncapi|proto) ;; *) echo "::error::tipo «$TIPO»: debe ser openapi, asyncapi o proto"; fallo=1 ;; esac
+          [[ "$APLICATIVO" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::aplicativo «$APLICATIVO»: minúsculas, números y guiones"; fallo=1; }
+          [[ "$CONTRATO" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::contrato «$CONTRATO»: minúsculas, números y guiones"; fallo=1; }
+          [ -f "$RUTA" ] || { echo "::error::No existe el spec $RUTA"; fallo=1; }
+          case "$MODO_BREAKING" in error|advertencia) ;; *) echo "::error::modo_breaking «$MODO_BREAKING»: error o advertencia"; fallo=1 ;; esac
+          case "$MODO_LINT" in error|advertencia) ;; *) echo "::error::modo_lint «$MODO_LINT»: error o advertencia"; fallo=1 ;; esac
+          [[ -z "$AMBIENTE" || "$AMBIENTE" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::ambiente «$AMBIENTE» no válido"; fallo=1; }
+          if [ -n "$ATLAS_URL" ] && [[ ! "$ATLAS_URL" =~ ^https://[^/]+$ ]]; then
+            echo "::error::atlas_url debe ser https://<host>, sin ruta ni barra final"; fallo=1
+          fi
+          if [ "$PUEDE_PUBLICAR" != "true" ]; then
+            echo "::notice::Solo valida (evento ${GITHUB_EVENT_NAME}, publicar=${{ inputs.publicar }}, atlas_url ${ATLAS_URL:-vacía})."
+          fi
+          exit "$fallo"
+
+      - name: Instalar vacuum y oasdiff (binarios fijados y verificados)
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/atlas-bin"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 --retry-all-errors -o "$dir/vacuum.tgz" \
+            "https://github.com/daveshanley/vacuum/releases/download/v${VACUUM_VERSION}/vacuum_${VACUUM_VERSION}_linux_x86_64.tar.gz"
+          echo "${VACUUM_SHA256}  $dir/vacuum.tgz" | sha256sum -c -
+          curl -fsSL --retry 3 --retry-all-errors -o "$dir/oasdiff.tgz" \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          echo "${OASDIFF_SHA256}  $dir/oasdiff.tgz" | sha256sum -c -
+          tar -xzf "$dir/vacuum.tgz" -C "$dir" vacuum
+          tar -xzf "$dir/oasdiff.tgz" -C "$dir" oasdiff
+          rm "$dir/vacuum.tgz" "$dir/oasdiff.tgz"
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Resolver las $ref a otros archivos (AsyncAPI)
+        run: |
+          # >>> empaquetar (scripts/atlas-publicar/probar.sh corre este bloque tal cual sobre fixtures ficticias)
+          # Atlas recibe un solo archivo y no sigue las $ref externas: en AsyncAPI, las que apuntan a otro archivo del repo
+          # (./comun/sobre.v1.yaml#/Sobre) se reemplazan por su contenido. Las locales (#/...) se quedan. Sin $ref
+          # externas se publica el archivo tal cual (mismo hash). Deja en SPEC la ruta de lo que se revisa y publica.
+          set -euo pipefail
+          entorno="${GITHUB_ENV:-/dev/null}"
+          if [ "$TIPO" != "asyncapi" ]; then
+            echo "SPEC=$RUTA" >> "$entorno"
+            exit 0
+          fi
+          command -v yq > /dev/null || { echo "::error::Falta yq (mikefarah/yq v4, viene en los runners de GitHub)"; exit 1; }
+          temporal="${RUNNER_TEMP:?}/atlas-spec"
+          mkdir -p "$temporal"
+          cat > "$temporal/empaquetar.js" <<'EMPAQUETAR'
+          // node empaquetar.js <spec> <salida.json>: imprime cuántas $ref a otros archivos resolvió.
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const [entrada, salida] = process.argv.slice(2);
+          const repo = process.cwd();
+          const raiz = path.resolve(entrada);
+          const leidos = new Map();
+          const leer = (archivo) => {
+            if (!leidos.has(archivo)) {
+              if (!fs.existsSync(archivo)) throw new Error(`no existe ${path.relative(repo, archivo)}`);
+              leidos.set(archivo, JSON.parse(execFileSync('yq', ['-o=json', '.', archivo], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })));
+            }
+            return leidos.get(archivo);
+          };
+          const apuntar = (documento, fragmento, donde) => {
+            let nodo = documento;
+            for (const parte of fragmento.split('/').filter(Boolean)) {
+              const clave = decodeURIComponent(parte).replace(/~1/g, '/').replace(/~0/g, '~');
+              if (nodo === null || typeof nodo !== 'object' || !Object.hasOwn(nodo, clave)) throw new Error(`${donde}: no apunta a nada`);
+              nodo = nodo[clave];
+            }
+            return nodo;
+          };
+          let externas = 0;
+          // Dentro del contenido de otro archivo también se resuelven sus $ref locales (#/... de ESE archivo).
+          const resolver = (nodo, archivo, pila) => {
+            if (Array.isArray(nodo)) return nodo.map((hijo) => resolver(hijo, archivo, pila));
+            if (nodo === null || typeof nodo !== 'object') return nodo;
+            const ref = nodo.$ref;
+            if (typeof ref === 'string' && (archivo !== raiz || !ref.startsWith('#'))) {
+              const donde = `${path.relative(repo, archivo)}: $ref ${ref}`;
+              if (/^[a-z][a-z0-9+.-]*:/i.test(ref)) throw new Error(`${donde}: las $ref remotas no se resuelven`);
+              if (Object.keys(nodo).length > 1) throw new Error(`${donde}: una $ref a otro archivo no lleva campos al lado`);
+              const corte = ref.indexOf('#');
+              const relativa = corte < 0 ? ref : ref.slice(0, corte);
+              const fragmento = corte < 0 ? '' : ref.slice(corte + 1);
+              const destino = relativa ? path.resolve(path.dirname(archivo), relativa) : archivo;
+              if (!destino.startsWith(repo + path.sep)) throw new Error(`${donde}: sale del repo`);
+              const clave = `${destino}#${fragmento}`;
+              if (pila.includes(clave)) throw new Error(`${donde}: es circular`);
+              if (relativa) externas++;
+              return resolver(apuntar(leer(destino), fragmento, donde), destino, [...pila, clave]);
+            }
+            return Object.fromEntries(Object.entries(nodo).map(([clave, hijo]) => [clave, resolver(hijo, archivo, pila)]));
+          };
+          fs.writeFileSync(salida, JSON.stringify(resolver(leer(raiz), raiz, [])));
+          console.log(externas);
+          EMPAQUETAR
+          externas="$(node "$temporal/empaquetar.js" "$RUTA" "$temporal/empaquetado.json")" || {
+            echo "::error::No se pudieron resolver las \$ref de $RUTA (ver el error de arriba)."; exit 1; }
+          if [ "$externas" = "0" ]; then
+            echo "SPEC=$RUTA" >> "$entorno"
+            echo "Sin \$ref a otros archivos: se publica $RUTA tal cual."
+            exit 0
+          fi
+          spec="$temporal/$(basename "$RUTA")"
+          case "$RUTA" in
+            *.json) cp "$temporal/empaquetado.json" "$spec" ;;
+            *) yq -p=json -o=yaml -P '.' "$temporal/empaquetado.json" > "$spec" ;;
+          esac
+          echo "SPEC=$spec" >> "$entorno"
+          echo "::notice::${RUTA}: ${externas} \$ref a otros archivos resueltas; se revisa y publica un solo documento."
+          # <<< empaquetar
+
+      - name: Lint con vacuum
+        env:
+          RULESET: ${{ inputs.ruleset }}
+          EXCEPCIONES: ${{ inputs.excepciones }}
+          MODO_LINT: ${{ inputs.modo_lint }}
+        run: |
+          set -euo pipefail
+          if [ "$TIPO" = "proto" ]; then
+            echo "::notice::proto: sin lint en este workflow (buf lint y buf breaking quedan pendientes, ATLAS-ADR-0010)."
+            exit 0
+          fi
+          if [ "$TIPO" = "asyncapi" ] && [[ "$(yq -r '.asyncapi // ""' "$SPEC")" == 2.* ]]; then
+            # vacuum 0.32 rechaza AsyncAPI 2.x («use AsyncAPI 3.0 or later»). Atlas revisa la estructura y las $ref al
+            # publicar; el lint completo queda en la CI del repo (p. ej. @asyncapi/parser) hasta migrar a AsyncAPI 3.
+            echo "::warning::${RUTA} es AsyncAPI 2.x: vacuum 0.32 solo revisa AsyncAPI 3, así que no tiene lint aquí."
+            exit 0
+          fi
+          reglas="$RUNNER_TEMP/atlas-reglas"
+          mkdir -p "$reglas"
+          # Copias de contracts/vacuum/ de flit-atlas: el repo que llama no las tiene. scripts/atlas-publicar/probar.sh
+          # falla si dejan de coincidir con los originales.
+          cat > "$reglas/compartible.yaml" <<'REGLAS_COMPARTIBLE'
+          # Ruleset de vacuum para los contratos «compartibles» (HU 3.8, ATLAS-ADR-0037). Compatible con Spectral.
+          #
+          # «Lo compartible» (prompt maestro §8.4 y plan 00 §8.1, §8.6 y §8.8) es lo que puede llegar a un cliente dentro de un
+          # paquete: operaciones marcadas `x-public: true` que la poda de Atlas deja en el spec del portal. Para eso el contrato
+          # tiene que:
+          #   1. traer ejemplos en cada petición y respuesta (alimentan el sandbox de Microcks, plan 00 §8.8) y en cada esquema;
+          #   2. declarar versión semántica, título propio, descripción y visibilidad (`x-flit-visibilidad`);
+          #   3. no apuntar a hosts internos (localhost, IP privadas, API Gateway, *.svc.cluster.local) en `servers`;
+          #   4. declarar seguridad en toda operación pública, salvo la que entrega el token (`x-flit-sin-autenticacion`);
+          #   5. cumplir lo mismo que exige contracts/vacuum/openapi.yaml a los contratos propios (operationId, etiquetas,
+          #      descripciones, solo HTTPS, nada sensible en la URL).
+          # Se corre sobre contracts/ict/core-ict.enriquecido.v1.yaml y contracts/ict/propuesta-flit/core-ict.v1.yaml en el job
+          # «contratos» de ci.yml, con la misma versión de vacuum (0.32.0).
+          extends:
+            - [spectral:oas, recommended]
+            - [vacuum:owasp, all]
+
+          rules:
+            # Lo mismo que el ruleset de los contratos propios (ATLAS-ADR-0010).
+            operation-operationId: error
+            operation-operationId-unique: error
+            operation-operationId-valid-in-url: error
+            operation-tags: error
+            operation-tag-defined: error
+            operation-description: error
+            info-description: error
+            owasp-no-credentials-in-url: error
+            owasp-no-api-keys-in-url: error
+            owasp-security-hosts-https-oas3: error
+            owasp-auth-insecure-schemes: error
+            owasp-no-http-basic: error
+            owasp-protection-global-safe: off
+            owasp-rate-limit-retry-after: error
+            owasp-rate-limit: warn
+            owasp-define-error-responses-429: warn
+            owasp-define-error-responses-500: warn
+            owasp-define-error-validation: warn
+            owasp-string-limit: info
+            owasp-string-restricted: info
+            owasp-integer-limit: info
+            owasp-integer-format: info
+            owasp-array-limit: info
+            owasp-no-additionalProperties: info
+            owasp-constrained-additionalProperties: info
+            owasp-define-error-responses-401: info
+            description-duplication: off
+            # Las operaciones internas (x-internal) no siempre declaran seguridad: el informe las lista y la
+            # poda las quita antes de compartir. Para las públicas manda flit-publica-con-seguridad.
+            owasp-protection-global-unsafe: warn
+            owasp-protection-global-unsafe-strict: warn
+
+            # 1. Ejemplos obligatorios.
+            oas3-missing-example: error
+            oas3-valid-schema-example: error
+            flit-ejemplos-obligatorios:
+              description: Toda petición y respuesta con cuerpo trae `example` o `examples` (alimentan el sandbox).
+              severity: error
+              # Sin `examples`, tiene que estar `example` (la función xor de vacuum 0.32 no avisa cuando faltan los dos).
+              given:
+                - "$.paths[*][*].requestBody.content[?(!@.examples)]"
+                - "$.paths[*][*].responses[*].content[?(!@.examples)]"
+                - "$.webhooks[*][*].requestBody.content[?(!@.examples)]"
+                - "$.webhooks[*][*].responses[*].content[?(!@.examples)]"
+              then:
+                field: example
+                function: defined
+
+            # 2. Metadatos.
+            flit-version-semantica:
+              description: info.version es una versión semántica (MAJOR.MINOR.PATCH, con prerelease opcional).
+              severity: error
+              given: "$.info"
+              then:
+                field: version
+                function: pattern
+                functionOptions:
+                  match: "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+            flit-titulo-propio:
+              description: El título no es el genérico de la plantilla de tsoa.
+              severity: error
+              given: "$.info"
+              then:
+                field: title
+                function: pattern
+                functionOptions:
+                  notMatch: "(?i)boilerplate"
+            flit-visibilidad-declarada:
+              description: El contrato declara si es compartible o interno.
+              severity: error
+              given: "$.info['x-flit-visibilidad']"
+              then:
+                function: enumeration
+                functionOptions:
+                  values: [compartible, interna]
+
+            # 3. Sin hosts internos.
+            flit-servidores-publicos:
+              description: Los servidores no apuntan a hosts internos ni a IP privadas.
+              severity: error
+              given:
+                - "$.servers[*].url"
+                - "$.servers[*].variables[*].default"
+              then:
+                function: pattern
+                functionOptions:
+                  notMatch: "(?i)(localhost|127\\.|(^|[/.])10\\.|192\\.168\\.|172\\.(1[6-9]|2\\d|3[01])\\.|execute-api|\\.svc|\\.cluster\\.local|\\.internal)"
+
+            # 4. Seguridad en lo público.
+            flit-publica-con-seguridad:
+              description: Toda operación pública declara seguridad, salvo la que entrega el token (x-flit-sin-autenticacion).
+              severity: error
+              given: "$.paths[*][?(@['x-public'] == true && @['x-flit-sin-autenticacion'] != true)]"
+              then:
+                field: security
+                function: truthy
+          REGLAS_COMPARTIBLE
+          cat > "$reglas/interno.yaml" <<'REGLAS_INTERNO'
+          # Ruleset de vacuum para contracts/openapi/ (HU 1.7, ATLAS-ADR-0010 y ATLAS-ADR-0021).
+          # Compatible con Spectral. El CI falla con cualquier error; las advertencias se ven en el log y no bloquean.
+          #
+          # Base: el «recommended» de vacuum para OpenAPI y todas las reglas OWASP, con la severidad ajustada a lo que
+          # ya aplica a una API BFF con cookie. La limitación de tasa (HU 1.3b, ATLAS-ADR-0022) cubre las rutas de identidad: su
+          # 429 con Retry-After es obligatorio; el resto de límites (cabeceras RateLimit-*, 429 en toda operación) queda como
+          # advertencia. Las de errores con cuerpo (500 y 400/422) siguen como advertencia hasta que haya problem+json.
+          extends:
+            - [spectral:oas, recommended]
+            - [vacuum:owasp, all]
+
+          rules:
+            # Mínimos de ATLAS-ADR-0010: operationId únicos y presentes, operaciones etiquetadas y descritas.
+            operation-operationId: error
+            operation-operationId-unique: error
+            operation-operationId-valid-in-url: error
+            operation-tags: error
+            operation-tag-defined: error
+            operation-description: error
+            info-description: error
+            # Autenticación declarada en toda operación que cambia estado (cookie de sesión y/o X-Atlas-Csrf), solo HTTPS, sin
+            # esquemas inseguros y nada sensible en la URL: quedan como error (su severidad de OWASP).
+            owasp-protection-global-unsafe: error
+            owasp-protection-global-unsafe-strict: error
+            owasp-no-credentials-in-url: error
+            owasp-no-api-keys-in-url: error
+            owasp-security-hosts-https-oas3: error
+            owasp-auth-insecure-schemes: error
+            owasp-no-http-basic: error
+            # Las operaciones de lectura sin sesión (versión, proveedores de ingreso) son públicas a propósito.
+            owasp-protection-global-safe: off
+            # Todo 429 declarado (rutas de identidad, ATLAS-ADR-0022) trae Retry-After.
+            owasp-rate-limit-retry-after: error
+            # Pendientes: Atlas no emite cabeceras RateLimit-* (la librería del framework no las da) y las rutas fuera de
+            # identidad (versión, salud) no tienen límite propio todavía.
+            owasp-rate-limit: warn
+            owasp-define-error-responses-429: warn
+            owasp-define-error-responses-500: warn
+            owasp-define-error-validation: warn
+            # Límites de tamaño en los esquemas: se ajustan por módulo; la entrada se valida en el servidor.
+            owasp-string-limit: info
+            owasp-string-restricted: info
+            owasp-integer-limit: info
+            owasp-integer-format: info
+            owasp-array-limit: info
+            owasp-no-additionalProperties: info
+            owasp-constrained-additionalProperties: info
+            # El 401 lo agrega ContratoOpenApi a toda operación con sesión; esta regla también lo pide a las públicas.
+            owasp-define-error-responses-401: info
+            # Los esquemas aún no traen ejemplos; se agregan con los módulos funcionales (F2 en adelante).
+            oas3-missing-example: info
+            # «OK», «Found» y «No Content» los pone el generador en cada respuesta.
+            description-duplication: off
+          REGLAS_INTERNO
+          cat > "$reglas/asyncapi.yaml" <<'REGLAS_ASYNCAPI'
+          # Ruleset de vacuum para contracts/asyncapi/ (HU 1.7, ATLAS-ADR-0010 y ATLAS-ADR-0021). Va aparte del de OpenAPI:
+          # en vacuum v0.32.0 un ruleset que extiende los dos conjuntos aplica solo las reglas de OpenAPI.
+          # El CI falla con cualquier error.
+          extends:
+            - [vacuum:asyncapi, recommended]
+
+          rules:
+            # Falla en vacuum v0.32.0 con cualquier documento («`schema` function needs a `schema` property… allErrors»).
+            # Los servidores se siguen validando con asyncapi-3-document-*. Revisar al subir vacuum.
+            asyncapi-servers: off
+            # Busca `tags` en la raíz, que no existe en AsyncAPI 3.0 (van en info.tags); la reemplaza atlas-asyncapi-info-tags.
+            asyncapi-3-tags: off
+            atlas-asyncapi-info-tags:
+              description: El documento debe tener info.tags (AsyncAPI 3.0).
+              given: $.info
+              severity: error
+              formats: [asyncapi3]
+              then:
+                field: tags
+                function: truthy
+            # El equipo aún no tiene un buzón propio para publicar aquí [por verificar].
+            asyncapi-info-contact-properties: warn
+            # Atlas se queda en AsyncAPI 3.0.0 hasta verificar que el visor de la PWA (@asyncapi/react-component) y los
+            # consumidores en Go y Python soporten 3.1 [por verificar].
+            asyncapi-latest-version: off
+          REGLAS_ASYNCAPI
+          printf 'extends:\n  - [spectral:oas, recommended]\n' > "$reglas/recomendado.yaml"
+          eleccion="$RULESET"
+          if [ -z "$eleccion" ]; then
+            if [ "$TIPO" = "asyncapi" ]; then
+              eleccion=asyncapi
+            elif grep -Eq '"?x-flit-visibilidad"?[[:space:]]*:[[:space:]]*"?compartible' "$SPEC"; then
+              eleccion=compartible
+            else
+              eleccion=interno
+            fi
+          fi
+          case "$eleccion" in
+            compartible|interno|asyncapi|recomendado) archivo="$reglas/$eleccion.yaml" ;;
+            *) [ -f "$eleccion" ] || { echo "::error::No existe el ruleset $eleccion"; exit 1; }; archivo="$eleccion" ;;
+          esac
+          echo "Ruleset: $eleccion"
+          argumentos=(lint --no-banner --details --no-clip -r "$archivo")
+          if [ -n "$EXCEPCIONES" ]; then
+            [ -f "$EXCEPCIONES" ] || { echo "::error::No existe el archivo de excepciones $EXCEPCIONES"; exit 1; }
+            argumentos+=(--ignore-file "$EXCEPCIONES")
+          fi
+          if vacuum "${argumentos[@]}" "$SPEC"; then
+            exit 0
+          fi
+          if [ "$MODO_LINT" = "advertencia" ]; then
+            echo "::warning::${RUTA} no cumple el ruleset «${eleccion}» (ver el log de vacuum); modo_lint=advertencia, sigue a publicar."
+            exit 0
+          fi
+          echo "::error::${RUTA} no cumple el ruleset «${eleccion}» (ver el log de vacuum)."
+          exit 1
+
+      - name: Base de comparación desde Atlas (la versión de pdn)
+        id: atlas
+        if: env.PUEDE_PUBLICAR == 'true' && inputs.tipo == 'openapi'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const { ATLAS_URL, AUDIENCIA, APLICATIVO, CONTRATO, RUNNER_TEMP } = process.env;
+            const token = await core.getIDToken(AUDIENCIA || ATLAS_URL);
+            const url = `${ATLAS_URL}/api/v1/contratos/publicaciones/base?aplicativo=${encodeURIComponent(APLICATIVO)}&contrato=${encodeURIComponent(CONTRATO)}`;
+            const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+            if (respuesta.status === 404) {
+              core.info(`Atlas aún no tiene una versión base de ${CONTRATO}: se compara con la rama de pdn.`);
+              return;
+            }
+            if (!respuesta.ok) {
+              core.setFailed(`Atlas respondió ${respuesta.status} al pedir la base: ${(await respuesta.text()).slice(0, 2000)}`);
+              return;
+            }
+            const base = await respuesta.json();
+            const archivo = path.join(RUNNER_TEMP, `base-atlas${path.extname(process.env.RUTA) || '.yaml'}`);
+            fs.writeFileSync(archivo, base.spec);
+            core.setOutput('archivo', archivo);
+            core.setOutput('version', base.version);
+            core.info(`Base: ${CONTRATO} ${base.version} (${base.origen} de ${base.ambiente}).`);
+
+      - name: Base de comparación desde git (si Atlas no la dio)
+        id: git
+        if: inputs.tipo == 'openapi' && steps.atlas.outputs.archivo == ''
+        env:
+          RAMA_PDN: ${{ inputs.rama_pdn }}
+          ANTES: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          candidatos=()
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            candidatos=("$RAMA_PDN" "${GITHUB_BASE_REF}")
+          elif [ "${GITHUB_REF_NAME}" != "$RAMA_PDN" ]; then
+            candidatos=("$RAMA_PDN")
+          elif [ -n "${ANTES:-}" ] && [ "${ANTES}" != "0000000000000000000000000000000000000000" ]; then
+            candidatos=("$ANTES")
+          fi
+          extension="${RUTA##*.}"
+          archivo="$RUNNER_TEMP/base-git.${extension}"
+          for ref in "${candidatos[@]}"; do
+            if git fetch --no-tags --depth=1 origin "$ref" 2>/dev/null && git show "FETCH_HEAD:${RUTA}" > "$archivo" 2>/dev/null; then
+              echo "Base: ${RUTA} de ${ref}."
+              echo "archivo=$archivo" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Sin base en git (${candidatos[*]:-ninguna}): primera publicación de ${RUTA}."
+
+      - name: Breaking contra la base y changelog
+        id: decidir
+        if: inputs.tipo == 'openapi'
+        env:
+          BASE: ${{ steps.atlas.outputs.archivo || steps.git.outputs.archivo }}
+          NUEVO: ${{ inputs.ruta }}
+          MODO_BREAKING: ${{ inputs.modo_breaking }}
+          DESTINO: ${{ github.base_ref || github.ref_name }}
+          RAMAS_ESTABLES: ${{ inputs.ramas_estables }}
+        run: |
+          # >>> decision (scripts/atlas-publicar/probar.sh corre este bloque tal cual sobre fixtures ficticias)
+          set -euo pipefail
+          salida="${GITHUB_OUTPUT:-/dev/null}"
+          resumen="${GITHUB_STEP_SUMMARY:-/dev/null}"
+          printf '[]' > changelog.json
+          if [ -z "${BASE:-}" ] || [ ! -s "$BASE" ]; then
+            echo "Sin versión base: primera publicación, no hay contra qué comparar."
+            echo "decision=sin_base" >> "$salida"
+            exit 0
+          fi
+          oasdiff breaking "$BASE" "$NUEVO" -f json > breaking.json
+          oasdiff changelog "$BASE" "$NUEVO" -f json > changelog.json
+          oasdiff diff "$BASE" "$NUEVO" -f json > diff.json
+          # Errores de oasdiff (nivel 3) y versiones (info.version solo aparece en el diff si cambió).
+          read -r errores version_base version_nueva < <(node -e '
+            const fs = require("node:fs");
+            const breaking = JSON.parse(fs.readFileSync("breaking.json", "utf8") || "[]");
+            const diff = JSON.parse(fs.readFileSync("diff.json", "utf8") || "{}");
+            const v = (diff.info && diff.info.version) || {};
+            console.log(breaking.filter((c) => c.level >= 3).length, v.from || "-", v.to || "-");')
+          mayor() { local m="${1%%.*}"; [[ "$m" =~ ^[0-9]+$ ]] || { echo "::error::info.version «$1» no es semántica" >&2; exit 1; }; echo "$m"; }
+          estable=false
+          for r in $RAMAS_ESTABLES; do [ "$r" = "${DESTINO:-}" ] && estable=true; done
+          {
+            echo "### Contrato ${NUEVO}"
+            echo
+            echo "Base: ${version_base/-/la misma versión} → nueva: ${version_nueva/-/la misma versión}. Breaking (nivel error): ${errores}."
+            echo
+            oasdiff changelog "$BASE" "$NUEVO" -f markdown || true
+          } >> "$resumen"
+          if [ "$errores" -gt 0 ]; then
+            subio=false
+            if [ "$version_base" != "-" ] && [ "$(mayor "$version_nueva")" -gt "$(mayor "$version_base")" ]; then
+              subio=true
+            fi
+            if [ "$subio" = true ]; then
+              echo "::notice::${errores} cambios incompatibles con la MAJOR subida (${version_base} → ${version_nueva})."
+              echo "decision=breaking_con_major" >> "$salida"
+              exit 0
+            fi
+            oasdiff breaking "$BASE" "$NUEVO" -f githubactions || true
+            mensaje="${errores} cambios incompatibles con la versión base sin subir la MAJOR (${version_base/-/misma versión} → ${version_nueva/-/misma versión}). Sube la MAJOR (y la ruta /vN) o documenta la excepción en un ADR (plan 00 §8.2, regla 2)."
+            if [ "${MODO_BREAKING:-error}" = "advertencia" ]; then
+              echo "::warning::${mensaje}"
+              echo "decision=breaking_aceptado" >> "$salida"
+              exit 0
+            fi
+            echo "::error::${mensaje}"
+            echo "decision=breaking_sin_major" >> "$salida"
+            exit 1
+          fi
+          if [ "$version_base" = "-" ] && [ "$estable" = true ] && ! cmp -s "$BASE" "$NUEVO"; then
+            echo "::error::El spec cambió pero info.version sigue igual y ${DESTINO} publica estables: Atlas lo rechazaría (409). Sube la versión."
+            echo "decision=misma_version" >> "$salida"
+            exit 1
+          fi
+          echo "Sin cambios incompatibles."
+          echo "decision=compatible" >> "$salida"
+          # <<< decision
+
+      - name: Versión según la rama
+        id: version
+        if: env.PUEDE_PUBLICAR == 'true'
+        env:
+          VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          RAMAS_ESTABLES: ${{ inputs.ramas_estables }}
+        run: |
+          set -euo pipefail
+          if [ "$TIPO" = "proto" ] && [ -z "$VERSION" ]; then
+            echo "::error::En proto la entrada «version» es obligatoria (X.Y.Z, con la MAJOR del paquete)."; exit 1
+          fi
+          pre="$PRERELEASE"
+          if [ -z "$pre" ]; then
+            sha7="${GITHUB_SHA::7}"
+            # SemVer no admite identificadores numéricos con ceros a la izquierda: un sha7 de solo dígitos va con «g».
+            [[ "$sha7" =~ ^[0-9]+$ ]] && sha7="g${sha7}"
+            pre="otra"
+            for r in $RAMAS_ESTABLES; do [ "$r" = "$GITHUB_REF_NAME" ] && pre=""; done
+            if [ -n "$pre" ]; then
+              case "$GITHUB_REF_NAME" in
+                develop) pre="dev.${sha7}" ;;
+                staging) pre="rc.${sha7}" ;;
+                *) pre="$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9-' '-').${sha7}" ;;
+              esac
+            fi
+          fi
+          echo "prerelease=$pre" >> "$GITHUB_OUTPUT"
+          echo "Prerelease: ${pre:-ninguno (rama estable)}"
+
+      - name: Publicar en Atlas
+        id: publicar
+        if: env.PUEDE_PUBLICAR == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          BASE_VERSION: ${{ steps.atlas.outputs.version }}
+          AMBIENTE: ${{ inputs.ambiente }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { ATLAS_URL, AUDIENCIA, APLICATIVO, CONTRATO, TIPO, RUTA, VERSION, PRERELEASE, BASE_VERSION, AMBIENTE } = process.env;
+            const api = `${ATLAS_URL}/api/v1/contratos`;
+            const pedir = async (metodo, ruta, cuerpo) => {
+              // Un token por llamada: vive minutos y nunca sale de este paso.
+              const token = await core.getIDToken(AUDIENCIA || ATLAS_URL);
+              const respuesta = await fetch(`${api}${ruta}`, {
+                method: metodo,
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(cuerpo),
+              });
+              const texto = await respuesta.text();
+              let json = null;
+              try { json = JSON.parse(texto); } catch { /* respuesta sin JSON */ }
+              return { estado: respuesta.status, json, texto };
+            };
+            const changelog = fs.existsSync('changelog.json') ? fs.readFileSync('changelog.json', 'utf8') : '';
+            const publicacion = await pedir('POST', '/publicaciones', {
+              aplicativo: APLICATIVO, contrato: CONTRATO, tipo: TIPO, version: VERSION || null, prerelease: PRERELEASE || null,
+              spec: fs.readFileSync(process.env.SPEC || RUTA, 'utf8'), changelog: changelog || null, changelogBase: BASE_VERSION || null,
+            });
+            const motivos = {
+              401: 'token rechazado (audiencia distinta de la URL de Atlas, vencido o sin id-token: write)',
+              403: 'fuera de la lista blanca (repo, rama, workflow, aplicativo o tipo) o workflow reutilizable no oficial',
+              409: 'la versión ya existe con otro contenido: sube la versión',
+              422: 'spec o versión inválidos',
+            };
+            if (publicacion.estado !== 201 && publicacion.estado !== 200) {
+              core.setFailed(`Publicación: ${publicacion.estado} ${motivos[publicacion.estado] ?? ''}\n${publicacion.texto.slice(0, 4000)}`);
+              return;
+            }
+            const version = publicacion.json.version;
+            core.setOutput('version', version);
+            core.notice(`${CONTRATO} ${version} ${publicacion.estado === 201 ? 'publicada' : 'ya estaba publicada (idempotente)'} en Atlas.`);
+            if (!AMBIENTE) return;
+            const canal = await pedir('PUT', `/canales/${encodeURIComponent(AMBIENTE)}`, { aplicativo: APLICATIVO, contrato: CONTRATO, version });
+            if (canal.estado !== 200) {
+              core.setFailed(`Canal ${AMBIENTE}: ${canal.estado}\n${canal.texto.slice(0, 4000)}`);
+              return;
+            }
+            core.notice(canal.json.cambio
+              ? `Canal ${AMBIENTE}: ${canal.json.versionAnterior ?? 'sin versión'} → ${version}.`
+              : `Canal ${AMBIENTE}: ya tenía ${version}.`);

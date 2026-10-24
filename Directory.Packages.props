@@ -42,6 +42,15 @@
   <ItemGroup Label="Contratos">
     <!-- OpenAPI 3.1 generado desde el código (HU 1.7, ATLAS-ADR-0021). Mismo conjunto 10.0.13 de ASP.NET Core. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+    <!-- Validación e índice de los contratos publicados (HU 3.2, ATLAS-ADR-0035). MIT. La 2.12.2 (20/08/2026) es la misma
+         Microsoft.OpenApi que ya trae Microsoft.AspNetCore.OpenApi 10.0.13; el lector YAML trae SharpYaml (MIT) con
+         topes de profundidad, nodos y alias. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.12.2" />
+    <PackageVersion Include="Microsoft.OpenApi.YamlReader" Version="2.12.2" />
+    <!-- Parser de .proto de protobuf-net (Apache-2.0), con los tipos conocidos de Google incluidos. 3.4.30 del 16/09/2026;
+         la 3.4.40 (21/10/2026) no tiene 2 semanas. -->
+    <PackageVersion Include="protobuf-net.Reflection" Version="3.4.30" />
+    <PackageVersion Include="protobuf-net.Core" Version="3.4.30" />
   </ItemGroup>
   <ItemGroup Label="Plataforma">
     <!-- Web Push con VAPID (HU 1.6, ATLAS-ADR-0020). MIT; en net6+ usa la criptografía de .NET, sin BouncyCastle. -->

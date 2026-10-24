@@ -227,6 +227,20 @@ Permiso de Graph: `Calendars.ReadWrite` **solo** con RBAC para aplicaciones de E
 - `GET /openapi/v1.yaml` solo existe en local y dev; en qa y pdn no se sirve.
 - Los eventos se declaran como `TipoEvento` y se encolan con `EncolarEvento(TipoEvento, …)`; `ContratoAsyncApiTests` los compara con `contracts/asyncapi/atlas-events.v1.yaml` ([`contracts/asyncapi/README.md`](../../contracts/asyncapi/README.md)).
 
+## Publicación de contratos desde la CI (HU 3.1 y 3.2, ATLAS-ADR-0035)
+
+- `POST /api/v1/contratos/publicaciones` solo acepta el token OIDC de GitHub Actions (esquema `GitHubActions` de Plataforma, `.RequierePublicacionCi()`); la cookie de la PWA recibe 401. Lista blanca en el catálogo: `GET|POST /api/v1/catalogo/fuentes-publicacion`, `PUT|DELETE …/{id}` con `atlas.catalogo.gestionar`, auditada.
+- Lectura con `atlas.contratos.ver_internos`: `GET /api/v1/contratos`, `…/{id}/versiones`, `…/{id}/versiones/{version}/spec` y `…/operaciones`.
+
+| Variable | Uso |
+|---|---|
+| `Plataforma__Publicacion__Audiencia` | Audiencia del token; vacía = `Atlas__UrlPublica` sin la barra final |
+| `Plataforma__Publicacion__Propietarios__0` | Dueños de repo aceptados (por defecto `flitsas`) |
+| `Plataforma__Publicacion__Eventos__0` | Eventos que publican (por defecto `push` y `workflow_dispatch`) |
+| `Plataforma__Publicacion__WorkflowsReutilizables__0` | `job_workflow_ref` aceptados, con `*` (por defecto `flitsas/flit-atlas/.github/workflows/atlas-publicar.yml@refs/tags/v*`) |
+| `Plataforma__Publicacion__RamasEstables__0`, `Plataforma__Publicacion__PrefijosPrerelease__<rama>` | `release` publica estables; `develop` → `dev.`, `staging` → `rc.` |
+| `Plataforma__Publicacion__MargenReloj`, `__VidaMaximaToken`, `__RefrescoLlaves`, `__EsperaMinimaLlaves` | 1 min, 1 h, 6 h y 30 s |
+
 ## Shell de la PWA: banderas, notificaciones y Web Push (HU 1.6)
 
 Endpoints bajo `/api/v1/plataforma`, todos con sesión y solo sobre los datos de la persona (ATLAS-ADR-0020):

@@ -83,19 +83,46 @@ jobs:
         run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi.yaml --ignore-file contracts/vacuum/openapi-excepciones.yaml contracts/openapi/atlas.v1.yaml
       - name: Lint AsyncAPI
         run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/asyncapi.yaml contracts/asyncapi/atlas-events.v1.yaml
-      - name: Cambios incompatibles frente a la rama base (solo advierte en F1)
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
+      - name: Lint del contrato de ICT de FLIT 2 enriquecido (reglas de lo compartible)
+        # HU 3.8 (ATLAS-ADR-0037): valida el spec ya generado en contracts/ict/ y la propuesta para el repo flit; ni
+        # el Excel ni el repo flit están en el CI. Que ningún dato sensible sobreviva y que cada campo del Excel esté
+        # en el spec o en el informe lo comprueba services/docs/tests/ict/test_specs_versionados.py (job python).
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${BASE_REF}"
-          if ! git show "origin/${BASE_REF}:contracts/openapi/atlas.v1.yaml" > base.yaml 2>/dev/null; then
-            echo "La rama base aún no tiene contracts/openapi/atlas.v1.yaml; no hay contra qué comparar."
-            exit 0
-          fi
-          oasdiff breaking base.yaml contracts/openapi/atlas.v1.yaml --format githubactions | sed 's/^::error /::warning /'
-          oasdiff changelog base.yaml contracts/openapi/atlas.v1.yaml --format markdown >> "$GITHUB_STEP_SUMMARY"
+          fallo=0
+          for spec in contracts/ict/core-ict.enriquecido.v1.yaml contracts/ict/propuesta-flit/core-ict.v1.yaml; do
+            vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi-compartible.yaml "$spec" || fallo=1
+          done
+          exit "$fallo"
+      - name: Prueba del workflow reutilizable atlas-publicar (decisión de breaking y MAJOR, rulesets embebidos)
+        # HU 3.3 (ATLAS-ADR-0035 §7): corre el bloque de decisión del workflow tal cual sobre specs ficticias.
+        run: bash scripts/atlas-publicar/probar.sh
+
+  atlas-publicar:
+    # HU 3.3: flit-atlas valida (en PR) y publica (en push a develop) sus propios contratos con el workflow reutilizable,
+    # llamado desde su propia rama (autopublicación, ATLAS-ADR-0035 §7). En los PR, un breaking frente a pdn (o, mientras
+    # Atlas no la tenga, frente a release o la rama base) sin subir la MAJOR falla (reemplaza el aviso de F1,
+    # ATLAS-ADR-0021). staging y release publican y marcan su canal desde cd.yml. Sin la variable ATLAS_URL, solo valida.
+    needs: contratos
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { contrato: atlas, tipo: openapi, ruta: contracts/openapi/atlas.v1.yaml, ruleset: contracts/vacuum/openapi.yaml, excepciones: contracts/vacuum/openapi-excepciones.yaml }
+          - { contrato: atlas-eventos, tipo: asyncapi, ruta: contracts/asyncapi/atlas-events.v1.yaml, ruleset: contracts/vacuum/asyncapi.yaml, excepciones: "" }
+    uses: ./.github/workflows/atlas-publicar.yml
+    with:
+      aplicativo: atlas-api
+      contrato: ${{ matrix.contrato }}
+      tipo: ${{ matrix.tipo }}
+      ruta: ${{ matrix.ruta }}
+      ruleset: ${{ matrix.ruleset }}
+      excepciones: ${{ matrix.excepciones }}
+      atlas_url: ${{ vars.ATLAS_URL }}
+      publicar: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
 
   go:
     runs-on: ubuntu-latest
@@ -107,7 +134,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: services/render/go.mod
-          cache-dependency-path: services/render/go.mod
+          cache-dependency-path: services/render/go.sum
       - name: Formato
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go vet ./...
