@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{#- Sin recursos remotos ni scripts: la política lo deja escrito para el navegador que abra el archivo. #}
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<meta name="generator" content="Flit Atlas (atlas-docs)">
+<meta name="description" content="{{ d.titulo }} · {{ d.marca_agua }}">
+<title>{{ d.titulo }}</title>
+<style>
+{{ estilos }}
+{% if pdf %}{{ impresion }}{% endif %}
+</style>
+</head>
+<body>
+<div class="marca-agua" aria-hidden="true">{{ d.marca_agua }}</div>
+<main>
+{% if pdf %}<span class="cadena-marca">{{ d.marca_agua }}</span><span class="cadena-huella">SHA-256 {{ d.hash[:16] }}…</span>{% endif %}
+<header class="portada" id="portada">
+  <div class="marca">FLIT · ATLAS</div>
+  <h1>{{ d.paquete }}</h1>
+  <p>Paquete de contratos de integración · revisión {{ d.revision }}</p>
+  <dl>
+    <dt>Organización</dt><dd>{{ d.organizacion }}</dd>
+    <dt>Fecha</dt><dd>{{ d.fecha }} (hora de Bogotá)</dd>
+    <dt>Revisión</dt><dd>{{ d.revision }}</dd>
+    <dt>Contratos</dt><dd>{% for c in d.contratos %}{{ c.titulo }} {{ c.version }} ({{ c.tipo }}){% if not loop.last %}; {% endif %}{% endfor %}</dd>
+    <dt>SHA-256</dt><dd class="hash">{{ d.hash }}</dd>
+  </dl>
+  <p class="leyenda">{{ d.leyenda }}</p>
+</header>
+
+<nav class="indice" id="indice" aria-label="Índice">
+  <h2>Índice</h2>
+  <ol>
+    <li><a href="#changelog">Cambios del paquete</a></li>
+    {% if d.guias %}<li><a href="#guias">Guías</a>
+      <ol>{% for g in d.guias %}<li><a href="#{{ g.ancla }}">{{ g.titulo }}</a></li>{% endfor %}</ol>
+    </li>{% endif %}
+    {% for c in d.contratos %}
+    <li><a href="#{{ c.ancla }}">{{ c.titulo }} {{ c.version }}</a>
+      <ol>{% for op in c.operaciones %}<li><a href="#{{ op.ancla }}">{{ op.metodo }} {{ op.ruta }} · {{ op.titulo }}</a></li>{% endfor %}</ol>
+    </li>
+    {% endfor %}
+  </ol>
+</nav>
+
+<section id="changelog">
+  <h2>Cambios del paquete</h2>
+  {% if d.changelog %}
+  <table>
+    <thead><tr><th>Revisión</th><th>Fecha</th><th>Cambio</th></tr></thead>
+    <tbody>{% for e in d.changelog %}<tr><td>{{ e.revision }}</td><td>{{ e.fecha }}</td><td>{{ e.cambio }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p>Primera revisión del paquete.</p>{% endif %}
+</section>
+
+{% if d.guias %}
+<section id="guias">
+  <h2>Guías</h2>
+  {% for g in d.guias %}
+  <article class="guia" id="{{ g.ancla }}">
+    <h3>{{ g.titulo }}</h3>
+    {{ md(g.markdown) }}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% for c in d.contratos %}
+<section class="contrato" id="{{ c.ancla }}">
+  <h2>{{ c.titulo }} {{ c.version }}</h2>
+  <p class="etiqueta">Contrato {{ c.contrato }} · {{ c.tipo }}</p>
+  {{ md(c.descripcion) }}
+  {% if c.ambientes %}
+  <h3>URL por ambiente</h3>
+  <table><thead><tr><th>Ambiente</th><th>URL</th></tr></thead>
+  <tbody>{% for a in c.ambientes %}<tr><td>{{ a.nombre }}</td><td class="ruta">{{ a.url }}</td></tr>{% endfor %}</tbody></table>
+  {% endif %}
+  {% if c.historial %}
+  <h3>Historial del contrato</h3>
+  <table><thead><tr><th>Versión</th><th>Fecha</th><th>Cambio</th></tr></thead>
+  <tbody>{% for h in c.historial %}<tr><td>{{ h.version }}</td><td>{{ h.fecha }}</td><td>{{ h.cambio }}</td></tr>{% endfor %}</tbody></table>
+  {% endif %}
+
+  {% for op in c.operaciones %}
+  <article class="operacion" id="{{ op.ancla }}">
+    <h3><span class="metodo">{{ op.metodo }}</span> <span class="ruta">{{ op.ruta }}</span></h3>
+    <p><strong>{{ op.titulo }}</strong> <span class="etiqueta">· {{ op.etiqueta }} · {{ op.operation_id }}</span>{% if op.deprecada %} <span class="deprecada">Deprecada</span>{% endif %}</p>
+    {{ md(op.descripcion) }}
+    <h4>Header</h4>
+    <pre>{{ op.cabeceras | join("\n") }}</pre>
+    {% if op.parametros %}
+    <h4>Parámetros</h4>
+    <table><thead><tr><th>Campo</th><th>Ubicación</th><th>Descripción</th><th>Tipo de dato</th><th>Obligatoriedad</th></tr></thead>
+    <tbody>{% for p in op.parametros %}<tr><td class="ruta">{{ p.nombre | cortable }}</td><td>{{ p.ubicacion }}</td><td>{{ p.descripcion }}{% if p.restricciones %}<br><span class="etiqueta">{{ p.restricciones }}</span>{% endif %}</td><td>{{ p.tipo }}</td><td>{{ "S" if p.obligatorio else "N" }}</td></tr>{% endfor %}</tbody></table>
+    {% endif %}
+    {% if op.cuerpo %}
+    <h4>{{ "Mensaje" if c.tipo == "AsyncAPI" else "Cuerpo" }}{% if op.tipo_contenido %} ({{ op.tipo_contenido }}){% endif %}</h4>
+    {% set m = op.matriz %}
+    {% if m %}
+    <table class="matriz">
+    <colgroup><col style="width: 17%"><col style="width: 25%"><col style="width: 12%">{% for t in m.tipos %}<col style="width: {{ (32 / (m.tipos | length)) | round(2) }}%">{% endfor %}<col style="width: 14%"></colgroup>
+    <thead>
+      <tr><th rowspan="2">Campo</th><th rowspan="2">Descripción</th><th rowspan="2">Tipo de dato</th><th colspan="{{ m.tipos | length }}">Obligatorio por tipo de trámite</th><th rowspan="2">Observaciones</th></tr>
+      <tr>{% for t in m.tipos %}<th>{{ t.nombre }}</th>{% endfor %}</tr></thead>
+    {% else %}
+    <table><thead><tr><th>Campo</th><th>Descripción</th><th>Tipo de dato</th><th>Obligatoriedad</th></tr></thead>
+    {% endif %}
+    <tbody>{% for f in op.cuerpo %}{% set fila = m.fila(f.nombre) if m else none %}<tr>
+      <td class="ruta nivel-{{ f.nivel }}">{{ f.nombre | cortable }}</td>
+      <td>{{ f.descripcion }}{% if f.restricciones %}<br><span class="etiqueta">{{ f.restricciones }}</span>{% endif %}</td>
+      <td>{{ f.tipo }}</td>
+      {% if m %}{% for t in m.tipos %}<td>{{ siglas[fila.valores[t.clave]] if fila else ("S" if f.obligatorio else "N") }}</td>{% endfor %}<td>{{ fila.condicion if fila else "" }}</td>
+      {% else %}<td>{{ "S" if f.obligatorio else "N" }}</td>{% endif %}
+    </tr>{% endfor %}</tbody></table>
+    {% if m %}<p class="etiqueta">S: obligatorio · N: opcional · N/A: no aplica a ese tipo de trámite ({{ m.propiedad }}).</p>{% endif %}
+    {% endif %}
+    {% if op.ejemplo_entrada %}<h4>Ejemplo</h4><pre>{{ op.ejemplo_entrada }}</pre>{% endif %}
+    {% if op.respuestas %}
+    <h4>Salida</h4>
+    <table><thead><tr><th>Código</th><th>Descripción</th></tr></thead>
+    <tbody>{% for r in op.respuestas %}<tr><td>{{ r.codigo }}</td><td>{{ r.descripcion }}</td></tr>{% endfor %}</tbody></table>
+    {% for r in op.respuestas if r.campos or r.ejemplo %}
+    <p><strong>Respuesta {{ r.codigo }}</strong></p>
+    {% if r.campos %}<table><thead><tr><th>Campo</th><th>Descripción</th><th>Tipo de dato</th><th>Obligatoriedad</th></tr></thead>
+    <tbody>{% for f in r.campos %}<tr><td class="ruta nivel-{{ f.nivel }}">{{ f.nombre | cortable }}</td><td>{{ f.descripcion }}</td><td>{{ f.tipo }}</td><td>{{ "S" if f.obligatorio else "N" }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+    {% if r.ejemplo %}<pre>{{ r.ejemplo }}</pre>{% endif %}
+    {% endfor %}
+    {% endif %}
+    {% if op.documentos %}{% set dm = op.documentos %}
+    <h4>{{ dm.titulo }}</h4>
+    <table><thead><tr><th>ID</th><th>Documento</th>{% for t in dm.tipos %}<th>{{ t.nombre }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for f in dm.filas %}<tr><td>{{ f.campo }}</td><td>{{ f.detalle }}</td>{% for t in dm.tipos %}<td>{{ etiquetas[f.valores[t.clave]] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+    {% endif %}
+    {% if op.tablas %}<p class="etiqueta">Tablas de referencia: {% for t in op.tablas %}<a href="#{{ c.ancla }}-tabla-{{ t.id | lower }}">{{ t.titulo }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+  </article>
+  {% endfor %}
+
+  {% if c.tablas %}
+  <h3>Tablas de referencia</h3>
+  {% for t in c.tablas %}
+  <h4 id="{{ c.ancla }}-tabla-{{ t.id | lower }}">{{ t.titulo }}</h4>
+  {% if t.descripcion %}<p class="etiqueta">{{ t.descripcion }}</p>{% endif %}
+  <table><thead><tr>{% for col in t.columnas %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for fila in t.filas %}<tr>{% for v in fila %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+  {% endfor %}
+  {% endif %}
+</section>
+{% endfor %}
+
+<footer class="pie">
+  <p>{{ d.leyenda }}</p>
+  <p>SHA-256 del contenido exportado: <span class="hash">{{ d.hash }}</span></p>
+  <p>Generado por Flit Atlas. Las URL de producción solo se usan con credenciales entregadas por FLIT.</p>
+</footer>
+</main>
+</body>
+</html>

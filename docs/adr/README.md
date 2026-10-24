@@ -43,5 +43,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0037](0037-enriquecimiento-contrato-ict-flit2.md) | Enriquecimiento del contrato de ICT de FLIT 2 con el Excel: core-ict.v1.yaml como base, un solo OpenAPI 3.1 con URL base única por ambiente en contracts/ict/ y reglas de vacuum para lo compartible | propuesto | §8.4, HU 3.8 |
 | [ATLAS-ADR-0039](0039-vista-de-contratos.md) | Vista de contratos: Scalar en un iframe aislado con CSP propia, vista propia de operaciones, AsyncAPI y proto, ejemplos con httpsnippet y diff desde atlas-render | propuesto | A-02, A-09, §8.4, §11, §12, HU 3.6, HU 3.9 |
 | [ATLAS-ADR-0040](0040-guias-de-contratos.md) | Guías de contratos: revisiones inmutables con huella, publicación que aprueba el responsable, Markdown sin HTML sanitizado en la PWA y diff de revisiones en el cliente | propuesto | §7.2, §8.4, HU 3.7 |
+| [ATLAS-ADR-0042](0042-exportaciones-de-paquetes.md) | Exportaciones de paquetes: generador puro en atlas-docs con Jinja2, WeasyPrint, python-docx y openpyxl, Postman propio, salida determinista con hash del contenido y endpoint interno previo a la cola | propuesto | A-02, §8.5, HU 4.5 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).

@@ -33,3 +33,8 @@ def asegurar_bucket(cliente: BaseClient, bucket: str) -> None:
         if error.response.get("Error", {}).get("Code") not in {"404", "NoSuchBucket"}:
             raise
         cliente.create_bucket(Bucket=bucket)
+
+
+def subir(cliente: BaseClient, bucket: str, clave: str, datos: bytes, tipo: str, sha256: str) -> None:
+    """Sube un archivo de una exportación. El SHA-256 va en los metadatos para verificarlo al descargar."""
+    cliente.put_object(Bucket=bucket, Key=clave, Body=datos, ContentType=tipo, Metadata={"sha256": sha256})
