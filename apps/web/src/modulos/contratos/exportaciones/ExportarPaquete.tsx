@@ -18,6 +18,7 @@ import {
   useExportacion,
   useSolicitarExportacion,
 } from './api';
+import { CompartirExportacion, type EnlaceCompartido } from './CompartirExportacion';
 import { abrirEnLaMismaPestana } from './descarga';
 
 /** Lo que la persona ve de un error de la API de exportaciones. */
@@ -86,6 +87,7 @@ export function ExportarPaquete({
   exportacionInicial = null,
   etiqueta = 'Exportar',
   controlada,
+  enlace,
 }: {
   base: BaseExportaciones;
   origen: OrigenExportacion;
@@ -97,11 +99,17 @@ export function ExportarPaquete({
    * `alCerrar` le avisa al cerrarla.
    */
   controlada?: { alCerrar: () => void };
+  /**
+   * Enlace interno que se comparte desde el resultado (HU 4.6). Por defecto, el del paquete: `/contratos/paquetes/<id>`
+   * o, en el portal, `/portal/paquetes/<id>` (el externo solo recibe rutas que puede abrir).
+   */
+  enlace?: EnlaceCompartido;
 }) {
   const [abiertaPropia, setAbierta] = useState(exportacionInicial !== null);
   const [id, setId] = useState<string | null>(exportacionInicial);
   const abierta = controlada ? true : abiertaPropia;
   const cerrar = controlada ? controlada.alCerrar : () => setAbierta(false);
+  const compartido = enlace ?? enlacePorDefecto(base, origen);
   return (
     <>
       {!controlada && (
@@ -111,11 +119,20 @@ export function ExportarPaquete({
       )}
       <Hoja abierta={abierta} alCerrar={cerrar} titulo="Exportar">
         <div className="flex flex-col gap-3 px-4 pt-2 pb-5 text-sm">
-          {abierta && (id === null ? <Elegir base={base} origen={origen} alSolicitar={setId} /> : <Estado base={base} id={id} alNueva={() => setId(null)} />)}
+          {abierta && (id === null ? <Elegir base={base} origen={origen} alSolicitar={setId} /> : <Estado base={base} id={id} enlace={compartido} alNueva={() => setId(null)} />)}
         </div>
       </Hoja>
     </>
   );
+}
+
+/** El paquete en la PWA interna o en el portal; una versión interna no tiene enlace propio: el de contratos. */
+function enlacePorDefecto(base: BaseExportaciones, origen: OrigenExportacion): EnlaceCompartido {
+  if ('paqueteId' in origen) {
+    const id = encodeURIComponent(origen.paqueteId);
+    return { ruta: base === '/api/v1/portal' ? `/portal/paquetes/${id}` : `/contratos/paquetes/${id}`, que: 'este paquete', etiqueta: 'Compartir enlace al paquete' };
+  }
+  return { ruta: '/contratos', que: 'los contratos' };
 }
 
 function Elegir({ base, origen, alSolicitar }: { base: BaseExportaciones; origen: OrigenExportacion; alSolicitar: (id: string) => void }) {
@@ -163,7 +180,7 @@ const TEXTO_ESTADO: Record<Exportacion['estado'], string> = {
   vencida: 'La exportación venció; solicítala de nuevo.',
 };
 
-function Estado({ base, id, alNueva }: { base: BaseExportaciones; id: string; alNueva: () => void }) {
+function Estado({ base, id, enlace, alNueva }: { base: BaseExportaciones; id: string; enlace: EnlaceCompartido; alNueva: () => void }) {
   const desde = useRef(Date.now());
   const consulta = useExportacion(base, id, desde.current);
   const [aviso, setAviso] = useState<Aviso>(null);
@@ -261,6 +278,7 @@ function Estado({ base, id, alNueva }: { base: BaseExportaciones; id: string; al
               </ul>
             </details>
           )}
+          <CompartirExportacion base={base} exportacion={e} enlace={enlace} />
         </>
       )}
       {!enCurso && (
