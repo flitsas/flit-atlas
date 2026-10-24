@@ -163,6 +163,31 @@ public sealed class PublicacionCiTests : IDisposable
     }
 
     [Fact]
+    public void El_repo_del_workflow_oficial_lo_corre_desde_su_propia_rama_y_nadie_mas()
+    {
+        const string ruta = "flitsas-demo/plantillas/.github/workflows/atlas-publicar.yml";
+        var opciones = Opciones();
+
+        // flit-atlas consigo mismo: uses: ./.github/workflows/atlas-publicar.yml en la rama que publica.
+        Assert.Null(ListaBlancaPublicacion.MotivoRechazoGlobal(
+            Publicador(GitHubActionsSimulado.Claims(repositorio: "flitsas-demo/plantillas", rama: "staging", jobWorkflow: $"{ruta}@refs/heads/staging")), opciones));
+        // Otra rama distinta de la del token, otro workflow del mismo repo u otro repo con la rama: no.
+        Assert.Equal("workflow_reutilizable_no_oficial", ListaBlancaPublicacion.MotivoRechazoGlobal(
+            Publicador(GitHubActionsSimulado.Claims(repositorio: "flitsas-demo/plantillas", rama: "staging", jobWorkflow: $"{ruta}@refs/heads/main")), opciones));
+        Assert.Equal("workflow_reutilizable_no_oficial", ListaBlancaPublicacion.MotivoRechazoGlobal(
+            Publicador(GitHubActionsSimulado.Claims(repositorio: "flitsas-demo/plantillas", rama: "staging",
+                jobWorkflow: "flitsas-demo/plantillas/.github/workflows/otro.yml@refs/heads/staging")), opciones));
+        Assert.Equal("workflow_reutilizable_no_oficial", ListaBlancaPublicacion.MotivoRechazoGlobal(
+            Publicador(GitHubActionsSimulado.Claims(repositorio: "flitsas-demo/api-demo", rama: "develop", jobWorkflow: $"{ruta}@refs/heads/develop")), opciones));
+
+        // Apagada por configuración, solo vale el tag.
+        opciones.AutopublicacionDesdeRama = false;
+        Assert.Equal("workflow_reutilizable_no_oficial", ListaBlancaPublicacion.MotivoRechazoGlobal(
+            Publicador(GitHubActionsSimulado.Claims(repositorio: "flitsas-demo/plantillas", rama: "staging", jobWorkflow: $"{ruta}@refs/heads/staging")), opciones));
+        Assert.Null(ListaBlancaPublicacion.MotivoRechazoGlobal(Publicador(), opciones));
+    }
+
+    [Fact]
     public void Un_token_de_un_tag_o_sin_job_workflow_ref_no_es_un_publicador()
     {
         var deTag = GitHubActionsSimulado.Claims();

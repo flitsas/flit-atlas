@@ -41,6 +41,15 @@ public sealed class OpcionesPublicacion
     /// </summary>
     public List<string> WorkflowsReutilizables { get; set; } = [];
 
+    /// <summary>
+    /// Autopublicación (HU 3.3, ATLAS-ADR-0035 §7): el repo que aloja un workflow reutilizable oficial (flit-atlas) puede
+    /// correrlo desde la misma rama que publica (<c>uses: ./.github/workflows/atlas-publicar.yml</c>, que GitHub reporta
+    /// como <c>…/atlas-publicar.yml@refs/heads/&lt;rama&gt;</c>), no solo desde un tag. Vale solo si la referencia del
+    /// workflow es exactamente la rama del token: el workflow que corre es el del commit que se publica, y esa rama sigue
+    /// en la lista blanca. Se apaga con <c>Plataforma__Publicacion__AutopublicacionDesdeRama=false</c>.
+    /// </summary>
+    public bool AutopublicacionDesdeRama { get; set; } = true;
+
     /// <summary>Ramas que publican versiones estables (sin prerelease). Vacía: <c>release</c>, que despliega en pdn.</summary>
     public List<string> RamasEstables { get; set; } = [];
 

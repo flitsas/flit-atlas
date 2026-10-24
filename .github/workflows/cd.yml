@@ -137,3 +137,29 @@ jobs:
             git pull -q --rebase origin main
           done
           echo "::error::No se pudo empujar a flit-gitops después de 3 intentos"; exit 1
+
+  contratos:
+    # HU 3.4 (ATLAS-ADR-0035 §8): después de fijar los digests en flit-gitops, publica (idempotente) los contratos de este
+    # commit y marca su versión en el canal del ambiente (PUT /api/v1/contratos/canales/{qa|pdn}) con el token OIDC, desde
+    # el workflow reutilizable de esta misma rama. Sin la variable ATLAS_URL no corre: el despliegue no depende de Atlas.
+    needs: [ambiente, gitops]
+    if: vars.ATLAS_URL != ''
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { contrato: atlas, tipo: openapi, ruta: contracts/openapi/atlas.v1.yaml, ruleset: contracts/vacuum/openapi.yaml, excepciones: contracts/vacuum/openapi-excepciones.yaml }
+          - { contrato: atlas-eventos, tipo: asyncapi, ruta: contracts/asyncapi/atlas-events.v1.yaml, ruleset: contracts/vacuum/asyncapi.yaml, excepciones: "" }
+    uses: ./.github/workflows/atlas-publicar.yml
+    with:
+      aplicativo: atlas-api
+      contrato: ${{ matrix.contrato }}
+      tipo: ${{ matrix.tipo }}
+      ruta: ${{ matrix.ruta }}
+      ruleset: ${{ matrix.ruleset }}
+      excepciones: ${{ matrix.excepciones }}
+      atlas_url: ${{ vars.ATLAS_URL }}
+      ambiente: ${{ needs.ambiente.outputs.nombre }}

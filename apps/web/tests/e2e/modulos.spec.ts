@@ -264,6 +264,35 @@ test.describe('contratos de integración (HU 3.2)', () => {
   });
 });
 
+test.describe('consolidado de contratos (HU 3.4)', () => {
+  test('versión por ambiente, desfases y breaking: tarjetas en el móvil, tabla en escritorio, sin scroll horizontal a 360 px', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.contratos.ver_internos'] });
+    await page.goto('/');
+
+    await abrirDesdeNavegacion(page, esMovil(info), 'Consolidado');
+    await expect(page).toHaveURL(/\/contratos\/consolidado$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Consolidado de contratos' })).toBeVisible();
+    const vista = esMovil(info)
+      ? page.getByRole('list', { name: 'Contratos por ambiente' })
+      : page.getByRole('region', { name: 'Tabla del consolidado' });
+    await expect(vista).toBeVisible();
+    await expect(vista.getByText('qa (1.3.0-rc.a1b2c3d) va adelante de pdn (1.2.0)')).toBeVisible();
+    await vista.getByText(/2 cambios rompen compatibilidad/).click();
+    await expect(vista.getByText('api-removed-without-deprecation')).toBeVisible();
+    if (esMovil(info)) {
+      await page.setViewportSize({ width: 360, height: 740 });
+      await sinScrollHorizontal(page, '/contratos/consolidado a 360 px');
+    }
+    await sinErroresCriticosDeAxe(page, '/contratos/consolidado');
+
+    await page.getByText('Solo con desfases').click();
+    await expect(page).toHaveURL(/desfases=true/);
+    await expect(page.getByRole('article', { name: 'Eventos Demo' })).toHaveCount(0);
+    expect(violaciones).toEqual([]);
+  });
+});
+
 test.describe('soporte de los sábados', () => {
   test('calendario y gestión: lista en el móvil, filtro por equipo, accesible y sin scroll horizontal', async ({ page }, info) => {
     const violaciones = await vigilarCsp(page);

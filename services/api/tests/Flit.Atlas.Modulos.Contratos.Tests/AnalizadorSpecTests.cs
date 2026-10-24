@@ -168,6 +168,23 @@ public class AnalizadorSpecTests
     }
 
     [Fact]
+    public void Con_el_prerelease_de_la_rama_la_version_es_la_del_spec_mas_el_sufijo()
+    {
+        var openapi = AnalizadorSpec.Analizar(TipoContrato.Openapi, SpecsDeEjemplo.OpenApiYaml);
+        var proto = AnalizadorSpec.Analizar(TipoContrato.Proto, SpecsDeEjemplo.Proto);
+
+        // HU 3.3: el workflow manda solo el prerelease de la rama; Atlas lo pega a info.version.
+        Assert.Equal("1.2.0-dev.abc1234", EndpointsPublicacion.Versionar(TipoContrato.Openapi, null, "dev.abc1234", openapi).Version?.ToString());
+        Assert.Equal("1.2.0-rc.g0123456", EndpointsPublicacion.Versionar(TipoContrato.Openapi, "1.2.0", "rc.g0123456", openapi).Version?.ToString());
+        Assert.Equal("1.2.0", EndpointsPublicacion.Versionar(TipoContrato.Openapi, null, " ", openapi).Version?.ToString());
+        Assert.Equal("version_invalida", EndpointsPublicacion.Versionar(TipoContrato.Openapi, null, "dev.0123456", openapi).Problema?.Codigo);
+        Assert.Equal("version_invalida", EndpointsPublicacion.Versionar(TipoContrato.Openapi, "1.2.0-rc.1", "dev.abc1234", openapi).Problema?.Codigo);
+        Assert.Equal("version_distinta_del_spec", EndpointsPublicacion.Versionar(TipoContrato.Openapi, "1.3.0", "dev.abc1234", openapi).Problema?.Codigo);
+        Assert.Equal("1.0.0-dev.abc1234", EndpointsPublicacion.Versionar(TipoContrato.Proto, "1.0.0", "dev.abc1234", proto).Version?.ToString());
+        Assert.Equal("version_invalida", EndpointsPublicacion.Versionar(TipoContrato.Proto, null, "dev.abc1234", proto).Problema?.Codigo);
+    }
+
+    [Fact]
     public void El_hash_es_sha256_de_los_bytes_utf8()
     {
         Assert.Equal("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", AnalizadorSpec.Sha256(string.Empty));

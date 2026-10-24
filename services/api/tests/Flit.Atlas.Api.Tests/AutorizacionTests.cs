@@ -170,6 +170,10 @@ public class AutorizacionTests(EntornoApi entorno)
         Assert.Contains(endpoints, e => e.Permisos.Contains(PermisosPlataforma.RolesGestionar));
         Assert.Contains(endpoints, e => e.Permisos.Contains(Identidad.Autorizacion.PermisosIdentidad.Administrar));
         Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "POST /api/v1/contratos/publicaciones");
+        // HU 3.3 y 3.4: la base de pdn para la CI y los canales que mueve el CD, también solo con el token de GitHub Actions.
+        Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "GET /api/v1/contratos/publicaciones/base");
+        Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "PUT /api/v1/contratos/canales/{ambiente}");
+        Assert.Contains(endpoints, e => e.Permisos.Contains("atlas.contratos.ver_internos") && e.Clave == "GET /api/v1/contratos/consolidado");
     }
 
     /// <summary>Todos los roles asignables del §7 más <c>atlas.lector</c> (empleado sin asignaciones).</summary>

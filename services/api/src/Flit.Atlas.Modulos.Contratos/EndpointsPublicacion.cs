@@ -53,7 +53,9 @@ internal static partial class EndpointsPublicacion
         [property: Description("openapi, asyncapi o proto.")] string Tipo,
         [property: Description("Versión semántica sin +metadatos. En OpenAPI y AsyncAPI, por defecto info.version; si se manda, debe ser info.version o info.version-<prerelease>. En proto es obligatoria y su MAJOR debe ser la del paquete (v1 → 1). release publica X.Y.Z; develop, X.Y.Z-dev.<sha7>; staging, X.Y.Z-rc.<sha7>.")] string? Version,
         [property: Description("El spec completo tal como está en el repo (JSON o YAML; proto en texto), hasta 5 MB. Su SHA-256 decide la idempotencia.")] string Spec,
-        [property: Description("Salida JSON de «oasdiff changelog» contra la versión de pdn (texto con un arreglo), hasta 1 MB; vacío si no hay base.")] string? Changelog);
+        [property: Description("Salida JSON de «oasdiff changelog» contra la versión de pdn (texto con un arreglo), hasta 1 MB; vacío si no hay base.")] string? Changelog,
+        [property: Description("Prerelease que agrega el workflow según la rama (dev.<sha7>, rc.<sha7>): la versión publicada es <version o info.version>-<prerelease>, y esa parte debe ser estable. Vacío: la versión tal cual.")] string? Prerelease = null,
+        [property: Description("Versión contra la que se calculó el changelog (la que Atlas entregó en GET /publicaciones/base), si la hubo. El Consolidado usa el changelog guardado cuando coincide con la versión que corre en pdn.")] string? ChangelogBase = null);
 
     [Description("La versión publicada (o la que ya existía con el mismo hash).")]
     public sealed record VersionPublicada(
@@ -73,7 +75,7 @@ internal static partial class EndpointsPublicacion
 
     [Description("Por qué no se publicó, con un código estable.")]
     public sealed record ErrorPublicacion(
-        [property: Description("fuente_no_autorizada, aplicativo_no_autorizado, tipo_no_autorizado (403); spec_invalida, version_invalida, version_distinta_del_spec, version_no_permitida_en_rama (422); version_existente, tipo_distinto (409).")] string Codigo,
+        [property: Description("fuente_no_autorizada, aplicativo_no_autorizado, tipo_no_autorizado, ambiente_no_permitido (403); sin_base, contrato_inexistente, version_inexistente, ambiente_inexistente (404); spec_invalida, version_invalida, version_distinta_del_spec, version_no_permitida_en_rama, version_no_estable (422); version_existente, tipo_distinto (409).")] string Codigo,
         string Mensaje,
         [property: Description("Detalle de la validación del spec (422), si lo hay.")] IReadOnlyList<string>? Errores);
 
@@ -140,6 +142,11 @@ internal static partial class EndpointsPublicacion
             errores["spec"] = [$"El spec es obligatorio y va hasta {AnalizadorSpec.TamanoMaximo / (1024 * 1024)} MB."];
         }
         var (changelog, tieneBreaking) = LeerChangelog(solicitud.Changelog, errores);
+        var changelogBase = string.IsNullOrWhiteSpace(solicitud.ChangelogBase) ? null : solicitud.ChangelogBase.Trim();
+        if (changelogBase is not null && VersionSemantica.Leer(changelogBase) is null)
+        {
+            errores["changelogBase"] = ["La versión base del changelog es semántica (X.Y.Z o X.Y.Z-<prerelease>)."];
+        }
         if (errores.Count > 0 || tipo is null)
         {
             return TypedResults.ValidationProblem(errores);
@@ -160,7 +167,7 @@ internal static partial class EndpointsPublicacion
         {
             return Invalido("spec_invalida", "El spec no es válido.", analizado.Errores);
         }
-        var (version, problemaVersion) = Versionar(tipo.Value, solicitud.Version, analizado);
+        var (version, problemaVersion) = Versionar(tipo.Value, solicitud.Version, solicitud.Prerelease, analizado);
         if (version is null)
         {
             return Invalido(problemaVersion!.Value.Codigo, problemaVersion.Value.Mensaje, null);
@@ -182,7 +189,7 @@ internal static partial class EndpointsPublicacion
         try
         {
             var publicada = await GuardarAsync(contexto, plataforma, http, publicador, fuente, aplicativo, codigo, tipo.Value, version, spec, tamano,
-                sha, analizado, changelog, tieneBreaking, ahora, ct);
+                sha, analizado, changelog, tieneBreaking, changelogBase, ahora, ct);
             if (publicada is Created<VersionPublicada> { Value: { } creada })
             {
                 Publicada(log, publicador.Repositorio, aplicativo, codigo, creada.Version);
@@ -205,7 +212,7 @@ internal static partial class EndpointsPublicacion
     private static async Task<IResult> GuardarAsync(
         ContratosDbContext contexto, PlataformaDbContext plataforma, HttpContext http, PublicadorCi publicador, FuentePublicacionLeida fuente,
         string aplicativo, string codigo, TipoContrato tipo, VersionSemantica version, string spec, int tamano, string sha,
-        SpecAnalizado analizado, string changelog, bool tieneBreaking, DateTimeOffset ahora, CancellationToken ct)
+        SpecAnalizado analizado, string changelog, bool tieneBreaking, string? changelogBase, DateTimeOffset ahora, CancellationToken ct)
     {
         var contrato = await contexto.Contratos.FirstOrDefaultAsync(c => c.AplicativoId == fuente.AplicativoId && c.Codigo == codigo, ct);
         if (contrato is not null && contrato.Tipo != tipo)
@@ -247,6 +254,7 @@ internal static partial class EndpointsPublicacion
             PublicadoEn = ahora,
             Changelog = changelog,
             TieneBreaking = tieneBreaking,
+            ChangelogBase = changelogBase,
         };
         contexto.Versiones.Add(nueva);
         contexto.Operaciones.AddRange(analizado.Operaciones.Select(o => new OperacionContrato
@@ -335,6 +343,34 @@ internal static partial class EndpointsPublicacion
     private static VersionPublicada Respuesta(Contrato c, VersionContrato v, string aplicativo, int operaciones, IReadOnlyList<string> advertencias, bool creada) =>
         new(c.Id, v.Id, aplicativo, c.Codigo, Valores.Texto(c.Tipo), v.Version, v.EsEstable, v.Sha256, operaciones, v.TieneBreaking, advertencias,
             v.PublicadoEn, creada);
+
+    /// <summary>
+    /// Como <see cref="Versionar(TipoContrato, string?, SpecAnalizado)"/>, con el prerelease que agrega el workflow según la
+    /// rama (HU 3.3): <c>&lt;version o info.version&gt;-&lt;prerelease&gt;</c>. La parte sin prerelease debe ser estable.
+    /// </summary>
+    internal static (VersionSemantica? Version, (string Codigo, string Mensaje)? Problema) Versionar(
+        TipoContrato tipo, string? pedida, string? prerelease, SpecAnalizado spec)
+    {
+        if (string.IsNullOrWhiteSpace(prerelease))
+        {
+            return Versionar(tipo, pedida, spec);
+        }
+        var pre = prerelease.Trim();
+        if (VersionSemantica.Leer($"0.0.0-{pre}") is null)
+        {
+            return (null, ("version_invalida",
+                $"El prerelease «{pre}» no es válido en SemVer (identificadores [0-9A-Za-z-] separados por puntos; los numéricos, sin ceros a la izquierda)."));
+        }
+        var nucleo = string.IsNullOrWhiteSpace(pedida) ? (tipo == TipoContrato.Proto ? null : spec.VersionDelSpec) : pedida;
+        var estable = VersionSemantica.Leer(nucleo);
+        if (estable is null || !estable.EsEstable)
+        {
+            return (null, ("version_invalida", tipo == TipoContrato.Proto && string.IsNullOrWhiteSpace(pedida)
+                ? "En proto la versión es obligatoria y semántica (X.Y.Z), también con prerelease."
+                : $"Con prerelease, la versión base («{nucleo}») debe ser estable (X.Y.Z)."));
+        }
+        return Versionar(tipo, $"{estable.Nucleo}-{pre}", spec);
+    }
 
     /// <summary>
     /// La versión que se publica: la de la petición o la del spec, que deben cuadrar (plan 00 §8.2, regla 1: la versión la

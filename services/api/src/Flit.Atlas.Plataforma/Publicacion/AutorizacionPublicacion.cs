@@ -80,11 +80,33 @@ public static partial class ListaBlancaPublicacion
         {
             return "evento_no_permitido";
         }
-        if (!opciones.WorkflowsReutilizables.Any(p => Coincide(p, publicador.WorkflowDelJob, distinguirMayusculas: false)))
+        if (!opciones.WorkflowsReutilizables.Any(p => Coincide(p, publicador.WorkflowDelJob, distinguirMayusculas: false)
+                || (opciones.AutopublicacionDesdeRama && EsAutopublicacion(p, publicador))))
         {
             return "workflow_reutilizable_no_oficial";
         }
         return null;
+    }
+
+    /// <summary>
+    /// ¿Corre el job el workflow oficial de <paramref name="patron"/> desde su propio repo y en la misma rama del token?
+    /// (<see cref="OpcionesPublicacion.AutopublicacionDesdeRama"/>). La ruta se compara con el patrón sin su referencia;
+    /// la referencia debe ser exactamente <c>refs/heads/&lt;rama del token&gt;</c>.
+    /// </summary>
+    public static bool EsAutopublicacion(string patron, PublicadorCi publicador)
+    {
+        ArgumentNullException.ThrowIfNull(patron);
+        ArgumentNullException.ThrowIfNull(publicador);
+        var arrobaPatron = patron.LastIndexOf('@');
+        var arrobaJob = publicador.WorkflowDelJob.LastIndexOf('@');
+        if (arrobaPatron <= 0 || arrobaJob <= 0)
+        {
+            return false;
+        }
+        var rutaJob = publicador.WorkflowDelJob[..arrobaJob];
+        return rutaJob.StartsWith(publicador.Repositorio + "/", StringComparison.OrdinalIgnoreCase)
+            && Coincide(patron[..arrobaPatron], rutaJob, distinguirMayusculas: false)
+            && string.Equals(publicador.WorkflowDelJob[(arrobaJob + 1)..], "refs/heads/" + publicador.Rama, StringComparison.Ordinal);
     }
 
     /// <summary>Las fuentes del repo que valen para la rama y el workflow del token (sin mirar aplicativo ni tipo).</summary>
