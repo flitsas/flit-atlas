@@ -316,12 +316,120 @@ public sealed class ExportacionesTests(EntornoApi entorno, ContenedoresExportaci
         Assert.Equal("tiempo_agotado", corte.GetProperty("error").GetProperty("codigo").GetString());
     }
 
+    // --- Límites (HU 4.10, ATLAS-ADR-0048) ---
+
+    private static async Task AssertEnCursoAsync(HttpResponseMessage respuesta)
+    {
+        Assert.Equal(HttpStatusCode.TooManyRequests, respuesta.StatusCode);
+        Assert.Equal("30", Assert.Single(respuesta.Headers.GetValues("Retry-After")));
+        Assert.Equal("application/problem+json", respuesta.Content.Headers.ContentType?.MediaType);
+        var cuerpo = await JsonAsync(respuesta);
+        Assert.Equal(EndpointsExportaciones.CodigoEnCurso, cuerpo.GetProperty("codigo").GetString());
+        Assert.Contains("exportaciones en curso", cuerpo.GetProperty("title").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Una_persona_no_pasa_del_maximo_de_exportaciones_en_curso_y_al_terminar_una_puede_pedir_otra()
+    {
+        await using var api = entorno.Api(configuracion: contenedores.Configuracion(conBroker: false, new()
+        {
+            [$"{OpcionesExportaciones.Seccion}:MaximoEnCursoPorPersona"] = "1",
+        }));
+        var paquete = await ContratosDePrueba.SembrarAsync(entorno.Postgres.GetConnectionString(), ct: Ct);
+        var (navegador, _) = await EmpleadoAsync(entorno, api, RolExportador);
+        var (otra, _) = await EmpleadoAsync(entorno, api, RolExportador);
+
+        var primera = await PostAsync(navegador, Ruta, new { paqueteId = paquete.PaqueteId, formatos = new[] { "openapi" } });
+        var segunda = await PostAsync(navegador, Ruta, new { paqueteId = paquete.PaqueteId, formatos = new[] { "openapi" } });
+        var deOtra = await PostAsync(otra, Ruta, new { paqueteId = paquete.PaqueteId, formatos = new[] { "openapi" } });
+
+        Assert.Equal(HttpStatusCode.Accepted, primera.StatusCode);
+        await AssertEnCursoAsync(segunda);
+        Assert.Equal(HttpStatusCode.Accepted, deOtra.StatusCode);
+
+        // Al quedar fallida la primera (como si atlas-docs la terminara), hay cupo otra vez.
+        var id = Guid.Parse((await JsonAsync(primera)).GetProperty("id").GetString()!);
+        await ManejarAsync(api, Sobre(EventosContratos.ExportacionFallida.Nombre, new { exportacionId = id, codigo = "interno", mensaje = "Falla de prueba." }));
+        Assert.Equal(HttpStatusCode.Accepted, (await PostAsync(navegador, Ruta, new { paqueteId = paquete.PaqueteId, formatos = new[] { "openapi" } })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Las_solicitudes_simultaneas_no_pasan_del_maximo_en_curso()
+    {
+        await using var api = entorno.Api(configuracion: contenedores.Configuracion(conBroker: false, new()
+        {
+            [$"{OpcionesExportaciones.Seccion}:MaximoEnCursoPorPersona"] = "2",
+            [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:ExportacionesPorPersona"] = "100",
+        }));
+        var paquete = await ContratosDePrueba.SembrarAsync(entorno.Postgres.GetConnectionString(), ct: Ct);
+        var (navegador, persona) = await EmpleadoAsync(entorno, api, RolExportador);
+
+        var respuestas = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ =>
+            PostAsync(navegador, Ruta, new { paqueteId = paquete.PaqueteId, formatos = new[] { "openapi" } })));
+
+        Assert.Equal(2, respuestas.Count(r => r.StatusCode == HttpStatusCode.Accepted));
+        Assert.Equal(4, respuestas.Count(r => r.StatusCode == HttpStatusCode.TooManyRequests));
+        await using var contratos = Contratos();
+        Assert.Equal(2, await contratos.Exportaciones.CountAsync(e => e.SolicitadaPor == persona, Ct));
+    }
+
+    [Fact]
+    public async Task Solicitar_exportaciones_tiene_limite_de_tasa_por_persona()
+    {
+        await using var api = entorno.Api(configuracion: contenedores.Configuracion(conBroker: false, new()
+        {
+            [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:ExportacionesPorPersona"] = "2",
+        }));
+        var (navegador, _) = await EmpleadoAsync(entorno, api, RolExportador);
+
+        // Aun las que no pasan la validación cuentan: el límite va antes del endpoint.
+        var respuestas = new List<HttpStatusCode>();
+        for (var i = 0; i < 3; i++)
+        {
+            respuestas.Add((await PostAsync(navegador, Ruta, new { formatos = Todos })).StatusCode);
+        }
+        var listar = await navegador.GetAsync(Ruta);
+
+        Assert.Equal([HttpStatusCode.BadRequest, HttpStatusCode.BadRequest, HttpStatusCode.TooManyRequests], respuestas);
+        Assert.Equal(HttpStatusCode.OK, listar.StatusCode);
+    }
+
+    [Fact]
+    public async Task Una_organizacion_no_pasa_del_maximo_de_exportaciones_en_curso_ni_de_su_limite_de_solicitudes()
+    {
+        var (escenario, paqueteA, paqueteB, orgA, orgB) = await PortalAsync(exportar: true, new()
+        {
+            [$"{OpcionesExportaciones.Seccion}:MaximoEnCursoPorOrganizacion"] = "1",
+            [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:ExportacionesPorOrganizacion"] = "3",
+        });
+        await using var _ = escenario;
+        var a1 = await escenario.ExternoAsync(orgA, RolesAtlas.Integrador, extras: ["exportar"]);
+        var a2 = await escenario.ExternoAsync(orgA, RolesAtlas.Integrador, extras: ["exportar"]);
+        var b = await escenario.ExternoAsync(orgB, RolesAtlas.Integrador, extras: ["exportar"]);
+
+        var primera = await PostAsync(a1.Navegador, RutaPortal, new { paqueteId = paqueteA, formatos = new[] { "openapi" } });
+        var deColega = await PostAsync(a2.Navegador, RutaPortal, new { paqueteId = paqueteA, formatos = new[] { "openapi" } });
+        var deOtraOrganizacion = await PostAsync(b.Navegador, RutaPortal, new { paqueteId = paqueteB, formatos = new[] { "openapi" } });
+        // La tercera solicitud de la organización A en la ventana: la corta el límite de tasa, no el tope en curso.
+        var tercera = await PostAsync(a2.Navegador, RutaPortal, new { paqueteId = paqueteA, formatos = new[] { "openapi" } });
+        var cuarta = await PostAsync(a1.Navegador, RutaPortal, new { paqueteId = paqueteA, formatos = new[] { "openapi" } });
+
+        Assert.Equal(HttpStatusCode.Accepted, primera.StatusCode);
+        await AssertEnCursoAsync(deColega);
+        Assert.Equal(HttpStatusCode.Accepted, deOtraOrganizacion.StatusCode);
+        await AssertEnCursoAsync(tercera);
+        Assert.Equal(HttpStatusCode.TooManyRequests, cuarta.StatusCode);
+        Assert.Equal("limite_de_tasa", await CodigoAsync(cuarta));
+        Assert.True(cuarta.Headers.Contains("Retry-After"));
+    }
+
     // --- Portal (con las comparticiones reales de la HU 4.3 y el acceso del portal de la HU 4.4) ---
 
     /// <summary>Un paquete publicado y compartido con la organización A (con o sin exportar) y otro solo con B.</summary>
-    private async Task<(EscenarioPortal Escenario, Guid PaqueteA, Guid PaqueteB, Guid OrgA, Guid OrgB)> PortalAsync(bool exportar)
+    private async Task<(EscenarioPortal Escenario, Guid PaqueteA, Guid PaqueteB, Guid OrgA, Guid OrgB)> PortalAsync(
+        bool exportar, Dictionary<string, string>? configuracion = null)
     {
-        var escenario = new EscenarioPortal(entorno, contenedores.Configuracion(conBroker: false));
+        var escenario = new EscenarioPortal(entorno, contenedores.Configuracion(conBroker: false, configuracion));
         var (lider, _) = await escenario.EmpleadoAsync(RolesAtlas.LiderTecnico);
         var (_, slug) = await EscenarioPortal.AplicativoAsync(lider, "API Demo Exportaciones");
         var (contrato, version) = await escenario.PublicarAsync(slug, "api-exporta", EscenarioPortal.Spec("API Exporta Demo", "exporta", "Exporta"));

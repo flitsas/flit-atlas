@@ -74,7 +74,8 @@ internal static class ServicioExportaciones
     /// </summary>
     public static async Task<ExportacionContratos> CrearAsync(
         ContratosDbContext contexto, PlataformaDbContext plataforma, Plataforma.Almacenamiento.IAlmacenObjetos almacen,
-        ExportacionContratos borrador, EntradaExportacion entrada, ActorAuditoria actor, DateTimeOffset ahora, CancellationToken ct)
+        ExportacionContratos borrador, EntradaExportacion entrada, ActorAuditoria actor, DateTimeOffset ahora, CancellationToken ct,
+        TopeEnCurso? tope = null)
     {
         var bytes = entrada.AJson();
         await almacen.SubirAsync(borrador.EntradaClave, bytes, "application/json", ct).ConfigureAwait(false);
@@ -98,6 +99,17 @@ internal static class ServicioExportaciones
         contexto.Exportaciones.Add(exportacion);
 
         await using var transaccion = await contexto.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        if (tope is not null)
+        {
+            // Candado de la transacción por organización (o por persona, si es interna): dos solicitudes simultáneas se
+            // ordenan y la segunda ve la primera al contar. Se suelta solo al confirmar o deshacer.
+            await contexto.Database.ExecuteSqlAsync(
+                $"SELECT pg_advisory_xact_lock({ClaseCandadoEnCurso}, {ClaveCandado(tope.OrganizacionId ?? tope.PersonaId)})", ct).ConfigureAwait(false);
+            if (await ExcedeTopeAsync(contexto, tope, ct).ConfigureAwait(false) is { } porOrganizacion)
+            {
+                throw new ExportacionesEnCursoException(porOrganizacion);
+            }
+        }
         await contexto.SaveChangesAsync(ct).ConfigureAwait(false);
         plataforma.Database.SetDbConnection(contexto.Database.GetDbConnection());
         await plataforma.Database.UseTransactionAsync(transaccion.GetDbTransaction(), ct).ConfigureAwait(false);
@@ -123,6 +135,37 @@ internal static class ServicioExportaciones
         return exportacion;
     }
 
+    /// <summary>Primera clave de los candados de exportaciones en curso (<c>pg_advisory_xact_lock(int, int)</c>): «EXPC».</summary>
+    private const int ClaseCandadoEnCurso = 0x45585043;
+
+    private static int ClaveCandado(Guid id)
+    {
+        var bytes = id.ToByteArray();
+        return BitConverter.ToInt32(bytes, 0) ^ BitConverter.ToInt32(bytes, 4) ^ BitConverter.ToInt32(bytes, 8) ^ BitConverter.ToInt32(bytes, 12);
+    }
+
+    /// <summary>
+    /// Si la persona (o su organización externa) ya tiene el máximo de exportaciones pendientes o en proceso (HU 4.10,
+    /// ATLAS-ADR-0048): <c>false</c> si es por la persona, <c>true</c> si es por la organización; <c>null</c> si hay cupo.
+    /// El endpoint lo revisa antes de armar la entrada (para no subirla en vano) y <see cref="CrearAsync"/> otra vez con el
+    /// candado. Con RLS, un externo solo cuenta las de su organización.
+    /// </summary>
+    public static async Task<bool?> ExcedeTopeAsync(ContratosDbContext contexto, TopeEnCurso tope, CancellationToken ct)
+    {
+        var enCurso = contexto.Exportaciones.AsNoTracking()
+            .Where(e => e.Estado == EstadoExportacion.Pendiente || e.Estado == EstadoExportacion.Procesando);
+        if (await enCurso.CountAsync(e => e.SolicitadaPor == tope.PersonaId, ct).ConfigureAwait(false) >= tope.MaximoPersona)
+        {
+            return false;
+        }
+        if (tope.OrganizacionId is { } organizacion
+            && await enCurso.CountAsync(e => e.OrganizacionId == organizacion, ct).ConfigureAwait(false) >= tope.MaximoOrganizacion)
+        {
+            return true;
+        }
+        return null;
+    }
+
     /// <summary>Audita una descarga (qué archivo, su tamaño y el hash del contenido; nunca el contenido ni la URL firmada).</summary>
     public static async Task AuditarDescargaAsync(
         PlataformaDbContext plataforma, ActorAuditoria actor, DateTimeOffset ahora, ExportacionContratos exportacion, ArchivoExportado archivo, CancellationToken ct)
@@ -138,6 +181,9 @@ internal static class ServicioExportaciones
         }));
         await plataforma.SaveChangesAsync(ct).ConfigureAwait(false);
     }
+
+    /// <summary>Tope de exportaciones en curso de una solicitud: la persona y, si es externa, su organización.</summary>
+    public sealed record TopeEnCurso(Guid PersonaId, Guid? OrganizacionId, int MaximoPersona, int MaximoOrganizacion);
 
     /// <summary>Quién hace la acción, para la auditoría.</summary>
     public sealed record ActorAuditoria(TipoActor Tipo, string? Id, Guid? OrganizacionId, IPAddress? Ip, string? Correlacion);
@@ -174,4 +220,11 @@ internal static class ServicioExportaciones
         var i = ruta.LastIndexOf('/');
         return i >= 0 ? ruta[(i + 1)..] : ruta;
     }
+}
+
+/// <summary>La persona o su organización ya tiene el máximo de exportaciones en curso (HU 4.10).</summary>
+internal sealed class ExportacionesEnCursoException(bool porOrganizacion)
+    : Exception(porOrganizacion ? "La organización ya tiene el máximo de exportaciones en curso." : "La persona ya tiene el máximo de exportaciones en curso.")
+{
+    public bool PorOrganizacion { get; } = porOrganizacion;
 }

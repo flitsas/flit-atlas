@@ -337,7 +337,7 @@ public static class EndpointsTokens
             ArgumentNullException.ThrowIfNull(httpContext);
             var cabeceras = httpContext.Response.Headers;
             cabeceras.CacheControl = "no-store";
-            cabeceras["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+            cabeceras["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
             cabeceras["Referrer-Policy"] = "no-referrer";
             return Results.Content(html, "text/html; charset=utf-8").ExecuteAsync(httpContext);
         }

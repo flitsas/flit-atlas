@@ -64,6 +64,9 @@ if (comandoEmergencia)
 }
 
 app.UseForwardedHeaders();
+// Cabeceras de seguridad de cada respuesta (HU 4.10, ATLAS-ADR-0048): CSP, nosniff, Referrer-Policy, Permissions-Policy,
+// COOP, CORP y, fuera de local, HSTS.
+app.UseCabecerasSeguridad(ambiente);
 
 app.MapEndpointsDeSalud();
 app.UseAntifalsificacionApi();
