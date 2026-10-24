@@ -1,6 +1,6 @@
 # Estado del trabajo · Flit Atlas
 
-> **Corte:** 24/10/2026, noche (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
+> **Corte:** 24/10/2026, noche (actualizado al cierre) (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
 > Se actualiza al cerrar cada jornada. El prompt maestro (`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`) sigue
 > siendo la fuente que prevalece; aquí solo va **dónde quedamos** y **qué sigue**.
 
@@ -30,35 +30,38 @@
 `ATLAS_CARGA_K6`). Web: Vitest 218/218 en serie, bundle inicial ~176,5 KB gzip. atlas-docs: pytest en verde (el PDF corre en
 el contenedor con Pango y `ATLAS_DOCS_EXIGIR_PDF=1`). El CI del PR #31 sobre `9fbafee` estaba corriendo al cierre: revisarlo.
 
-## 2. Trabajo en curso al cierre (ola 4)
+## 2. Ola 4: lo que ya quedó listo
 
-Dos agentes quedaron trabajando. Si la sesión se cerró antes de que entregaran, **revisar si dejaron commit** y, si no,
-relanzar la tarea con el mismo encargo:
+1. **Limpieza de descripciones del contrato ICT**: integrada en `f4/portal-integracion` (`8078bad`). El generador
+   `atlas_docs.ict` falla si un texto de cara al cliente nombra piezas internas (`ict/lenguaje.py`); la procedencia va en
+   `x-flit-*` y en `contracts/ict/informe.md`. El **PR #698 de flit** ya tiene el contrato limpio (commit `90f24be`).
+   Pendiente menor: ¿renombrar `info.title` «FLIT Core ICT API»?
+2. **PR #76 de flit-gitops (borrador)**: https://github.com/flitsas/flit-gitops/pull/76, rama `atlas/qa-f4`, worktree
+   `D:/FLIT/Code/flit-gitops-atlas-f4` (el checkout principal de gitops sigue en la rama ajena `docs/flito-pdn-argocd`).
+   Trae atlas-docs (`replicas: 0` hasta sellar), MinIO propio `atlas-s3` (`replicas: 0`), NetworkPolicy, RabbitMQ con
+   permisos mínimos por servicio, roles de base (`docs/host-177/atlas-qa-roles-base.md`), scripts
+   `gen-atlas-qa-{migrador,rabbitmq,s3}.sh`, sitio nginx del S3 público y el runbook en `docs/atlas/`.
+   - **Decisión del líder pendiente:** QA no tenía S3 para Atlas. ¿MinIO propio en atlas-qa (lo que trae el PR), RustFS o
+     reutilizar el MinIO de filemanager-qa?
+   - **Marcadores `REEMPLAZAR`:** host público del S3 (`Plataforma__Almacenamiento__EndpointPublico`, `ATLAS_S3_PUBLICO`,
+     sitio nginx) y ClusterIP fija de `atlas-s3` (inmutable: decidir antes de integrar).
+   - Dudas a verificar: que `ghcr-pull` baje la imagen espejo de MinIO y que traiga `mc`/`sh`; el JWKS por HTTP interno
+     (OpenIddict exige HTTPS; solo afecta `POST /exportes`, la vía normal es la cola); medir memoria de atlas-docs.
+   - **No volver a correr** `servicio-con-esquema-propio.sql` para atlas: deshace la separación de roles.
 
-1. **Limpieza de descripciones del contrato ICT** (encargo del líder). Rama local `f4/ict-descripciones` (worktree en
-   `.claude/worktrees/`). El generador `services/docs/src/atlas_docs/ict` debe dejar las `description`/`summary` sin piezas
-   internas (`services/core-ict`, «Feature #…», nombres de clases y archivos `.cs`, rutas `contracts/` de flit, comandos);
-   la procedencia va a extensiones `x-flit-*` (la poda ya las quita) o a `contracts/ict/informe.md`. Regenerar con:
-   `uv run python -m atlas_docs.ict --excel "<ruta del Excel en docs/atlas/insumos>" --base-flit "<ruta del repo flit>"`.
-   Pruebas: pytest que recorre el spec y una prueba de poda del ICT real. Luego **actualizar el PR #698 de flit** con
-   `contracts/ict/propuesta-flit/core-ict.v1.yaml`.
-2. **PR en borrador a flit-gitops para QA** (rama `atlas/qa-f4`, worktree aparte en `D:\FLIT\Code\flit-gitops-atlas-f4`;
-   el checkout principal de gitops está en una rama ajena `docs/flito-pdn-argocd` y **no se toca**). Debe traer:
-   atlas-docs (Deployment, Service, NetworkPolicy, variables `ATLAS_DOCS_*`), `Atlas__Proxy__RedesConfiables`,
-   `Plataforma__Almacenamiento__*` con el host público del S3, `ATLAS_S3_PUBLICO` y `ATLAS_HSTS` en atlas-web, usuarios de
-   RabbitMQ por servicio, CORS y ciclo de vida del bucket, roles de base (SealedSecret `atlas-migrador-secrets` y SQL del
-   DBA), runbook copiado a gitops. Microcks **no** se despliega todavía.
+## 3. Orden para llevar la F4 a QA (detalle en el README de `services/atlas-qa` del PR #76)
 
-## 3. Orden para llevar la F4 a QA
-
-1. Integrar la limpieza del ICT en `f4/portal-integracion`, esperar el CI del PR #31 en verde y marcarlo **listo**.
-2. El líder integra el **PR #31** en `develop`.
-3. El DBA separa los roles de la base en QA (runbook §3): `flit_atlas_migrador` dueño del esquema; `flit_atlas` sin
-   propiedad, sin `BYPASSRLS`. **Sin esto `/health/ready` deja a atlas-api no lista.**
-4. Generar y sellar los secretos nuevos con los scripts `docs/host-177/gen-atlas-qa-*.sh` del PR de gitops.
-5. Integrar el **PR de gitops** (declara la imagen `atlas-docs`; sin él el CD de staging falla al fijar digests).
-6. Abrir y integrar el PR `develop → staging` de la F4. Verificar en QA: portal con una organización de prueba, una
-   exportación de punta a punta, cabeceras/CSP, límites de tasa.
+1. CI del PR #31 en verde → marcarlo **listo** → el líder lo integra en `develop`.
+2. **DBA:** pasos 1 a 5 de `docs/host-177/atlas-qa-roles-base.md` (incluye permisos puente para la versión actual y `pg_hba`).
+3. Crear la carpeta del S3 en la 177 (`/opt/atlas-qa/s3`), el host público del S3 (DNS, certificado, sitio nginx) y la
+   ClusterIP fija; reemplazar los `REEMPLAZAR`.
+4. **Sellar** con los tres scripts, agregar los archivos a `resources` y poner `replicas: 1` en atlas-docs y atlas-s3, en
+   el mismo PR #76.
+5. Integrar el **PR #76** (reinicia RabbitMQ y atlas-api con la versión actual).
+6. Abrir e integrar el PR `develop → staging` de la F4: el CD fija los cuatro digests y el migrador concede permisos.
+   **Si la F4 llega a staging antes del paso 2, atlas-api queda no lista y QA se queda sin API.**
+7. PR de cierre en gitops: quitar el `envFrom` de `atlas-api-secrets` del migrador y la HSTS del sitio del host.
+8. Verificar en QA: portal con una organización de prueba, una exportación de punta a punta, cabeceras/CSP, límites.
 
 **Ojo:** atlas-api ya **no arranca** en qa/pdn sin `Atlas__Proxy__RedesConfiables` (F4-SEC-13). Verificar también que el
 nginx del host reemplace `X-Forwarded-For` en vez de encadenarlo.
@@ -105,7 +108,7 @@ nginx del host reemplace `X-Forwarded-For` en vez de encadenarlo.
 1. Leer el prompt maestro y este archivo.
 2. `git fetch && git checkout f4/portal-integracion && git pull`.
 3. `gh pr view 31` y `gh pr checks 31`; `gh pr list -R flitsas/flit-gitops --author @me`.
-4. Revisar las ramas locales `f4/ict-descripciones` y, en gitops, `atlas/qa-f4` (sección 2).
+4. `gh pr view 76 -R flitsas/flit-gitops` y `gh pr view 698 -R flitsas/flit` (sección 2).
 5. Seguir la sección 3.
 
 Notas operativas:
