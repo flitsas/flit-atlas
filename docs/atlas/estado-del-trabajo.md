@@ -112,7 +112,7 @@ nginx del host reemplace `X-Forwarded-For` en vez de encadenarlo.
 5. Seguir la sección 3.
 
 Notas operativas:
-- El hook de pre-commit exige gitleaks en el PATH con formato `/c/...` (no `C:/` ni `$TEMP`).
+- El hook de pre-commit exige gitleaks en el PATH en formato POSIX: `PATH="/d/FLIT/tmp/gl-bin:$PATH" git commit -F <archivo>` (no `C:/` ni `$TEMP`).
 - No correr la suite .NET y Vitest al mismo tiempo; Vitest falla por tiempo con la máquina cargada
   (`vitest run --no-file-parallelism` es estable).
 - El E2E corre contra `ATLAS_API_URL=http://localhost:1 pnpm exec vite preview --port <n> --strictPort` con `ATLAS_E2E_URL`;
