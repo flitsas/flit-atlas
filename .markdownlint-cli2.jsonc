@@ -9,6 +9,7 @@
     "MD060": false           // alineación de columnas de tablas
   },
   "globs": ["**/*.md"],
-  // docs/atlas/ son documentos importados (planes, prompts, insumos); se mantienen como llegaron.
-  "ignores": ["**/node_modules/**", "**/.venv/**", "docs/atlas/**"]
+  // docs/atlas/ son documentos importados (planes, prompts, insumos); se mantienen como llegaron. Los .md de
+  // services/api/tests/**/Datos/ son copias ficticias de esos insumos con su mismo formato (los importadores las leen).
+  "ignores": ["**/node_modules/**", "**/.venv/**", "docs/atlas/**", "services/api/tests/**/Datos/**"]
 }
