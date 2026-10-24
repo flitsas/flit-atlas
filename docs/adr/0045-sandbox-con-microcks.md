@@ -178,8 +178,8 @@ servicio, por SealedSecret), `Intervalo`, `TrabajoHabilitado`, `CuerpoMaximoKiB`
 
 ### Negativas
 
-- El tráfico del sandbox pasa por atlas-api (carga, aunque los mocks son livianos). El límite de tasa por organización
-  llega con la HU 4.10.
+- El tráfico del sandbox pasa por atlas-api (carga, aunque los mocks son livianos). El límite de tasa del proxy llegó con
+  la HU 4.10 (ATLAS-ADR-0048): 60 por minuto por llave y 120 por IP, con 429 y `Retry-After`.
 - La llave va en `Authorization`: en el sandbox el cliente la usa en lugar de su token real (Microcks no valida el suyo).
 - La importación es síncrona en la petición de activar (menos de 1 s por contrato en las pruebas); con paquetes grandes
   habría que pasarla a la cola (§5.1).
@@ -214,5 +214,5 @@ Lo que el líder debe desplegar en la 177 (manifiestos en `flit-gitops`, no en e
 Pendientes **[por verificar con el líder]**: el host público del sandbox por ambiente; si el sandbox va a pdn (el plan
 lo deja solo en la 177 al inicio, §15); si regenerar la llave debe pedir reautenticación (§6.3; hoy no la pide); si un
 contrato nuevo en una revisión debe entrar solo al sandbox o exigir que alguien lo vuelva a activar (hoy, lo segundo);
-el límite de tasa del proxy (HU 4.10); y si conviene la imagen no «uber» de Microcks (con MongoDB persistente) cuando
+y si conviene la imagen no «uber» de Microcks (con MongoDB persistente) cuando
 haya clientes.

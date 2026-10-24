@@ -28,6 +28,15 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    private static readonly Dictionary<string, string> SinLimitesDeTasa = new()
+    {
+        [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:PorExterno"] = "100000",
+        [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:PorEmpleado"] = "100000",
+        [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:PortalPorOrganizacion"] = "100000",
+        [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:ExportacionesPorPersona"] = "100000",
+        [$"{Identidad.Seguridad.OpcionesLimiteTasa.Seccion}:ExportacionesPorOrganizacion"] = "100000",
+    };
+
     /// <summary>Lo que se le puede pedir al portal de un paquete: el paquete, uno de sus contratos y una de sus guías.</summary>
     private sealed record Recursos(Guid Paquete, Guid Contrato, Guid Guia, IReadOnlyList<string> Marcas);
 
@@ -156,7 +165,9 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
     public async Task Nadie_obtiene_del_portal_datos_de_otra_organizacion_ni_fuera_de_su_alcance_ni_tras_revocar_o_vencer()
     {
         // El sandbox con un Microcks en memoria: lo que se prueba aquí es el aislamiento (SandboxMicrocksTests prueba los mocks).
-        await using var escenario = new EscenarioPortal(entorno, servicios: s => s.Replace(ServiceDescriptor.Singleton<IClienteMicrocks, MicrocksEnMemoria>()));
+        // Esta prueba recorre cada endpoint con cada persona muchas veces: sin los límites de tasa por persona y por
+        // organización (ATLAS-ADR-0048), que prueba EndurecimientoTests.
+        await using var escenario = new EscenarioPortal(entorno, SinLimitesDeTasa, servicios: s => s.Replace(ServiceDescriptor.Singleton<IClienteMicrocks, MicrocksEnMemoria>()));
         var (lider, _) = await escenario.EmpleadoAsync(RolesAtlas.LiderTecnico);
         var (aplicativoA, slugA) = await AplicativoAsync(lider, "Aplicativo Alfa Demo");
         var (aplicativoB, slugB) = await AplicativoAsync(lider, "Aplicativo Exclusivo Demo");
@@ -269,7 +280,7 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
     [Fact]
     public async Task Los_proveedores_de_la_busqueda_global_no_devuelven_nada_de_otra_organizacion_a_un_externo()
     {
-        await using var escenario = new EscenarioPortal(entorno);
+        await using var escenario = new EscenarioPortal(entorno, SinLimitesDeTasa);
         var (lider, _) = await escenario.EmpleadoAsync(RolesAtlas.LiderTecnico);
         var (_, slug) = await AplicativoAsync(lider, "Aplicativo Exclusivo Busqueda");
         var (contrato, version) = await escenario.PublicarAsync(slug, "api-exclusiva-busqueda", Spec("API Exclusiva Busqueda", "exclusivabusqueda", "ExclusivaBusqueda"));

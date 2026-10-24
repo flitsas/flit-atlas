@@ -48,7 +48,7 @@ export async function vigilarCsp(page: Page): Promise<string[]> {
   await page.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', (e) => {
       const tipo = e.disposition === 'report' ? ' (report)' : '';
-      console.error(`Content-Security-Policy${tipo}: ${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`);
+      console.error(`Content-Security-Policy${tipo}: ${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}:${e.columnNumber}`);
     });
   });
   return violaciones;

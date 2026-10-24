@@ -60,6 +60,9 @@ public class AutorizacionTests(EntornoApi entorno)
         "POST /api/v1/identidad/emergencia/passkey/opciones",
         "POST /api/v1/identidad/emergencia/totp/clave",
         "POST /api/v1/identidad/emergencia/activar",
+        // HU 4.10 (ATLAS-ADR-0048): informes de violaciones de la CSP, que manda el navegador sin cookie ni cabecera propia;
+        // solo escriben en el log, con tope de cuerpo y límites de tasa por IP y en total.
+        "POST /api/v1/plataforma/csp-reportes",
         // HU 2.10 (ATLAS-ADR-0033): feed .ics suscrito desde Outlook, Google Calendar o el teléfono, que no tienen la cookie.
         // Se autentica con el token de 256 bits de la URL (guardado como hash, revocable y regenerable); solo vale si la
         // persona que lo creó sigue activa y con atlas.soporte.ver; no trae correos ni teléfonos. Un token malo es 404.

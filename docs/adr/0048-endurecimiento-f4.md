@@ -204,4 +204,8 @@ externos. Contra qa, las sesiones van por variables de entorno (README).
 - [por verificar] En flit-gitops: `ATLAS_S3_PUBLICO` en el ConfigMap de atlas-web y CORS `GET` del bucket desde el origen
   de Atlas; que el nginx del host **reemplace** `X-Forwarded-For` (no lo encadene con el del cliente), para que la IP de
   los límites no se pueda falsear.
-- [por verificar] La ruta exacta del proxy del sandbox cuando la HU 4.7 se integre (hoy `/api/v1/contratos/sandbox/**`).
+- [por verificar] En Safari real: el WebKit de Playwright informa `style-src-attr inline` al crear el `<input readOnly>` del
+  feed `.ics` (`/soporte/microsoft-365`, pila en el `createElement` de React; la PWA no pone estilos en línea). La prueba
+  lo anota en el perfil iPhone en lugar de fallar.
+- El proxy del sandbox de la HU 4.7 (ATLAS-ADR-0045) vive en `/api/v1/contratos/sandbox/{ruta}/{contrato}/{**resto}`: lo
+  cubren `SandboxPorLlave` y `SandboxPorIp` (verificado al integrar).

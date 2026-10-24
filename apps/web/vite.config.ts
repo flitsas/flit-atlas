@@ -82,13 +82,14 @@ export const MANIFIESTO: Partial<ManifestOptions> = {
 /**
  * Cabeceras de seguridad de la imagen nginx (`deploy/`), leídas de los mismos archivos, para que `vite preview` (E2E)
  * sirva la PWA y el visor con su CSP y las pruebas vean las mismas violaciones que en qa (HU 4.10, ATLAS-ADR-0048). Las
- * variables de nginx toman su valor de local: sin HSTS ni S3 público; el visor, con los hosts por defecto de la imagen.
+ * variables de nginx toman su valor de local: sin HSTS; el S3 de las pruebas; el visor, con los hosts por defecto de la imagen.
  */
 function cabecerasDeNginx(): (ruta: string) => [string, string][] {
   const leer = (archivo: string) => readFileSync(fileURLToPath(new URL(`./deploy/${archivo}`, import.meta.url)), 'utf8');
   const variables: Record<string, string> = {
     $atlas_hsts: '',
-    $atlas_s3_publico: '',
+    // El S3 ficticio de las pruebas E2E (compartir el archivo exportado, HU 4.6); en la imagen sale de ATLAS_S3_PUBLICO.
+    $atlas_s3_publico: process.env.ATLAS_S3_PUBLICO ?? 'https://s3.ejemplo.com',
     '${ATLAS_VISOR_CONEXIONES}': 'https://*.qa.flitsas.online https://*.qa.flitsas.com',
   };
   const cabeceras = (texto: string): [string, string][] =>
