@@ -10,6 +10,7 @@
     <Project Path="services/api/src/Flit.Atlas.Identidad/Flit.Atlas.Identidad.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Migrador/Flit.Atlas.Migrador.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Modulos.Catalogo/Flit.Atlas.Modulos.Catalogo.csproj" />
+    <Project Path="services/api/src/Flit.Atlas.Modulos.Contratos/Flit.Atlas.Modulos.Contratos.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Modulos.Equipo/Flit.Atlas.Modulos.Equipo.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Modulos.Hola/Flit.Atlas.Modulos.Hola.csproj" />
     <Project Path="services/api/src/Flit.Atlas.Modulos.Soporte/Flit.Atlas.Modulos.Soporte.csproj" />
@@ -19,6 +20,7 @@
   <Folder Name="/services/api/tests/">
     <Project Path="services/api/tests/Flit.Atlas.Api.Tests/Flit.Atlas.Api.Tests.csproj" />
     <Project Path="services/api/tests/Flit.Atlas.Modulos.Catalogo.Tests/Flit.Atlas.Modulos.Catalogo.Tests.csproj" />
+    <Project Path="services/api/tests/Flit.Atlas.Modulos.Contratos.Tests/Flit.Atlas.Modulos.Contratos.Tests.csproj" />
     <Project Path="services/api/tests/Flit.Atlas.Modulos.Equipo.Tests/Flit.Atlas.Modulos.Equipo.Tests.csproj" />
     <Project Path="services/api/tests/Flit.Atlas.Modulos.Hola.Tests/Flit.Atlas.Modulos.Hola.Tests.csproj" />
     <Project Path="services/api/tests/Flit.Atlas.Modulos.Soporte.Tests/Flit.Atlas.Modulos.Soporte.Tests.csproj" />

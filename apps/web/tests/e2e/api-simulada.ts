@@ -164,6 +164,147 @@ const REF_FLITO = { id: 'a6', slug: 'flito', nombre: 'FLITO', tipo: 'producto' }
 const PRINCIPAL_FLITO = responsableSimulado('r5', 'principal', { ...PERSONA_CORTA, id: 'p9', nombre: 'Principal De Flito Demo', telefono: TELEFONO_FICTICIO });
 const SECUNDARIO_FLITO = responsableSimulado('r6', 'secundario', { ...PERSONA_CORTA, id: 'p10', nombre: 'Secundaria De Flito Demo' });
 
+/** Una versión de contrato ficticia (HU 3.2): repos y workflows `flitsas-demo`. */
+function versionSimulada(version: string, estable: boolean, publicadoEn: string) {
+  const rama = estable ? 'release' : 'develop';
+  return {
+    id: `v-${version}`, version, esEstable: estable, sha256: 'a'.repeat(64), formato: 'yaml', tamano: 1200,
+    repositorio: 'flitsas-demo/api-demo-con-un-nombre-de-repositorio-largo', rama,
+    commit: '0123456789abcdef0123456789abcdef01234567', workflow: '.github/workflows/ci.yml',
+    workflowDelJob: 'flitsas-demo/plantillas/.github/workflows/atlas-publicar.yml@refs/tags/v1', ejecucion: '1234567890',
+    publicadoPor: `github:flitsas-demo/api-demo@${rama}`, publicadoEn, tieneBreaking: !estable, estado: 'vigente', retiroEn: null,
+  };
+}
+
+const VERSIONES_CONTRATO = [versionSimulada('1.3.0-dev.a1b2c3d', false, '2026-10-23T16:00:00Z'), versionSimulada('1.2.0', true, '2026-10-23T15:00:00Z')];
+
+const CONTRATOS = [
+  {
+    id: 'c1', codigo: 'api-externa', nombre: 'API Externa Demo de Trámites con un nombre largo', descripcion: 'Contrato ficticio de prueba.',
+    tipo: 'openapi', visibilidad: 'interna', aplicativo: { id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0' },
+    repositorio: 'flitsas-demo/api-demo', versiones: 2, ultimaVersion: VERSIONES_CONTRATO[0], ultimaEstable: VERSIONES_CONTRATO[1],
+  },
+  {
+    id: 'c2', codigo: 'eventos', nombre: 'Eventos Demo', descripcion: null, tipo: 'asyncapi', visibilidad: 'interna',
+    aplicativo: { id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0' }, repositorio: 'flitsas-demo/api-demo', versiones: 1,
+    ultimaVersion: VERSIONES_CONTRATO[1], ultimaEstable: VERSIONES_CONTRATO[1],
+  },
+];
+
+// Guías del contrato c1 (HU 3.7): el cuerpo trae HTML y un enlace javascript: que la PWA no debe interpretar.
+const AUTORA_GUIA = { id: 'p1', nombre: 'Persona Demo con un nombre bastante largo' };
+const revisionGuia = (numero: number, contenido: string) => ({
+  numero, origen: numero === 1 ? 'creacion' : 'edicion', restauradaDe: null, titulo: 'Cómo autenticarse en la API Externa Demo de Trámites',
+  contenido, operacion: 'GET /tramites/{id}', aplicaDesde: '1.0.0', aplicaHasta: null, visibilidad: 'compartible',
+  nota: numero === 1 ? 'Primera versión.' : 'Renovación del token.', autor: AUTORA_GUIA, guardadaEn: '2026-10-23T15:00:00Z',
+  huella: String(numero).repeat(64), publicada: false,
+});
+const CUERPO_GUIA =
+  '# Autenticación\n\nPide un token y envíalo como `Authorization: Bearer $TOKEN`.\n\n<script>alert(1)</script>\n\n[enlace malo](javascript:alert(2))\n\n' +
+  '| Campo | Descripción |\n|---|---|\n| token | Vence en una hora |\n\n```bash\ncurl -H "Authorization: Bearer $TOKEN" https://qa.ejemplo.com/api/v1/tramites/123\n```\n';
+const REVISIONES_GUIA = [revisionGuia(2, CUERPO_GUIA), revisionGuia(1, '# Autenticación\n\nPide un token.\n')];
+const GUIA = {
+  id: 'g1', contratoId: 'c1', titulo: REVISIONES_GUIA[0]!.titulo, operacion: 'GET /tramites/{id}', aplicaDesde: '1.0.0', aplicaHasta: null,
+  visibilidad: 'compartible', estado: 'borrador', revisionActual: 2, revisionPublicada: null, publicadaEn: null, publicadaPor: null,
+  aprobadaPor: null, actualizadaEn: '2026-10-23T15:00:00Z',
+};
+
+/** Consolidado ficticio por ambiente (HU 3.4): un contrato con desfase y breaking pendientes, otro al día. */
+const CONSOLIDADO_CONTRATOS = [
+  {
+    id: 'c1', codigo: 'api-externa', nombre: CONTRATOS[0]!.nombre, tipo: 'openapi', aplicativo: CONTRATOS[0]!.aplicativo,
+    canales: [
+      { ambiente: 'dev', version: '1.3.0-dev.a1b2c3d', esEstable: false, desplegadoEn: '2026-10-23T16:00:00Z' },
+      { ambiente: 'qa', version: '1.3.0-rc.a1b2c3d', esEstable: false, desplegadoEn: '2026-10-23T17:00:00Z' },
+      { ambiente: 'pdn', version: '1.2.0', esEstable: true, desplegadoEn: '2026-10-01T15:00:00Z' },
+    ],
+    desfases: [{ ambiente: 'qa', respectoDe: 'pdn', tipo: 'adelante', mensaje: 'qa (1.3.0-rc.a1b2c3d) va adelante de pdn (1.2.0)' }],
+    breakingPendientes: {
+      desde: '1.2.0', hasta: '1.3.0-rc.a1b2c3d', estado: 'con_breaking', fuente: 'changelog',
+      cambios: [
+        { regla: 'api-removed-without-deprecation', texto: 'Se quitó la operación sin deprecarla', metodo: 'GET', ruta: '/api/v1/tramites-demo/{id}/adjuntos-con-una-ruta-larga' },
+        { regla: 'request-property-became-required', texto: 'La propiedad «placa» del cuerpo pasó a ser obligatoria', metodo: 'POST', ruta: '/api/v1/tramites-demo' },
+      ],
+    },
+  },
+  {
+    id: 'c2', codigo: 'eventos', nombre: 'Eventos Demo', tipo: 'asyncapi', aplicativo: CONTRATOS[1]!.aplicativo,
+    canales: [
+      { ambiente: 'dev', version: null, esEstable: null, desplegadoEn: null },
+      { ambiente: 'qa', version: '1.2.0', esEstable: true, desplegadoEn: '2026-10-20T15:00:00Z' },
+      { ambiente: 'pdn', version: '1.2.0', esEstable: true, desplegadoEn: '2026-10-20T16:00:00Z' },
+    ],
+    desfases: [],
+    breakingPendientes: null,
+  },
+];
+
+/**
+ * HU 3.6 y 3.9: el contrato real de ICT de FLIT 2 enriquecido con el Excel (`contracts/ict/core-ict.enriquecido.v1.yaml`,
+ * ATLAS-ADR-0037), con dos versiones, su diff y sus canales (HU 3.4).
+ */
+const VERSIONES_ICT = [
+  { ...versionSimulada('3.0.0', true, '2026-10-20T15:00:00Z'), tieneBreaking: true },
+  versionSimulada('2.9.0', true, '2026-09-01T15:00:00Z'),
+];
+const CONTRATO_ICT = {
+  id: 'c3', codigo: 'core-ict', nombre: 'API de ICT · Integración con Terceros (core-ict)', descripcion: null, tipo: 'openapi',
+  visibilidad: 'compartible', aplicativo: { id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0' }, repositorio: 'flitsas-demo/flit',
+  versiones: 2, ultimaVersion: VERSIONES_ICT[0], ultimaEstable: VERSIONES_ICT[0],
+};
+const DIFF_ICT = {
+  contratoId: 'c3', desde: '2.9.0', hasta: '3.0.0', motor: 'oasdiff v1.33.0', sinDiferencias: false, changelog: '', desdeCache: true,
+  resumen: { total: 2, errores: 1, advertencias: 0, informativos: 1, breaking: 1, hayBreaking: true },
+  cambios: [
+    { regla: 'api-path-removed-without-deprecation', nivel: 'error', breaking: true, texto: 'Se quitó la ruta /api/v1/ict/antigua sin deprecarla', comentario: null, metodo: 'GET', ruta: '/api/v1/ict/antigua', operationId: null, seccion: 'paths' },
+    { regla: 'endpoint-added', nivel: 'info', breaking: false, texto: 'Se agregó la ruta de reproceso', comentario: null, metodo: 'POST', ruta: '/api/v1/ict/reprocess/{id}', operationId: null, seccion: 'paths' },
+  ],
+};
+/** Canales ficticios de c3 (HU 3.4): la 3.0.0 en pdn y en qa, nada en dev. */
+const CANALES_ICT = {
+  ambientes: ['dev', 'qa', 'pdn'],
+  canales: [
+    { ambiente: 'qa', versionId: 'v-3.0.0', version: '3.0.0', esEstable: true, desplegadoEn: '2026-10-20T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@staging', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '11' },
+    { ambiente: 'pdn', versionId: 'v-3.0.0', version: '3.0.0', esEstable: true, desplegadoEn: '2026-10-21T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@release', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '12' },
+  ],
+  historial: [
+    { ambiente: 'pdn', version: '3.0.0', versionAnterior: '2.9.0', desplegadoEn: '2026-10-21T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@release', repositorio: 'flitsas-demo/flit', rama: 'release', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '12' },
+    { ambiente: 'qa', version: '3.0.0', versionAnterior: '2.9.0', desplegadoEn: '2026-10-20T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@staging', repositorio: 'flitsas-demo/flit', rama: 'staging', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '11' },
+  ],
+};
+const OPENAPI_SIMULADO = `openapi: 3.1.0
+info: { title: API Demo, version: 1.3.0-dev.a1b2c3d }
+paths:
+  /tramites/{id}:
+    get:
+      summary: Obtener un trámite
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: El trámite. }, '404': { description: No existe. } }
+`;
+const ASYNCAPI_SIMULADO = `asyncapi: 3.0.0
+info: { title: Eventos Demo, version: 1.2.0 }
+channels:
+  radicados:
+    address: tramites.radicado.con.una.direccion.de.canal.larga
+    messages:
+      radicado: { $ref: '#/components/messages/Radicado' }
+operations:
+  publicarRadicado:
+    action: send
+    summary: Se radicó un trámite.
+    channel: { $ref: '#/channels/radicados' }
+components:
+  messages:
+    Radicado:
+      name: TramiteRadicado
+      payload:
+        type: object
+        required: [id]
+        properties:
+          id: { type: string, description: Id del trámite }
+          organismo: { type: string, description: Organismo Demo que lo radicó }
+`;
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
@@ -219,6 +360,43 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         const grupo = url.searchParams.get('grupo');
         const elementos = aplicativos.filter((a) => !grupo || a.grupo === grupo);
         return json(route, { total: elementos.length, elementos });
+      }
+      // Contratos (HU 3.2).
+      case '/api/v1/contratos': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        const tipo = url.searchParams.get('tipo');
+        const elementos = CONTRATOS.filter((c) => !tipo || c.tipo === tipo);
+        return json(route, { total: elementos.length, elementos });
+      }
+      case '/api/v1/contratos/consolidado': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        const tipo = url.searchParams.get('tipo');
+        const soloDesfases = url.searchParams.get('desfases') === 'true';
+        const elementos = CONSOLIDADO_CONTRATOS.filter((c) => (!tipo || c.tipo === tipo) && (!soloDesfases || c.desfases.length > 0));
+        return json(route, {
+          ambientes: ['dev', 'qa', 'pdn'], total: elementos.length,
+          conDesfases: elementos.filter((c) => c.desfases.length > 0).length,
+          conBreaking: elementos.filter((c) => c.breakingPendientes?.estado === 'con_breaking').length,
+          elementos,
+        });
+      }
+      case '/api/v1/contratos/c1/versiones':
+      case '/api/v1/contratos/c2/versiones':
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        return json(route, url.pathname.includes('/c1/') ? VERSIONES_CONTRATO : [VERSIONES_CONTRATO[1]]);
+      // Guías (HU 3.7): quien edita, sin ser responsable (no aprueba lo compartible).
+      case '/api/v1/contratos/c1/guias':
+      case '/api/v1/contratos/guias/g1':
+      case '/api/v1/contratos/guias/g1/revisiones':
+      case '/api/v1/contratos/guias/g1/revisiones/1':
+      case '/api/v1/contratos/guias/g1/revisiones/2': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        const edita = opciones.permisos.includes('atlas.contratos.guias.editar');
+        if (url.pathname.endsWith('/c1/guias')) return json(route, { contratoId: 'c1', puedeEditar: edita, puedeAprobar: false, elementos: [GUIA] });
+        if (url.pathname.endsWith('/revisiones')) return json(route, REVISIONES_GUIA);
+        if (url.pathname.endsWith('/revisiones/1')) return json(route, REVISIONES_GUIA[1]);
+        if (url.pathname.endsWith('/revisiones/2')) return json(route, REVISIONES_GUIA[0]);
+        return json(route, { guia: GUIA, revision: REVISIONES_GUIA[0], puedeEditar: edita, puedeAprobar: false });
       }
       // Responsables (HU 2.3 a 2.5).
       case '/api/v1/equipo/responsabilidades':
@@ -459,6 +637,22 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
           }, 201);
         return json(route, [{ id: 'f0', tipo: 'equipo', equipo: { id: 'e2', nombre: 'Operaciones' }, creadoEn: '2026-10-22T15:00:00Z', ultimoUsoEn: '2026-10-23T10:00:00Z' }]);
       default: {
+        // Pantalla del contrato (HU 3.6 y 3.9): c3 es el contrato real de ICT (saneado) y c2 un AsyncAPI ficticio.
+        const deContrato = /^\/api\/v1\/contratos\/(c[123])(\/.*)?$/.exec(url.pathname);
+        if (deContrato) {
+          if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+          const [, id, resto = ''] = deContrato;
+          const contrato = id === 'c3' ? CONTRATO_ICT : CONTRATOS.find((c) => c.id === id)!;
+          if (resto === '') return json(route, contrato);
+          if (resto === '/versiones') return json(route, id === 'c3' ? VERSIONES_ICT : id === 'c1' ? VERSIONES_CONTRATO : [VERSIONES_CONTRATO[1]]);
+          if (resto.endsWith('/operaciones')) return json(route, []);
+          if (resto.endsWith('/spec')) {
+            const texto = id === 'c3' ? readFileSync(resolve(RAIZ, 'contracts/ict/core-ict.enriquecido.v1.yaml'), 'utf8') : id === 'c2' ? ASYNCAPI_SIMULADO : OPENAPI_SIMULADO;
+            return route.fulfill({ status: 200, contentType: 'application/yaml', body: texto });
+          }
+          if (resto === '/diff') return json(route, DIFF_ICT);
+          if (resto === '/canales') return json(route, CANALES_ICT);
+        }
         const ficha = /^\/api\/v1\/catalogo\/aplicativos\/([a-z0-9-]+)$/.exec(url.pathname);
         const aplicativo = ficha && aplicativos.find((a) => a.slug === ficha[1]);
         if (aplicativo) {

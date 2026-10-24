@@ -29,6 +29,9 @@ public class ModuloSoporteTests(EntornoApi entorno)
     private static DateOnly Hoy => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Bogota).DateTime);
 
     /// <summary>El primer sábado después de hoy.</summary>
+    /// <summary>El sábado que muestra «Soporte de este sábado»: hoy si es sábado, si no el siguiente.</summary>
+    private static DateOnly EsteSabado => Hoy.AddDays(((int)DayOfWeek.Saturday - (int)Hoy.DayOfWeek + 7) % 7);
+
     private static DateOnly ProximoSabado
     {
         get
@@ -264,21 +267,21 @@ public class ModuloSoporteTests(EntornoApi entorno)
         await AgregarParticipantesAsync(e.Lider, Desarrollo, personas.Take(2));
         await AgregarParticipantesAsync(e.Lider, Operaciones, personas);
 
-        var noSabado = await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Desarrollo, fecha = ProximoSabado.AddDays(1), personaId = personas[0] });
+        var noSabado = await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Desarrollo, fecha = EsteSabado.AddDays(1), personaId = personas[0] });
         Assert.Equal(HttpStatusCode.BadRequest, noSabado.StatusCode);
         var creado = await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos",
-            new { equipoId = Desarrollo, fecha = ProximoSabado, personaId = personas[0], horaInicio = "09:00", horaFin = "13:00" });
+            new { equipoId = Desarrollo, fecha = EsteSabado, personaId = personas[0], horaInicio = "09:00", horaFin = "13:00" });
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var turno = await JsonAsync(creado);
         Assert.Equal("manual", turno.GetProperty("origen").GetString());
         Assert.Equal("09:00", turno.GetProperty("horaInicio").GetString());
         // Desarrollo TI admite una persona por sábado; Operaciones, dos.
-        var completo = await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Desarrollo, fecha = ProximoSabado, personaId = personas[1] });
+        var completo = await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Desarrollo, fecha = EsteSabado, personaId = personas[1] });
         Assert.Equal(HttpStatusCode.Conflict, completo.StatusCode);
         Assert.Equal("equipo_completo", (await JsonAsync(completo)).GetProperty("error").GetString());
-        Assert.Equal(HttpStatusCode.Created, (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Operaciones, fecha = ProximoSabado, personaId = personas[1] })).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Operaciones, fecha = ProximoSabado, personaId = personas[2] })).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Operaciones, fecha = ProximoSabado, personaId = personas[0] })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Operaciones, fecha = EsteSabado, personaId = personas[1] })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Operaciones, fecha = EsteSabado, personaId = personas[2] })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Enviar(e.Lider, HttpMethod.Post, "/api/v1/soporte/turnos", new { equipoId = Operaciones, fecha = EsteSabado, personaId = personas[0] })).StatusCode);
 
         var reemplazo = await Enviar(e.Lider, HttpMethod.Post, $"/api/v1/soporte/turnos/{turno.GetProperty("id").GetGuid()}/reemplazo", new { personaId = personas[1] });
         Assert.Equal(HttpStatusCode.Created, reemplazo.StatusCode);
@@ -290,14 +293,14 @@ public class ModuloSoporteTests(EntornoApi entorno)
         using var lector = await EmpleadoAsync(e.Api);
         var paraLider = await JsonAsync(await e.Lider.GetAsync("/api/v1/soporte/este-sabado"));
         var paraLector = await JsonAsync(await lector.GetAsync("/api/v1/soporte/este-sabado"));
-        Assert.Equal(Iso(ProximoSabado), paraLector.GetProperty("fecha").GetString());
+        Assert.Equal(Iso(EsteSabado), paraLector.GetProperty("fecha").GetString());
         var equipos = paraLector.GetProperty("equipos").EnumerateArray().ToDictionary(q => q.GetProperty("equipo").GetProperty("nombre").GetString()!);
         Assert.Equal([personas[1]], equipos["Desarrollo TI"].GetProperty("turnos").EnumerateArray().Select(t => t.GetProperty("persona").GetProperty("id").GetGuid()));
         Assert.Equal(2, equipos["Operaciones"].GetProperty("turnos").GetArrayLength());
         Assert.Equal(JsonValueKind.Null, equipos["Operaciones"].GetProperty("turnos")[0].GetProperty("persona").GetProperty("telefono").ValueKind);
         Assert.Equal("3000000000", paraLider.GetProperty("equipos")[0].GetProperty("turnos")[0].GetProperty("persona").GetProperty("telefono").GetString());
 
-        var indicadores = await JsonAsync(await e.Lider.GetAsync($"/api/v1/soporte/indicadores?desde={Iso(ProximoSabado)}&hasta={Iso(ProximoSabado)}&equipo={Desarrollo}"));
+        var indicadores = await JsonAsync(await e.Lider.GetAsync($"/api/v1/soporte/indicadores?desde={Iso(EsteSabado)}&hasta={Iso(EsteSabado)}&equipo={Desarrollo}"));
         Assert.Equal(1, indicadores.GetProperty("turnos").GetInt32());
         Assert.Equal(1, indicadores.GetProperty("reemplazos").GetInt32());
 

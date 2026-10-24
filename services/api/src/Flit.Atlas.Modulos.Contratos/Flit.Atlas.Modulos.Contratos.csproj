@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Flit.Atlas.Modulos.Contratos</RootNamespace>
+    <!-- Las migraciones generadas por EF no siguen todas las reglas de análisis. -->
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!-- Validación e índice de OpenAPI 3.x (JSON y YAML) y lectura del YAML de AsyncAPI (ATLAS-ADR-0035). -->
+    <PackageReference Include="Microsoft.OpenApi.YamlReader" />
+    <!-- Parser de .proto (ATLAS-ADR-0035). -->
+    <PackageReference Include="protobuf-net.Reflection" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Un módulo solo depende del núcleo (ATLAS-ADR-0016): nunca de otro módulo ni de Identidad. Lo verifica
+         ArquitecturaModulosTests. -->
+    <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Atlas.Modulos.Contratos.Tests" />
+    <InternalsVisibleTo Include="Flit.Atlas.Api.Tests" />
+  </ItemGroup>
+</Project>

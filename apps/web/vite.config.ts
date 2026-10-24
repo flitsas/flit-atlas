@@ -117,6 +117,11 @@ export default defineConfig(({ command, mode }) => {
         ? Object.fromEntries(RUTAS_DE_LA_API.map((ruta) => [ruta, { target: api, changeOrigin: false, ws: true, xfwd: true }]))
         : undefined,
     },
+    // `vite preview` (E2E): el visor de contratos corre con origen opaco (iframe con sandbox, ATLAS-ADR-0039) y sus módulos
+    // se piden con CORS y `Origin: null`; nginx hace lo mismo solo en /visor/ (deploy/nginx.conf.template).
+    preview: {
+      cors: { origin: [/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/, 'null'] },
+    },
     build: {
       target: 'es2022',
       sourcemap: true,

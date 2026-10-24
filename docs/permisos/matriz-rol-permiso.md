@@ -34,13 +34,10 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.organizaciones.gestionar` | Crear y editar organizaciones (interna, clientes y proveedores). | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.auditoria.ver` | Leer la auditoría y las evidencias. | ✔ |   |   |   |   |   | ✔ |   |   |   |   |   |   |   |
 
-## Contratos de integración (`contratos`)
+## Portal, paquetes y exportaciones (`portal`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.contratos.ver_internos` | Ver los contratos internos (OpenAPI, AsyncAPI y proto) y su historial. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
-| `atlas.contratos.publicar_manual` | Publicar una versión de contrato a mano, por excepción. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
-| `atlas.contratos.guias.editar` | Editar las guías de integración. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 | `atlas.paquetes.gestionar` | Armar paquetes de contratos y compartirlos con organizaciones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 | `atlas.portal.ver` | Entrar al portal de clientes y ver lo compartido con la organización. | ✔ | ✔ |   | ✔ |   |   |   |   | ✔ | ✔ | ✔ | ✔ | ✔ |   |
 | `atlas.exportaciones.solicitar` | Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP). | ✔ | ✔ | ✔ |   | ✔ |   |   |   |   |   | ✔ |   |   |   |
@@ -91,6 +88,14 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.catalogo.ver` | Ver el catálogo de aplicativos y sus fichas. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
 | `atlas.catalogo.gestionar` | Crear y editar productos, módulos y servicios del catálogo. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.catalogo.editar` | Editar los datos de un aplicativo existente (descripción, repo, tecnología, ambientes, criticidad, estado, etiquetas) sin cambiar la jerarquía; el responsable, solo los suyos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
+
+## Contratos de integración (`contratos`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.contratos.ver_internos` | Ver los contratos internos (OpenAPI, AsyncAPI y proto) y su historial. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
+| `atlas.contratos.publicar_manual` | Publicar una versión de contrato a mano, por excepción. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
+| `atlas.contratos.guias.editar` | Editar las guías de integración. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 
 ## Equipo y responsables (`equipo`)
 

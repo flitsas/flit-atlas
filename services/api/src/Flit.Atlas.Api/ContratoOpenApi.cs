@@ -7,6 +7,7 @@ using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Identidad.Tokens;
 using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
+using Flit.Atlas.Plataforma.Publicacion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.OpenApi;
@@ -28,6 +29,7 @@ internal static class ContratoOpenApi
     public const string EsquemaSesion = "sesionAtlas";
     public const string EsquemaCsrf = "csrfAtlas";
     public const string EsquemaToken = "tokenAtlas";
+    public const string EsquemaGitHubActions = "githubActions";
 
     /// <summary>
     /// En qa y pdn el documento no se sirve: el contrato vive en el repo y se publica por el módulo de contratos (F3),
@@ -92,6 +94,7 @@ internal static class ContratoOpenApi
                 "Los clientes que no son el navegador (atlas-cli, MCP, servicios internos) usan tokens Bearer del servidor " +
                 $"OpenIddict de Atlas solo en las operaciones que declaran el esquema `{EsquemaToken}`; el protocolo " +
                 $"(`/connect/*`) se describe en `{ServidorTokens.RutaDescubrimiento}` (ATLAS-ADR-0024). " +
+                $"La CI de cada repo publica con el token OIDC de GitHub Actions solo en las operaciones que declaran `{EsquemaGitHubActions}` (ATLAS-ADR-0035). " +
                 "Este archivo se genera desde el código: no se edita a mano.",
         };
         documento.Servers = [.. Servidores.Select(s => new OpenApiServer { Url = s.Url, Description = s.Descripcion })];
@@ -140,6 +143,16 @@ internal static class ContratoOpenApi
                     },
                 },
             },
+            [EsquemaGitHubActions] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.OpenIdConnect,
+                OpenIdConnectUrl = new Uri("https://token.actions.githubusercontent.com/.well-known/openid-configuration"),
+                Description =
+                    "Token OIDC de GitHub Actions (ATLAS-ADR-0009 y ATLAS-ADR-0035) en «Authorization: Bearer», pedido por el workflow " +
+                    "reutilizable oficial con la audiencia del ambiente (la URL pública de Atlas). Atlas valida la firma (RS256, JWKS de " +
+                    "GitHub), el emisor, la audiencia y la vigencia, y luego el dueño, el evento, la rama, el workflow y la lista blanca " +
+                    "del catálogo. Sin secretos en los repos. La cookie de la PWA no sirve en estas operaciones.",
+            },
         };
     }
 
@@ -183,9 +196,11 @@ internal static class ContratoOpenApi
     private static void DescribirSeguridad(OpenApiOperation operacion, OpenApiOperationTransformerContext contexto, IReadOnlyList<string> permisos)
     {
         var metadata = contexto.Description.ActionDescriptor.EndpointMetadata;
-        // Con scope, la operación acepta solo el token Bearer (ATLAS-ADR-0024), nunca la cookie.
+        // Con scope, la operación acepta solo el token Bearer (ATLAS-ADR-0024), nunca la cookie; igual la publicación desde
+        // la CI, con el token de GitHub Actions (ATLAS-ADR-0035).
         var scope = metadata.OfType<MetadatoScope>().FirstOrDefault();
-        var requiereSesion = scope is null && metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any();
+        var ci = metadata.OfType<MetadatoPublicacionCi>().Any();
+        var requiereSesion = scope is null && !ci && metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any();
         var metodo = contexto.Description.HttpMethod ?? HttpMethods.Get;
         var cambiaEstado = !(HttpMethods.IsGet(metodo) || HttpMethods.IsHead(metodo) || HttpMethods.IsOptions(metodo));
 
@@ -198,7 +213,11 @@ internal static class ContratoOpenApi
         {
             requisito[new OpenApiSecuritySchemeReference(EsquemaToken, contexto.Document)] = [.. scope.Scopes];
         }
-        if (cambiaEstado && scope is null)
+        if (ci)
+        {
+            requisito[new OpenApiSecuritySchemeReference(EsquemaGitHubActions, contexto.Document)] = [];
+        }
+        if (cambiaEstado && scope is null && !ci)
         {
             requisito[new OpenApiSecuritySchemeReference(EsquemaCsrf, contexto.Document)] = [];
         }
@@ -208,7 +227,7 @@ internal static class ContratoOpenApi
         }
 
         var reautenticacion = metadata.OfType<MetadatoReautenticacion>().Any();
-        var conPolitica = metadata.OfType<IAuthorizeData>().Any(a => !string.IsNullOrEmpty(a.Policy) || !string.IsNullOrEmpty(a.Roles));
+        var conPolitica = !ci && metadata.OfType<IAuthorizeData>().Any(a => !string.IsNullOrEmpty(a.Policy) || !string.IsNullOrEmpty(a.Roles));
 
         if (permisos.Count > 0)
         {
@@ -228,6 +247,23 @@ internal static class ContratoOpenApi
             {
                 Description = $"El token no tiene ninguno de los scopes que exige la operación ({string.Join(", ", scope.Scopes)}).",
             });
+        }
+        if (ci)
+        {
+            operacion.Responses.TryAdd("401", new OpenApiResponse
+            {
+                Description = "Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).",
+            });
+            // El 403 con el cuerpo de la lista blanca lo declara la operación; aquí va su descripción.
+            const string prohibido = "El dueño del repo, el evento o el workflow reutilizable no están permitidos (sin cuerpo), o el repo, la rama, el workflow, el aplicativo o el tipo no están en la lista blanca (con el código).";
+            if (operacion.Responses.TryGetValue("403", out var propia) && propia is OpenApiResponse prohibida)
+            {
+                prohibida.Description = prohibido;
+            }
+            else
+            {
+                operacion.Responses.TryAdd("403", new OpenApiResponse { Description = prohibido });
+            }
         }
         if (requiereSesion)
         {
