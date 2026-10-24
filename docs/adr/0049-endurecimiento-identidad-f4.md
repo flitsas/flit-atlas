@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0049
 titulo: Endurecimiento de la identidad en F4 — contadores propios y atómicos del segundo factor, límite por cuenta, tiempos constantes con cola de correo en memoria, último paso TOTP por usuario, recuperación con aviso y riesgo residual del buzón, enlace de empleados solo por oid, roles de grupos recalculados a diario y proxies confiables obligatorios
-estado: propuesto
+estado: aceptado (decisión del líder, 24/10/2026)
 fecha: 2026-10-24
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

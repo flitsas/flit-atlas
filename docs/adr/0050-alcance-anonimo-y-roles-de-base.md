@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0050
 titulo: Alcance de datos de las peticiones sin sesión y roles de la base — sin sesión no se ve nada salvo que el endpoint pida el alcance del sistema, y la aplicación usa un rol sin propiedad ni BYPASSRLS distinto del dueño (el migrador)
-estado: propuesto
+estado: aceptado (decisión del líder, 24/10/2026)
 fecha: 2026-10-24
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

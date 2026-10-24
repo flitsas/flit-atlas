@@ -19,7 +19,7 @@
 >
 > **Actualización 24/10/2026 (identidad):** corregidos en `2078282` (rama `f4/seguridad-identidad`, ATLAS-ADR-0049,
 > **propuesto**) F4-SEC-01 a 05, 07, 08, 13, 14, 18, 19 y 21; F4-SEC-06 queda como riesgo residual documentado (solo el
-> buzón) con aviso al titular, a la espera de que el líder acepte el ADR. Sus pruebas ya no se omiten. Pasan a **cumplir**
+> buzón) con aviso al titular; el líder aceptó el ADR el 24/10/2026. Sus pruebas ya no se omiten. Pasan a **cumplir**
 > V6.3, V6.5, V6.8, V7.4 y V7.6; V6.4 sigue **parcial** hasta aceptar el riesgo. Quedan de identidad: F4-SEC-15, 16, 17,
 > 20, 31 y la agrupación de IPv6 por /64.
 >
@@ -442,9 +442,9 @@ respondía 204. No explotable entre orígenes sin CORS (el preflight lo bloquea)
    05 y 13 corregidos en `2078282`; falta poner `Atlas__Proxy__RedesConfiables` en el ConfigMap de qa y pdn (sin ella
    atlas-api ya no arranca).*
 2. **Antes o con riesgo aceptado en un ADR firmado por el líder técnico:** F4-SEC-04, F4-SEC-06, ~~F4-SEC-10~~
-   (corregido en `ca7dadc`; falta aceptar ATLAS-ADR-0050 y separar los roles en cada ambiente), ~~F4-SEC-12~~ (corregido en
+   (corregido en `ca7dadc`; ATLAS-ADR-0050 aceptado el 24/10/2026; falta separar los roles en cada ambiente), ~~F4-SEC-12~~ (corregido en
    `ca7dadc`; la `NetworkPolicy` sigue por verificar). *F4-SEC-04 corregido en `2078282`; F4-SEC-06 mitigado, con el
-   riesgo del buzón en ATLAS-ADR-0049 a la espera de que el líder lo acepte.*
+   riesgo del buzón en ATLAS-ADR-0049, aceptado por el líder el 24/10/2026.*
 3. **Pueden seguir después del lanzamiento con fecha:** F4-SEC-07 y F4-SEC-08 (internos), los bajos y los informativos.
    *F4-SEC-07, 08, 14, 18, 19 y 21 corregidos en `2078282`.*
 
