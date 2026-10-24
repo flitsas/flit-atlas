@@ -553,7 +553,7 @@ internal static class EndpointsGuias
 
     private static PersonaRef Persona(Guid id, IReadOnlyDictionary<Guid, string> nombres) => new(id, nombres.GetValueOrDefault(id) ?? "Persona no disponible");
 
-    private static async Task<IReadOnlyDictionary<Guid, string>> NombresAsync(PlataformaDbContext plataforma, IEnumerable<Guid?> ids, CancellationToken ct)
+    internal static async Task<IReadOnlyDictionary<Guid, string>> NombresAsync(PlataformaDbContext plataforma, IEnumerable<Guid?> ids, CancellationToken ct)
     {
         var lista = ids.OfType<Guid>().Distinct().ToList();
         return lista.Count == 0
@@ -561,7 +561,7 @@ internal static class EndpointsGuias
             : await plataforma.Personas.AsNoTracking().Where(p => lista.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Nombre, ct);
     }
 
-    private static Guid PersonaDeSesion(ClaimsPrincipal usuario) => Guid.Parse(usuario.FindFirstValue(EndpointsPlataforma.ClaimPersona)!);
+    internal static Guid PersonaDeSesion(ClaimsPrincipal usuario) => Guid.Parse(usuario.FindFirstValue(EndpointsPlataforma.ClaimPersona)!);
 
     /// <summary>Auditoría de una acción sobre una guía: ids, números, visibilidad y huella; nunca el título, el cuerpo ni la nota.</summary>
     private static EventoAuditoria Evento(HttpContext http, DateTimeOffset ahora, string accion, GuiaContrato guia, int revision, object datos) => new()
@@ -580,7 +580,7 @@ internal static class EndpointsGuias
     };
 
     /// <summary>Los cambios de la guía y su auditoría en <b>una sola transacción</b> (el contexto de la plataforma usa la del módulo).</summary>
-    private static async Task GuardarConAuditoriaAsync(ContratosDbContext contexto, PlataformaDbContext plataforma, EventoAuditoria evento, CancellationToken ct)
+    internal static async Task GuardarConAuditoriaAsync(ContratosDbContext contexto, PlataformaDbContext plataforma, EventoAuditoria evento, CancellationToken ct)
     {
         await using var transaccion = await contexto.Database.BeginTransactionAsync(ct);
         await contexto.SaveChangesAsync(ct);

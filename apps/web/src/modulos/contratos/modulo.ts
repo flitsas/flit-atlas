@@ -5,7 +5,7 @@ import type { ModuloAtlas } from '../../app/modulos/contrato';
  * desde la CI y sus versiones; desde la HU 3.4, el consolidado por ambiente (versión en dev, qa y pdn, desfases y
  * breaking pendientes); desde la HU 3.6 y 3.9, la pantalla del contrato (`/contratos/<id>`, con operaciones, matriz de
  * obligatoriedad, tablas de referencia, versiones con diff, guías y canales); desde la HU 3.7, el enlace directo a una
- * guía. El portal (F4) llega después.
+ * guía; desde la HU 4.1, los paquetes con revisiones (`/contratos/paquetes`). El portal (F4) llega después.
  */
 export const moduloContratos: ModuloAtlas = {
   id: 'contratos',
@@ -19,10 +19,13 @@ export const moduloContratos: ModuloAtlas = {
     // guía; la pestaña «Guías» de la pantalla del contrato (HU 3.6) monta el mismo componente.
     { path: '/contratos/:contratoId/guias/:guiaId', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Guia') },
     { path: '/contratos/consolidado', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Consolidado') },
+    // HU 4.1: leer paquetes exige ver_internos; armarlos, atlas.paquetes.gestionar (el servidor dice si puede con `puedeCrear`).
+    { path: '/contratos/paquetes', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paquetes/Paquetes') },
   ],
   navegacion: [
     { etiqueta: 'Contratos', ruta: '/contratos', movil: 'mas', orden: 40 },
     { etiqueta: 'Consolidado', ruta: '/contratos/consolidado', movil: 'mas', orden: 41 },
+    { etiqueta: 'Paquetes', ruta: '/contratos/paquetes', movil: 'mas', orden: 42 },
   ],
   widgetsInicio: [
     {

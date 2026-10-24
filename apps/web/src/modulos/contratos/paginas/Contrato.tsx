@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, History, Hourglass, Package } from 'lucide-react';
+import { ArrowLeft, Download, History } from 'lucide-react';
 import { lazy, type ReactNode, Suspense, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
@@ -6,11 +6,12 @@ import { ErrorApi } from '../../../app/api';
 import { NoEncontrada } from '../../../app/paginas/Estados';
 import { formatearFecha } from '../../../app/ui/formato';
 import { Hoja } from '../../../app/ui/Hoja';
-import { Boton, Tarjeta } from '../../../app/ui/Tarjeta';
+import { Boton } from '../../../app/ui/Tarjeta';
 import { type ContratoResumen, TIPOS, useContrato, useOperaciones, useSpec, useVersiones, type VersionResumen } from '../api';
 import { Canales } from '../componentes/Canales';
 import { MatrizObligatoriedad } from '../componentes/MatrizObligatoriedad';
 import { Operaciones } from '../componentes/Operaciones';
+import { PaquetesDelContrato } from '../paquetes/PaquetesDelContrato';
 import { PuntoGuias } from '../componentes/PuntoGuias';
 import { TablasReferencia } from '../componentes/TablasReferencia';
 import { Etiqueta, type Pestana, Pestanas, useEscritorio } from '../componentes/ui';
@@ -31,7 +32,7 @@ const VisorScalar = lazy(() => import('../componentes/VisorScalar').then((m) => 
  * Pantalla del contrato (HU 3.6 y 3.9, plan 00 §8.9): `/contratos/<id>` (última versión) y `/contratos/<id>/v/<versión>`.
  * Pestañas según el tipo: operaciones (vista propia con ejemplos), referencia interactiva con Scalar (OpenAPI, solo en
  * escritorio), matriz de obligatoriedad y tablas de referencia (si el spec las trae), versiones con diff, guías (HU 3.7),
- * canales por ambiente con su historial (HU 3.4) y paquetes (F4, todavía marcador). La pestaña y la operación van en la
+ * canales por ambiente con su historial (HU 3.4) y los paquetes que lo usan (HU 4.1). La pestaña y la operación van en la
  * URL (`?pestana=`, `?op=`) para compartirlas.
  */
 export default function Contrato() {
@@ -179,11 +180,7 @@ function Contenido({ contrato: c, version, versiones }: { contrato: ContratoResu
         {activa === 'versiones' && <Versiones contratoId={c.id} tipo={c.tipo} versiones={versiones} actual={version} />}
         {activa === 'guias' && <PuntoGuias contratoId={c.id} version={version} />}
         {activa === 'canales' && <Canales contratoId={c.id} actual={version} />}
-        {activa === 'paquetes' && (
-          <Marcador titulo="Paquetes que lo usan" icono={<Package className="size-4 shrink-0" aria-hidden="true" />}>
-            Los paquetes para clientes que incluyen este contrato, con su versión fijada. Llegan con el portal de clientes (fase F4).
-          </Marcador>
-        )}
+        {activa === 'paquetes' && <PaquetesDelContrato contratoId={c.id} />}
       </Pestanas>
 
       <Hoja abierta={eligiendoVersion} alCerrar={() => setEligiendoVersion(false)} titulo="Elegir versión">
@@ -211,19 +208,4 @@ function Contenido({ contrato: c, version, versiones }: { contrato: ContratoResu
 
 function Contador({ n }: { n: number }) {
   return <span className="rounded-full bg-atlas-activo px-1.5 text-xs">{n}</span>;
-}
-
-function Marcador({ titulo, icono, children }: { titulo: string; icono: ReactNode; children: ReactNode }) {
-  return (
-    <Tarjeta titulo={titulo}>
-      <p className="flex items-start gap-2 text-sm text-atlas-texto-suave">
-        {icono}
-        <span>{children}</span>
-      </p>
-      <p className="mt-3 inline-flex items-center gap-2 text-sm">
-        <Hourglass className="size-4 text-atlas-tinta" aria-hidden="true" />
-        Próximamente
-      </p>
-    </Tarjeta>
-  );
 }

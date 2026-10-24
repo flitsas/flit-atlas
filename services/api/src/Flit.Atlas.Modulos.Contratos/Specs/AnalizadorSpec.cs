@@ -24,6 +24,12 @@ public sealed record SpecAnalizado(
     IReadOnlyList<string> Errores, IReadOnlyList<string> Advertencias)
 {
     public bool Valido => Errores.Count == 0;
+
+    /// <summary>
+    /// <c>info.x-flit-visibilidad</c> (<c>compartible</c> o <c>interna</c>) en OpenAPI y AsyncAPI, la misma marca con la
+    /// que la CI elige las reglas de vacuum de lo compartible (ATLAS-ADR-0035); vacío si no la declara o no se reconoce.
+    /// </summary>
+    public VisibilidadContrato? VisibilidadDeclarada { get; init; }
 }
 
 /// <summary>
@@ -57,6 +63,16 @@ public static partial class AnalizadorSpec
             _ => Proto(contenido),
         };
     }
+
+    /// <summary>Extensión de <c>info</c> con la visibilidad del contrato (ATLAS-ADR-0035 y ATLAS-ADR-0041).</summary>
+    public const string ExtensionVisibilidad = "x-flit-visibilidad";
+
+    private static VisibilidadContrato? Visibilidad(string? texto) => texto?.Trim() switch
+    {
+        "compartible" => VisibilidadContrato.Compartible,
+        "interna" => VisibilidadContrato.Interna,
+        _ => null,
+    };
 
     private static FormatoSpec FormatoDe(string contenido) => contenido.AsSpan().TrimStart().StartsWith("{") ? FormatoSpec.Json : FormatoSpec.Yaml;
 
@@ -124,8 +140,12 @@ public static partial class AnalizadorSpec
                 operaciones.Add(OperacionHttp($"{metodo.Method.ToUpperInvariant()} webhook:{nombre}", "webhook", metodo.Method.ToUpperInvariant(), nombre, operacion));
             }
         }
+        var declarada = documento.Info?.Extensions?.TryGetValue(ExtensionVisibilidad, out var marca) == true
+            && marca is JsonNodeExtension { Node: JsonValue valorMarca } && valorMarca.TryGetValue<string>(out var textoMarca)
+            ? Visibilidad(textoMarca)
+            : null;
         return new(formato, Corto(documento.Info?.Title, ContratosDbContext.LargoNombre), Corto(documento.Info?.Description, ContratosDbContext.LargoDescripcion),
-            documento.Info?.Version, Unicas(operaciones), Recortar(errores), Recortar(advertencias));
+            documento.Info?.Version, Unicas(operaciones), Recortar(errores), Recortar(advertencias)) { VisibilidadDeclarada = declarada };
     }
 
     private static OperacionIndexada OperacionHttp(string clave, string clase, string metodo, string ruta, OpenApiOperation operacion)
@@ -192,7 +212,7 @@ public static partial class AnalizadorSpec
             ? AsyncApi2(documento, errores)
             : AsyncApi3(documento, errores);
         return new(formato, Corto(titulo, ContratosDbContext.LargoNombre), Corto(Texto(info?["description"]), ContratosDbContext.LargoDescripcion),
-            versionInfo, Unicas(operaciones), Recortar(errores), Recortar(advertencias));
+            versionInfo, Unicas(operaciones), Recortar(errores), Recortar(advertencias)) { VisibilidadDeclarada = Visibilidad(Texto(info?[ExtensionVisibilidad])) };
     }
 
     private static JsonNode? Yaml(string contenido)
