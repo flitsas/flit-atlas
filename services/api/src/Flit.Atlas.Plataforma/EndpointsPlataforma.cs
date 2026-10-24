@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.ComponentModel;
 using System.Security.Claims;
+using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Notificaciones;
@@ -91,11 +92,13 @@ public static class EndpointsPlataforma
         notificaciones.MapGet("/preferencias", ListarPreferenciasAsync)
             .WithName("ListarPreferenciasDeNotificacion")
             .WithSummary("Preferencias de notificación")
-            .WithDescription("Cada tipo de notificación con el estado de sus canales (app, push, correo y Teams).");
+            .WithDescription(
+                "Cada tipo de notificación (del núcleo y de los módulos) con el estado de sus canales (app, push, correo y Teams). " +
+                "Un canal no disponible es uno que el tipo no usa o que el ambiente no tiene configurado.");
         notificaciones.MapPut("/preferencias", GuardarPreferenciasAsync)
             .WithName("GuardarPreferenciasDeNotificacion")
             .WithSummary("Guardar preferencias de notificación")
-            .WithDescription("Activa o apaga canales por tipo. El canal app no se puede apagar; correo y Teams aún no están disponibles.")
+            .WithDescription("Activa o apaga canales por tipo. El canal app no se puede apagar; un canal no disponible para el tipo o el ambiente responde 400.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesValidationProblem();
 
@@ -181,17 +184,18 @@ public static class EndpointsPlataforma
     private static string NombreCanal(CanalNotificacion canal) => canal.ToString().ToLowerInvariant();
 
     private static async Task<List<PreferenciaTipoDto>> ListarPreferenciasAsync(
-        ClaimsPrincipal usuario, PlataformaDbContext contexto, CancellationToken ct)
+        ClaimsPrincipal usuario, PlataformaDbContext contexto, CatalogoNotificaciones catalogo, IEnviadorCorreo correo,
+        CancellationToken ct)
     {
         var persona = Persona(usuario);
         var guardadas = await contexto.PreferenciasNotificacion.AsNoTracking().Where(p => p.PersonaId == persona).ToListAsync(ct);
         return
         [
-            .. TiposNotificacion.Todos.Select(tipo => new PreferenciaTipoDto(tipo.Codigo, tipo.Nombre, tipo.Descripcion,
+            .. catalogo.Todos.Select(tipo => new PreferenciaTipoDto(tipo.Codigo, tipo.Nombre, tipo.Descripcion,
             [
                 .. Enum.GetValues<CanalNotificacion>().Select(canal =>
                 {
-                    var disponible = TiposNotificacion.Disponibles.Contains(canal);
+                    var disponible = CatalogoNotificaciones.Disponible(tipo, canal, correo);
                     var guardada = guardadas.FirstOrDefault(p => p.Tipo == tipo.Codigo && p.Canal == canal);
                     var activa = canal == CanalNotificacion.App || (disponible && (guardada?.Activa ?? tipo.PorDefecto.Contains(canal)));
                     return new PreferenciaCanalDto(NombreCanal(canal), activa, disponible, disponible && canal != CanalNotificacion.App);
@@ -201,20 +205,21 @@ public static class EndpointsPlataforma
     }
 
     private static async Task<IResult> GuardarPreferenciasAsync(
-        [Description("Cambios de preferencia a aplicar.")] List<CambioPreferencia> cambios, ClaimsPrincipal usuario, PlataformaDbContext contexto, TimeProvider reloj, CancellationToken ct)
+        [Description("Cambios de preferencia a aplicar.")] List<CambioPreferencia> cambios, ClaimsPrincipal usuario, PlataformaDbContext contexto,
+        CatalogoNotificaciones catalogo, IEnviadorCorreo correo, TimeProvider reloj, CancellationToken ct)
     {
         var persona = Persona(usuario);
         var errores = new Dictionary<string, string[]>();
         var validos = new List<(TipoNotificacion Tipo, CanalNotificacion Canal, bool Activa)>();
         foreach (var (cambio, i) in cambios.Select((c, i) => (c, i)))
         {
-            var tipo = TiposNotificacion.Buscar(cambio.Tipo);
+            var tipo = catalogo.Buscar(cambio.Tipo);
             var canal = Enum.GetValues<CanalNotificacion>().Cast<CanalNotificacion?>().FirstOrDefault(c => NombreCanal(c!.Value) == cambio.Canal);
             if (tipo is null)
             {
                 errores[$"[{i}].tipo"] = [$"Tipo de notificación desconocido: «{cambio.Tipo}»."];
             }
-            else if (canal is null || canal == CanalNotificacion.App || !TiposNotificacion.Disponibles.Contains(canal.Value))
+            else if (canal is null || canal == CanalNotificacion.App || !CatalogoNotificaciones.Disponible(tipo, canal.Value, correo))
             {
                 errores[$"[{i}].canal"] = [$"El canal «{cambio.Canal}» no se puede cambiar."];
             }

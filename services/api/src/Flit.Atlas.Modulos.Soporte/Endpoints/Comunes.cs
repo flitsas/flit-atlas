@@ -203,6 +203,9 @@ internal static class Comunes
         {
             await plataforma.Database.UseTransactionAsync(null, ct);
         }
+        // Ya confirmado: el trabajo de Microsoft 365 puede ver los eventos y avisos pendientes (ATLAS-ADR-0033).
+        await transaccion.DisposeAsync();
+        soporte.DespertarSiConfirmado();
     }
 
     /// <summary>¿La excepción es la del índice único de un sábado con turno vigente?</summary>

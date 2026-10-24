@@ -189,6 +189,38 @@ curl -s https://qa.atlas.flitsas.com/api/v1/identidad/token/yo -H "Authorization
 
 Sin GitHub configurado, la pantalla de CODEOWNERS muestra el bloque sugerido y dice que no puede comparar.
 
+## Soporte en Microsoft 365 (HU 2.10, ATLAS-ADR-0033)
+
+- **Calendario compartido**: cada turno vigente de hoy en adelante es un evento del buzón compartido con la persona como asistente (Outlook y Teams). Cada cambio de un turno deja su fila de `soporte_evento_calendario` pendiente en la misma transacción; `TrabajoM365Soporte` (todas las réplicas, candado consultivo) la sincroniza por Graph con el token de aplicación (`IAccesoGraph`), con reintentos y `transactionId`. Se despierta con cada cambio de la réplica y revisa cada 15 s.
+- **Teams**: `INotificadorTeams` (Plataforma) publica tarjetas adaptables en el webhook de un flujo de Workflows; el soporte encola los avisos (`ColaAvisosTeams`, tabla `soporte_aviso_teams`) al confirmar una generación y al aprobar un cambio. Los recordatorios del sábado (HU 2.11) usan la misma cola. No hay aviso personal por Teams: Workflows publica en un canal.
+- **Feeds .ics**: `GET|POST /api/v1/soporte/feeds` y `DELETE /api/v1/soporte/feeds/{id}` con `atlas.soporte.ver`; `GET /api/v1/soporte/ics/{token}.ics` es público (el token, de 256 bits, se guarda como SHA-256). Estado: `GET /api/v1/soporte/microsoft-365`.
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `Soporte__M365__Buzon` | — | UPN del buzón compartido; sin él (o sin Entra), el calendario queda apagado |
+| `Soporte__M365__CalendarioHabilitado` | `true` | `false` apaga el calendario |
+| `Soporte__M365__NombreCalendario` | `Soporte TI sábados` | Nombre en la pantalla y en los feeds |
+| `Soporte__M365__CanalTeams` | `soporte` | Canal de `Plataforma__Teams__Canales__*` donde salen los avisos |
+| `Soporte__M365__Intervalo` | `00:00:15` | Revisión periódica de lo pendiente |
+| `Soporte__M365__EsperaReintento`, `Soporte__M365__EsperaMaxima` | `00:00:30`, `00:30:00` | Espera que se duplica tras cada fallo |
+| `Soporte__M365__DiasFeedAtras`, `Soporte__M365__DiasFeedAdelante` | `90`, `400` | Ventana de los feeds .ics |
+| `Plataforma__Teams__Canales__<nombre>` | — | URL HTTPS del disparador del flujo de Workflows de cada canal. Secreto: SealedSecret |
+
+Permiso de Graph: `Calendars.ReadWrite` **solo** con RBAC para aplicaciones de Exchange Online sobre el buzón (pasos en `deploy/README.md`), nunca consentido en Entra.
+
+## Recordatorios de turno de soporte (HU 2.11, ATLAS-ADR-0029)
+
+- `TrabajoRecordatorios` (módulo de soporte) mira cada 5 minutos si en Bogotá ya pasó la hora de los recordatorios (`horaRecordatorios` de `PUT /api/v1/soporte/configuracion`, 07:00 por defecto) y si falta la corrida del día; si la réplica arranca tarde, la recupera. Un candado consultivo de PostgreSQL deja correr un nodo a la vez.
+- Manda `diasAnticipacionRecordatorio` días antes del sábado a la persona de turno y, el mismo sábado, a cada persona de turno por la bandeja, push y correo (`IEnviadorCorreo`, SMTP en qa) y un aviso por equipo en el canal de Teams del soporte (`ColaAvisosTeams` de la HU 2.10). Cada persona elige sus canales en las preferencias del centro de notificaciones (tipo `soporte.recordatorio_turno`).
+- Idempotente: cada envío por canal queda en `soporte_recordatorio` (clave única) antes de salir; las corridas, en `soporte_recordatorio_corrida`. Lo fallido se reintenta en la corrida siguiente (hasta 3 veces).
+- `GET /api/v1/soporte/recordatorios` (estado y últimas corridas) y `POST /api/v1/soporte/recordatorios/ejecucion` («Enviar ahora», 202), con `atlas.soporte.gestionar`.
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `Soporte__Recordatorios__Habilitados` | `true` | `false` apaga la corrida diaria («Enviar ahora» sigue) |
+| `Soporte__Recordatorios__Intervalo` | `00:05:00` | Cada cuánto revisa si ya es la hora |
+| `Atlas__UrlPublica` | — | URL del botón del correo (la misma de las invitaciones) |
+
 ## Contratos (HU 1.7)
 
 - `contracts/openapi/atlas.v1.yaml` se genera desde los endpoints con `Microsoft.AspNetCore.OpenApi` (OpenAPI 3.1, `ContratoOpenApi.cs`) y `ContratoOpenApiTests` falla si no coincide con el código. Para regenerarlo: `ATLAS_ACTUALIZAR_CONTRATOS=1 dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class Flit.Atlas.Api.Tests.ContratoOpenApiTests` (detalles en [`contracts/openapi/README.md`](../../contracts/openapi/README.md)).
@@ -204,7 +236,7 @@ Endpoints bajo `/api/v1/plataforma`, todos con sesión y solo sobre los datos de
 | `GET /banderas` | `modulo.<id>` → activo según `plataforma_modulo` y la organización de la persona |
 | `GET /notificaciones?limite=` | Bandeja (más recientes primero, máximo 100) y total sin leer |
 | `POST /notificaciones/{id}/leida`, `POST /notificaciones/leidas` | Marcar una o todas como leídas |
-| `GET` y `PUT /notificaciones/preferencias` | Canales por tipo de notificación; `app` no se apaga, correo y Teams aún no están disponibles |
+| `GET` y `PUT /notificaciones/preferencias` | Canales por tipo de notificación; `app` no se apaga, correo según el tipo y el proveedor; Teams nunca (no hay aviso personal por Teams) |
 | `GET /push/clave` | Llave pública VAPID (`habilitado: false` si el ambiente no tiene llaves) |
 | `POST /push/suscripciones`, `POST /push/suscripciones/baja` | Registrar o quitar el dispositivo (`plataforma_suscripcion_push`); solo endpoints https de servicios de push conocidos (contra SSRF) |
 | `POST /push/prueba` | Notificación de prueba en la bandeja y por push a los dispositivos |

@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 
 import type { AplicativoDeFicha } from '../../../app/modulos/contrato';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Boton, Insignia } from '../../../app/ui/Tarjeta';
 import { iniciales } from '../../../app/ui/formato';
 import { Avatar } from '../../../app/ui/Marca';
 import { CLAVE_REPARTO, fechaCorta, obtenerAQuienLlamo, obtenerFicha, obtenerResponsablesDe, useReparto } from '../apiResponsables';
 import { Bloque, BotonCopiar, Contacto, Definiciones, descargar, TarjetaResponsable } from '../componentes';
+import { RECURSO_REPARTO } from '../recursos';
 import { TarjetaTraspaso } from '../vistas/Traspasos';
 
 /**
@@ -27,6 +29,7 @@ export default function PestanaResponsables({ aplicativo }: { aplicativo: Aplica
 
   return (
     <div className="flex flex-col gap-4">
+      <DatosGuardados recurso={RECURSO_REPARTO.clave} />
       <div className="flex flex-wrap items-center gap-2">
         <Boton onClick={() => setLlamar((v) => !v)} aria-expanded={llamar}>
           <PhoneCall className="size-4" aria-hidden="true" />

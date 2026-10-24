@@ -223,6 +223,11 @@ test.describe('soporte de los sábados', () => {
     await page.goto('/soporte/gestion');
     await expect(page.getByRole('heading', { level: 1, name: 'Gestionar el soporte' })).toBeVisible();
     await expect(page.getByRole('form', { name: 'Configuración del soporte' })).toBeVisible();
+    await expect(page.getByLabel('Hora de envío')).toHaveValue('07:00');
+    // HU 2.11: el estado de los recordatorios con sus canales y la última corrida.
+    await expect(page.getByRole('list', { name: 'Canales de los recordatorios' })).toContainText('Teams: sin configurar');
+    await expect(page.getByRole('list', { name: 'Últimas corridas' })).toContainText('6 enviados, 1 fallidos, 2 omitidos');
+    await expect(page.getByRole('button', { name: 'Enviar ahora' })).toBeEnabled();
     await sinScrollHorizontal(page, '/soporte/gestion');
     await sinErroresCriticosDeAxe(page, '/soporte/gestion');
     expect(violaciones).toEqual([]);
@@ -268,6 +273,22 @@ test.describe('soporte de los sábados', () => {
     await expect(page.getByRole('button', { name: 'Marcar tomada' })).toBeVisible();
     await sinScrollHorizontal(page, '/soporte/cambios');
     await sinErroresCriticosDeAxe(page, '/soporte/cambios');
+    expect(violaciones).toEqual([]);
+  });
+
+  test('Outlook, Teams y feeds .ics: apagado con su motivo, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.soporte.ver'], roles: ['atlas.desarrollador'] });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte/microsoft-365');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Outlook, Teams y calendarios' })).toBeVisible();
+    await expect(page.getByRole('region', { name: /Calendario compartido de Outlook/ })).toContainText('Apagado en este ambiente');
+    await expect(page.getByRole('list', { name: 'Mis feeds' })).toContainText('Equipo Operaciones');
+    await page.getByRole('button', { name: 'Feed de mis turnos' }).click();
+    await expect(page.getByLabel('Dirección del feed')).toHaveValue(/\/api\/v1\/soporte\/ics\/.+\.ics$/);
+    await sinScrollHorizontal(page, '/soporte/microsoft-365');
+    await sinErroresCriticosDeAxe(page, '/soporte/microsoft-365');
     expect(violaciones).toEqual([]);
   });
 });

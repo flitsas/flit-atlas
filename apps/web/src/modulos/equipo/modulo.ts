@@ -1,4 +1,5 @@
 import type { ModuloAtlas } from '../../app/modulos/contrato';
+import { RECURSOS_SIN_CONEXION, TTL_HORAS } from './recursos';
 
 /**
  * Equipo y responsables (prompt maestro §8.2). Desde la HU 2.2 trae el directorio interno sincronizado con Graph
@@ -33,8 +34,8 @@ export const moduloEquipo: ModuloAtlas = {
     { id: 'responsables', titulo: 'Responsables', orden: 10, permiso: 'atlas.equipo.ver', cargar: () => import('./pestanas/Responsables') },
   ],
   busqueda: { proveedor: 'equipo', tipos: ['persona', 'responsabilidad'] },
-  // HU 2.12: se guarda sin conexión (aún no lo usa el shell).
-  offline: { recursos: ['/api/v1/equipo/responsabilidades'], ttlHoras: 24 },
+  // HU 2.12: el reparto de responsables, sin conexión (ATLAS-ADR-0034).
+  offline: { recursos: RECURSOS_SIN_CONEXION, ttlHoras: TTL_HORAS },
   bandera: 'modulo.equipo',
   banderaPorDefecto: true,
 };

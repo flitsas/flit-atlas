@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Insignia } from '../../../app/ui/Tarjeta';
 import { CLAVE, horario, obtenerEsteSabado } from '../api';
 import { Avatar } from '../componentes';
 import { formatearDia } from '../fechas';
+import { RECURSO_ESTE_SABADO } from '../recursos';
 
 /** Widget de Inicio «Soporte de este sábado» (prompt maestro §8.3): a quién llamar en cada equipo, con horario y contacto. */
 export default function EsteSabado() {
@@ -14,6 +16,7 @@ export default function EsteSabado() {
 
   return (
     <div className="flex flex-col gap-3 text-sm">
+      <DatosGuardados recurso={RECURSO_ESTE_SABADO.clave} />
       {sabado.isPending && <p role="status">Cargando el turno…</p>}
       {sabado.isError && <p role="alert">No pudimos cargar el soporte de este sábado.</p>}
       {datos && (

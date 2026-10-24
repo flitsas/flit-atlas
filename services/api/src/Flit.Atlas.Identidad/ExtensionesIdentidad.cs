@@ -324,6 +324,8 @@ public static class ExtensionesIdentidad
             .AddInMemoryTokenCaches();
 
         builder.Services.AddHttpClient<IPerfilEmpleados, PerfilGraph>(c => c.BaseAddress = new Uri("https://graph.microsoft.com/"));
+        // Token de aplicación de Graph para los módulos (calendario del soporte, ATLAS-ADR-0033).
+        builder.Services.Replace(ServiceDescriptor.Scoped<Plataforma.Microsoft365.IAccesoGraph, AccesoGraphEntra>());
         builder.Services.Configure<OpenIdConnectOptions>(ClaimsAtlas.EsquemaEntra, o =>
         {
             var previo = o.Events.OnTokenValidated;

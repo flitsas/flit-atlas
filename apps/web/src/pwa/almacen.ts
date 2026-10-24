@@ -30,7 +30,8 @@ export interface AccionEncolada {
 interface EsquemaAtlas extends DBSchema {
   recursos: {
     key: string;
-    value: { clave: string; datos: unknown; guardadoEn: number; venceEn: number };
+    /** `permiso`: el que exige el recurso; al perderlo, se borra (HU 2.12). */
+    value: { clave: string; datos: unknown; guardadoEn: number; venceEn: number; permiso?: string };
   };
   cola: {
     key: string;
@@ -57,11 +58,24 @@ export function abrir() {
 
 export const almacenDisponible = disponible;
 
-export async function guardar(clave: string, datos: unknown, ttlHoras: number, ahora = Date.now()): Promise<void> {
+export async function guardar(clave: string, datos: unknown, ttlHoras: number, ahora = Date.now(), permiso?: string): Promise<void> {
   if (!disponible()) return;
   const base = await abrir();
-  await base.put('recursos', { clave, datos, guardadoEn: ahora, venceEn: ahora + ttlHoras * 3_600_000 });
+  await base.put('recursos', { clave, datos, guardadoEn: ahora, venceEn: ahora + ttlHoras * 3_600_000, permiso });
   base.close();
+}
+
+/** Borra los recursos guardados cuyo permiso la persona ya no tiene (§11: «al perder el permiso»). Devuelve cuántos. */
+export async function depurarSinPermiso(permisos: readonly string[]): Promise<number> {
+  if (!disponible()) return 0;
+  const base = await abrir();
+  try {
+    const sinPermiso = (await base.getAll('recursos')).filter((r) => r.permiso !== undefined && !permisos.includes(r.permiso));
+    await Promise.all(sinPermiso.map((r) => base.delete('recursos', r.clave)));
+    return sinPermiso.length;
+  } finally {
+    base.close();
+  }
 }
 
 /** El recurso guardado, o `null` si no existe o ya venció (en ese caso se borra). */
@@ -86,6 +100,14 @@ export async function olvidar(clave: string): Promise<void> {
   const base = await abrir();
   await base.delete('recursos', clave);
   base.close();
+}
+
+/**
+ * Sin sesión o con otra persona en el dispositivo (HU 2.12): borra IndexedDB (caché y acciones sin enviar de quien
+ * estaba). A diferencia de `borrarDatosLocales`, deja la precarga del shell para poder abrir Atlas sin conexión.
+ */
+export async function borrarDatosDePersona(): Promise<void> {
+  if (disponible()) await deleteDB(BASE);
 }
 
 /**

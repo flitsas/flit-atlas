@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router';
 import { CargandoPagina } from '../../../app/layout/Shell';
 import { tienePermiso } from '../../../app/modulos/resolver';
 import { useSesion } from '../../../app/sesion';
+import { DatosGuardados } from '../../../app/ui/DatosGuardados';
 import { Icono } from '../../../app/ui/Icono';
 import { Boton, cn } from '../../../app/ui/Tarjeta';
 import {
@@ -17,6 +18,7 @@ import {
   useReparto,
 } from '../apiResponsables';
 import { Advertencia, type Aviso, avisoDeError, claseCampo, MostrarAviso } from '../componentes';
+import { RECURSO_REPARTO } from '../recursos';
 import { moduloEquipo } from '../modulo';
 
 // Cada vista en su chunk: abrir el reparto no descarga el importador ni el CODEOWNERS.
@@ -73,6 +75,7 @@ export default function Responsables() {
         </div>
       </header>
 
+      <DatosGuardados recurso={RECURSO_REPARTO.clave} />
       <RevisionTrimestral gestiona={gestiona} />
 
       <nav aria-label="Vistas de los responsables">

@@ -3,8 +3,10 @@ using System.Globalization;
 using System.Security.Claims;
 using Flit.Atlas.Modulos.Soporte.Datos;
 using Flit.Atlas.Modulos.Soporte.Dominio;
+using Flit.Atlas.Modulos.Soporte.Dominio.Microsoft365;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Microsoft365;
 using Flit.Atlas.Plataforma.Notificaciones;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Builder;
@@ -527,7 +529,8 @@ internal static class EndpointsCambios
     private static async Task<IResult> ResolverAsync(
         [Description("Id de la solicitud.")] Guid id,
         [Description("Si aprueba, su nota y la llave de idempotencia.")] ResolucionSolicitud resolucion,
-        HttpContext http, IPermisosDeSesion permisos, SoporteDbContext soporte, PlataformaDbContext plataforma, TimeProvider reloj, CancellationToken ct)
+        HttpContext http, IPermisosDeSesion permisos, SoporteDbContext soporte, PlataformaDbContext plataforma, ColaAvisosTeams avisosTeams,
+        TimeProvider reloj, CancellationToken ct)
     {
         var nota = Limpiar(resolucion.Nota);
         var (solicitud, resultado) = await PrepararAsync(id, resolucion.LlaveIdempotencia, nota,
@@ -594,6 +597,15 @@ internal static class EndpointsCambios
             }));
             titulo = "Cambio de turno aprobado";
             cuerpo = $"Se aprobó el cambio del turno de {equipo} del sábado {Dia(solicitud.Fecha)}.";
+            // Aviso en el canal de Teams del soporte (HU 2.10): sale por la cola, con la misma transacción.
+            var nombres = await PersonasAsync(plataforma, [solicitud.SolicitantePersonaId, solicitud.ReemplazoPersonaId], ct);
+            var atiende = NombreDe(nombres, solicitud.ReemplazoPersonaId);
+            avisosTeams.Encolar(soporte, TipoAvisoTeams.CambioAprobado, new MensajeTeams(
+                $"Cambio de turno aprobado: {equipo}",
+                $"El turno de soporte de {equipo} del sábado {Dia(solicitud.Fecha)} pasa de {NombreDe(nombres, solicitud.SolicitantePersonaId)} a " +
+                $"{atiende}. El evento de Outlook se mueve solo.",
+                [new HechoTeams("Equipo", equipo), new HechoTeams("Sábado", Dia(solicitud.Fecha)), new HechoTeams("Atiende", atiende)],
+                avisosTeams.Enlace("/soporte"), "Ver el calendario"));
         }
         else
         {
