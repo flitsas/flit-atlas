@@ -51,8 +51,8 @@ public static class EventosContratos
 /// la CI con el token OIDC de GitHub Actions y la lista blanca del catálogo, versiones inmutables (201, 200 idempotente,
 /// 409 y 422), el índice de operaciones y canales, y la lectura interna. HU 3.3 y 3.4: la versión base de pdn para la CI,
 /// los canales por ambiente que mueve el CD (con historial) y el Consolidado. HU 3.7: guías con revisiones inmutables,
-/// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). Diff, paquetes y portal llegan en las HU
-/// siguientes. Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
+/// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). HU 4.2: la poda de specs para clientes
+/// (<see cref="Poda.Podadores"/>, ATLAS-ADR-0038). Paquetes y portal llegan en las HU siguientes. Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
 /// </summary>
 public sealed class ModuloContratos : IModuloAtlas
 {
