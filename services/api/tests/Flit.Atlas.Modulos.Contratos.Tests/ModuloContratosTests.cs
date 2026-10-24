@@ -71,7 +71,7 @@ public class ModuloContratosTests(Contenedores contenedores)
         await contratos.Database.MigrateAsync(Ct);
 
         Assert.Empty(await contratos.Database.GetPendingMigrationsAsync(Ct));
-        Assert.Equal(["__ef_migraciones_contratos", "contratos_contrato", "contratos_operacion", "contratos_version"],
+        Assert.Equal(["__ef_migraciones_contratos", "contratos_contrato", "contratos_guia", "contratos_guia_revision", "contratos_operacion", "contratos_version"],
             (await Tablas(bd)).Except(delNucleo).Order(StringComparer.Ordinal));
     }
 

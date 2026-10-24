@@ -222,6 +222,46 @@ test.describe('contratos de integración (HU 3.2)', () => {
     await expect(page.getByText('1 contrato', { exact: true })).toBeVisible();
     expect(violaciones).toEqual([]);
   });
+
+  test('guía (HU 3.7): Markdown sin HTML, editor con vista previa e historial con comparación; accesible, a 360 px y sin violar la CSP', async ({
+    page,
+  }, info) => {
+    const violaciones = await vigilarCsp(page);
+    const dialogos: string[] = [];
+    page.on('dialog', (d) => {
+      dialogos.push(d.message());
+      void d.dismiss();
+    });
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.contratos.ver_internos', 'atlas.contratos.guias.editar'] });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/contratos/c1/guias/g1');
+
+    const contenido = page.getByRole('article', { name: /^Contenido de Cómo autenticarse/ });
+    await expect(contenido.getByRole('heading', { name: 'Autenticación' })).toBeVisible();
+    // El HTML del autor se ve como texto y el enlace javascript: queda sin href.
+    await expect(contenido.getByText('<script>alert(1)</script>')).toBeVisible();
+    await expect(contenido.locator('script, a[href^="javascript"]')).toHaveCount(0);
+    await expect(page.getByText(/Pendiente de aprobación/)).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, 'guía a 360 px');
+    await sinErroresCriticosDeAxe(page, 'guía');
+
+    await page.getByRole('button', { name: 'Historial' }).click();
+    await page.getByRole('button', { name: 'Comparar con la 1' }).click();
+    await expect(page.getByRole('list', { name: 'Cambios línea a línea' })).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, 'comparación a 360 px');
+    await sinErroresCriticosDeAxe(page, 'historial de la guía');
+
+    await page.getByRole('button', { name: 'Leer' }).click();
+    await page.getByRole('button', { name: 'Editar' }).click();
+    const editor = page.getByRole('form', { name: 'Editar la guía' });
+    await expect(editor.getByLabel(/Cuerpo en Markdown/)).toBeVisible();
+    if (esMovil(info)) await editor.getByRole('button', { name: 'Vista previa' }).click();
+    await expect(editor.getByRole('article', { name: 'Vista previa de la guía' }).getByRole('heading', { name: 'Autenticación' })).toBeVisible();
+    if (esMovil(info)) await sinScrollHorizontal(page, 'editor a 360 px');
+    await sinErroresCriticosDeAxe(page, 'editor de la guía');
+    expect(dialogos).toEqual([]);
+    expect(violaciones).toEqual([]);
+  });
 });
 
 test.describe('soporte de los sábados', () => {

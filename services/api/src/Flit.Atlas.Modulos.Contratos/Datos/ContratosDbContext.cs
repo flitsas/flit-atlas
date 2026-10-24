@@ -158,6 +158,112 @@ public sealed class OperacionContrato : Entidad
     public bool Publica { get; init; }
 }
 
+/// <summary>Quién puede ver una guía (HU 3.7, prompt maestro §7.1 y §7.2).</summary>
+public enum VisibilidadGuia
+{
+    /// <summary>Solo empleados con <c>atlas.contratos.ver_internos</c>.</summary>
+    Interna,
+
+    /// <summary>Puede ir en paquetes para clientes (F4); publicarla exige la aprobación del principal o del secundario.</summary>
+    Compartible,
+}
+
+/// <summary>Estado de una guía: <c>publicada</c> si su última revisión es la publicada.</summary>
+public enum EstadoGuia
+{
+    Borrador,
+    Publicada,
+}
+
+/// <summary>De dónde salió una revisión.</summary>
+public enum OrigenRevision
+{
+    Creacion,
+    Edicion,
+    Restauracion,
+}
+
+/// <summary>
+/// Guía de integración de un contrato (plan 00 §8.1 y §8.4, HU 3.7, ATLAS-ADR-0040): Markdown editable en Atlas, con
+/// revisiones inmutables. Esta fila guarda la foto de la última revisión (para listar sin leer los cuerpos), el estado y
+/// qué revisión está publicada. Solo se escribe junto con una revisión o una publicación, en la misma transacción que su
+/// auditoría.
+/// </summary>
+public sealed class GuiaContrato : Entidad
+{
+    public required Guid ContratoId { get; init; }
+
+    public required string Titulo { get; set; }
+
+    /// <summary>Clave del índice de operaciones (<c>GET /tramites/{id}</c>) si la guía es de una operación; vacío = del contrato.</summary>
+    public string? Operacion { get; set; }
+
+    /// <summary>Primera versión del contrato a la que aplica (semver); vacío = desde la primera.</summary>
+    public string? AplicaDesde { get; set; }
+
+    /// <summary>Última versión del contrato a la que aplica (semver); vacío = hasta la última.</summary>
+    public string? AplicaHasta { get; set; }
+
+    public VisibilidadGuia Visibilidad { get; set; } = VisibilidadGuia.Interna;
+
+    public EstadoGuia Estado { get; set; } = EstadoGuia.Borrador;
+
+    /// <summary>Número de la última revisión.</summary>
+    public int RevisionActual { get; set; }
+
+    /// <summary>Revisión publicada (la que verá el portal en F4); vacío si nunca se publicó.</summary>
+    public int? RevisionPublicada { get; set; }
+
+    public Guid? PublicadaPor { get; set; }
+
+    public DateTimeOffset? PublicadaEn { get; set; }
+
+    /// <summary>Principal o secundario que aprobó la revisión publicada, si es compartible (§7.2).</summary>
+    public Guid? AprobadaPor { get; set; }
+}
+
+/// <summary>
+/// Una revisión <b>inmutable</b> de una guía (plan 00 §8.2, regla 6): la foto completa de lo guardado (título, cuerpo,
+/// operación, versiones y visibilidad), su autor, su fecha y su nota. Restaurar la N crea otra igual a la N, con la misma
+/// huella. Un trigger de la base rechaza cualquier <c>UPDATE</c>.
+/// </summary>
+public sealed class RevisionGuia : Entidad
+{
+    public required Guid GuiaId { get; init; }
+
+    /// <summary>1, 2, 3… dentro de la guía.</summary>
+    public required int Numero { get; init; }
+
+    public required OrigenRevision Origen { get; init; }
+
+    /// <summary>Si es una restauración, la revisión que se restauró.</summary>
+    public int? RestauradaDe { get; init; }
+
+    public required string Titulo { get; init; }
+
+    /// <summary>El cuerpo en Markdown, tal cual.</summary>
+    public required string Contenido { get; init; }
+
+    public string? Operacion { get; init; }
+
+    public string? AplicaDesde { get; init; }
+
+    public string? AplicaHasta { get; init; }
+
+    public required VisibilidadGuia Visibilidad { get; init; }
+
+    /// <summary>Mensaje del cambio (texto libre: puede traer datos personales; nunca va a la auditoría ni a los logs).</summary>
+    public required string Nota { get; init; }
+
+    /// <summary>Persona de Atlas que guardó.</summary>
+    public required Guid AutorPersonaId { get; init; }
+
+    public required DateTimeOffset GuardadaEn { get; init; }
+
+    /// <summary>SHA-256 (hexadecimal) de la foto sin autor, fecha ni nota: dos revisiones con la misma huella son iguales.</summary>
+    public required string Huella { get; init; }
+}
+
 /// <summary>
 /// Tablas <c>contratos_*</c> del módulo con su historial <c>__ef_migraciones_contratos</c> (ATLAS-ADR-0026 y
 /// ATLAS-ADR-0035). El prefijo es el id del módulo (<c>contratos</c>), como en los demás módulos; el plan 00 §8.4 las
@@ -181,12 +287,21 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
     public const int LargoRuta = 500;
     public const int LargoResumen = 500;
     public const int LargoEtiqueta = 100;
+    public const int LargoTituloGuia = 200;
+    public const int LargoNotaGuia = 500;
+
+    /// <summary>Tope del cuerpo de una guía, en caracteres.</summary>
+    public const int LargoContenidoGuia = 200_000;
 
     public DbSet<Contrato> Contratos => Set<Contrato>();
 
     public DbSet<VersionContrato> Versiones => Set<VersionContrato>();
 
     public DbSet<OperacionContrato> Operaciones => Set<OperacionContrato>();
+
+    public DbSet<GuiaContrato> Guias => Set<GuiaContrato>();
+
+    public DbSet<RevisionGuia> RevisionesGuia => Set<RevisionGuia>();
 
     public static void Configurar(DbContextOptionsBuilder opciones, string cadenaConexion) =>
         ConfigurarOpciones(opciones, cadenaConexion, TablaHistorial);
@@ -253,6 +368,48 @@ public sealed class ContratosDbContext(DbContextOptions<ContratosDbContext> opci
             e.HasOne<VersionContrato>().WithMany().HasForeignKey(o => o.VersionId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(o => new { o.VersionId, o.Clave }).IsUnique();
             e.HasIndex(o => o.OperationId);
+        });
+
+        modelBuilder.Entity<GuiaContrato>(e =>
+        {
+            e.ToTable(Prefijo + "guia", t =>
+            {
+                t.HasComment("Guías de integración de cada contrato, con la foto de su última revisión (HU 3.7, ATLAS-ADR-0040).");
+                t.HasCheckConstraint("ck_contratos_guia_revisiones",
+                    "revision_actual >= 1 AND (revision_publicada IS NULL OR revision_publicada BETWEEN 1 AND revision_actual)");
+            });
+            e.Property(g => g.Id).ValueGeneratedNever();
+            e.Property(g => g.Titulo).HasMaxLength(LargoTituloGuia);
+            e.Property(g => g.Operacion).HasMaxLength(LargoClave);
+            e.Property(g => g.AplicaDesde).HasMaxLength(LargoVersion);
+            e.Property(g => g.AplicaHasta).HasMaxLength(LargoVersion);
+            Enum(e.Property(g => g.Visibilidad), 20);
+            Enum(e.Property(g => g.Estado), 20);
+            e.HasOne<Contrato>().WithMany().HasForeignKey(g => g.ContratoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(g => g.ContratoId);
+        });
+
+        modelBuilder.Entity<RevisionGuia>(e =>
+        {
+            e.ToTable(Prefijo + "guia_revision", t =>
+            {
+                t.HasComment("Revisiones inmutables de cada guía: foto completa, autor, fecha, nota y huella (HU 3.7, ATLAS-ADR-0040).");
+                t.HasCheckConstraint("ck_contratos_guia_revision_huella", "huella ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("ck_contratos_guia_revision_restaurada", "(origen = 'restauracion') = (restaurada_de IS NOT NULL)");
+            });
+            e.Property(r => r.Id).ValueGeneratedNever();
+            e.Property(r => r.Titulo).HasMaxLength(LargoTituloGuia);
+            e.Property(r => r.Contenido).HasMaxLength(LargoContenidoGuia);
+            e.Property(r => r.Operacion).HasMaxLength(LargoClave);
+            e.Property(r => r.AplicaDesde).HasMaxLength(LargoVersion);
+            e.Property(r => r.AplicaHasta).HasMaxLength(LargoVersion);
+            e.Property(r => r.Nota).HasMaxLength(LargoNotaGuia).HasComment("@pii texto libre del autor");
+            e.Property(r => r.Huella).HasMaxLength(64).IsFixedLength();
+            Enum(e.Property(r => r.Origen), 20);
+            Enum(e.Property(r => r.Visibilidad), 20);
+            e.HasOne<GuiaContrato>().WithMany().HasForeignKey(r => r.GuiaId).OnDelete(DeleteBehavior.Restrict);
+            // Dos guardados a la vez de la misma guía: el segundo choca aquí y responde 409.
+            e.HasIndex(r => new { r.GuiaId, r.Numero }).IsUnique();
         });
 
         // translate() y lower() para la búsqueda sin tildes, como en el catálogo.

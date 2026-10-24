@@ -11,7 +11,11 @@ export const moduloContratos: ModuloAtlas = {
   descripcion: 'OpenAPI, AsyncAPI y proto versionados desde los repos, con diff, guías, paquetes y exportación.',
   icono: 'contratos',
   estado: 'disponible',
-  rutas: [{ path: '/contratos', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Contratos') }],
+  rutas: [
+    { path: '/contratos', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Contratos') },
+    // HU 3.7: enlace directo a una guía; la pestaña «Guías» de la pantalla del contrato (HU 3.6) monta el mismo componente.
+    { path: '/contratos/:contratoId/guias/:guiaId', permiso: 'atlas.contratos.ver_internos', cargar: () => import('./paginas/Guia') },
+  ],
   navegacion: [{ etiqueta: 'Contratos', ruta: '/contratos', movil: 'mas', orden: 40 }],
   widgetsInicio: [
     {

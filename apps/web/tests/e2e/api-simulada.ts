@@ -191,6 +191,24 @@ const CONTRATOS = [
   },
 ];
 
+// Guías del contrato c1 (HU 3.7): el cuerpo trae HTML y un enlace javascript: que la PWA no debe interpretar.
+const AUTORA_GUIA = { id: 'p1', nombre: 'Persona Demo con un nombre bastante largo' };
+const revisionGuia = (numero: number, contenido: string) => ({
+  numero, origen: numero === 1 ? 'creacion' : 'edicion', restauradaDe: null, titulo: 'Cómo autenticarse en la API Externa Demo de Trámites',
+  contenido, operacion: 'GET /tramites/{id}', aplicaDesde: '1.0.0', aplicaHasta: null, visibilidad: 'compartible',
+  nota: numero === 1 ? 'Primera versión.' : 'Renovación del token.', autor: AUTORA_GUIA, guardadaEn: '2026-10-23T15:00:00Z',
+  huella: String(numero).repeat(64), publicada: false,
+});
+const CUERPO_GUIA =
+  '# Autenticación\n\nPide un token y envíalo como `Authorization: Bearer $TOKEN`.\n\n<script>alert(1)</script>\n\n[enlace malo](javascript:alert(2))\n\n' +
+  '| Campo | Descripción |\n|---|---|\n| token | Vence en una hora |\n\n```bash\ncurl -H "Authorization: Bearer $TOKEN" https://qa.ejemplo.com/api/v1/tramites/123\n```\n';
+const REVISIONES_GUIA = [revisionGuia(2, CUERPO_GUIA), revisionGuia(1, '# Autenticación\n\nPide un token.\n')];
+const GUIA = {
+  id: 'g1', contratoId: 'c1', titulo: REVISIONES_GUIA[0]!.titulo, operacion: 'GET /tramites/{id}', aplicaDesde: '1.0.0', aplicaHasta: null,
+  visibilidad: 'compartible', estado: 'borrador', revisionActual: 2, revisionPublicada: null, publicadaEn: null, publicadaPor: null,
+  aprobadaPor: null, actualizadaEn: '2026-10-23T15:00:00Z',
+};
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
@@ -258,6 +276,20 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
       case '/api/v1/contratos/c2/versiones':
         if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
         return json(route, url.pathname.includes('/c1/') ? VERSIONES_CONTRATO : [VERSIONES_CONTRATO[1]]);
+      // Guías (HU 3.7): quien edita, sin ser responsable (no aprueba lo compartible).
+      case '/api/v1/contratos/c1/guias':
+      case '/api/v1/contratos/guias/g1':
+      case '/api/v1/contratos/guias/g1/revisiones':
+      case '/api/v1/contratos/guias/g1/revisiones/1':
+      case '/api/v1/contratos/guias/g1/revisiones/2': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        const edita = opciones.permisos.includes('atlas.contratos.guias.editar');
+        if (url.pathname.endsWith('/c1/guias')) return json(route, { contratoId: 'c1', puedeEditar: edita, puedeAprobar: false, elementos: [GUIA] });
+        if (url.pathname.endsWith('/revisiones')) return json(route, REVISIONES_GUIA);
+        if (url.pathname.endsWith('/revisiones/1')) return json(route, REVISIONES_GUIA[1]);
+        if (url.pathname.endsWith('/revisiones/2')) return json(route, REVISIONES_GUIA[0]);
+        return json(route, { guia: GUIA, revision: REVISIONES_GUIA[0], puedeEditar: edita, puedeAprobar: false });
+      }
       // Responsables (HU 2.3 a 2.5).
       case '/api/v1/equipo/responsabilidades':
         if (!opciones.permisos.includes('atlas.equipo.ver')) return route.fulfill({ status: 403 });

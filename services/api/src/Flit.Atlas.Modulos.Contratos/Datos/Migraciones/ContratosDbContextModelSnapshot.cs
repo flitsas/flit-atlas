@@ -92,6 +92,91 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.GuiaContrato", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("AplicaDesde")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("aplica_desde");
+
+                    b.Property<string>("AplicaHasta")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("aplica_hasta");
+
+                    b.Property<Guid?>("AprobadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("aprobada_por");
+
+                    b.Property<Guid>("ContratoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contrato_id");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<string>("Operacion")
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("operacion");
+
+                    b.Property<DateTimeOffset?>("PublicadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("publicada_en");
+
+                    b.Property<Guid?>("PublicadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("publicada_por");
+
+                    b.Property<int>("RevisionActual")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_actual");
+
+                    b.Property<int?>("RevisionPublicada")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_publicada");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("titulo");
+
+                    b.Property<string>("Visibilidad")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("visibilidad");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_guia");
+
+                    b.HasIndex("ContratoId")
+                        .HasDatabaseName("ix_contratos_guia_contrato_id");
+
+                    b.ToTable("contratos_guia", "atlas", t =>
+                        {
+                            t.HasComment("Guías de integración de cada contrato, con la foto de su última revisión (HU 3.7, ATLAS-ADR-0040).");
+
+                            t.HasCheckConstraint("ck_contratos_guia_revisiones", "revision_actual >= 1 AND (revision_publicada IS NULL OR revision_publicada BETWEEN 1 AND revision_actual)");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.OperacionContrato", b =>
                 {
                     b.Property<Guid>("Id")
@@ -164,6 +249,110 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                     b.ToTable("contratos_operacion", "atlas", t =>
                         {
                             t.HasComment("Índice de operaciones, webhooks, canales y rpc de cada versión (plan 00 §8.4).");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.RevisionGuia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("AplicaDesde")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("aplica_desde");
+
+                    b.Property<string>("AplicaHasta")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("aplica_hasta");
+
+                    b.Property<Guid>("AutorPersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("autor_persona_id");
+
+                    b.Property<string>("Contenido")
+                        .IsRequired()
+                        .HasMaxLength(200000)
+                        .HasColumnType("character varying(200000)")
+                        .HasColumnName("contenido");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTimeOffset>("GuardadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("guardada_en");
+
+                    b.Property<Guid>("GuiaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("guia_id");
+
+                    b.Property<string>("Huella")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("huella")
+                        .IsFixedLength();
+
+                    b.Property<string>("Nota")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("nota")
+                        .HasComment("@pii texto libre del autor");
+
+                    b.Property<int>("Numero")
+                        .HasColumnType("integer")
+                        .HasColumnName("numero");
+
+                    b.Property<string>("Operacion")
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("operacion");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("origen");
+
+                    b.Property<int?>("RestauradaDe")
+                        .HasColumnType("integer")
+                        .HasColumnName("restaurada_de");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("titulo");
+
+                    b.Property<string>("Visibilidad")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("visibilidad");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contratos_guia_revision");
+
+                    b.HasIndex("GuiaId", "Numero")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contratos_guia_revision_guia_id_numero");
+
+                    b.ToTable("contratos_guia_revision", "atlas", t =>
+                        {
+                            t.HasComment("Revisiones inmutables de cada guía: foto completa, autor, fecha, nota y huella (HU 3.7, ATLAS-ADR-0040).");
+
+                            t.HasCheckConstraint("ck_contratos_guia_revision_huella", "huella ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_contratos_guia_revision_restaurada", "(origen = 'restauracion') = (restaurada_de IS NOT NULL)");
                         });
                 });
 
@@ -317,6 +506,16 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.GuiaContrato", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.Contrato", null)
+                        .WithMany()
+                        .HasForeignKey("ContratoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_guia_contratos_contrato_contrato_id");
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.OperacionContrato", b =>
                 {
                     b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", null)
@@ -325,6 +524,16 @@ namespace Flit.Atlas.Modulos.Contratos.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_contratos_operacion_contratos_version_version_id");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.RevisionGuia", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Contratos.Datos.GuiaContrato", null)
+                        .WithMany()
+                        .HasForeignKey("GuiaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contratos_guia_revision_contratos_guia_guia_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Contratos.Datos.VersionContrato", b =>
