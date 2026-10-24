@@ -30,7 +30,7 @@ namespace Flit.Atlas.Api.Tests;
 /// conformidad básica propia: descubrimiento, JWKS, código con PKCE, firma del id_token, audiencias y revocación.
 /// Usan una base propia: la sincronización de clientes borra los que no están en su configuración.
 /// </summary>
-public class TokensTests(EntornoApi entorno)
+public partial class TokensTests(EntornoApi entorno)
 {
     private const string Cli = "atlas-cli";
     private const string Servicio = "svc-prueba";

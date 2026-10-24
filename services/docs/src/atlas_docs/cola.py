@@ -145,7 +145,7 @@ class ManejadorExportaciones:
         if recibido.type != SOLICITADA:
             raise MensajeIlegibleError(f"Tipo inesperado en la cola: {recibido.type[:100]}")
         exportacion_id = recibido.data.get("exportacionId")
-        if not isinstance(exportacion_id, str) or not re.match(PATRON_UUID, exportacion_id):
+        if not isinstance(exportacion_id, str) or not re.fullmatch(PATRON_UUID, exportacion_id):
             raise MensajeIlegibleError("El mensaje no trae un exportacionId válido.")
 
         async def publicar(tipo: str, datos: dict[str, Any]) -> None:
