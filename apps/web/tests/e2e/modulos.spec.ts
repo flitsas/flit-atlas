@@ -270,6 +270,22 @@ test.describe('soporte de los sábados', () => {
     await sinErroresCriticosDeAxe(page, '/soporte/cambios');
     expect(violaciones).toEqual([]);
   });
+
+  test('Outlook, Teams y feeds .ics: apagado con su motivo, accesible y sin scroll horizontal', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.soporte.ver'], roles: ['atlas.desarrollador'] });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/soporte/microsoft-365');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Outlook, Teams y calendarios' })).toBeVisible();
+    await expect(page.getByRole('region', { name: /Calendario compartido de Outlook/ })).toContainText('Apagado en este ambiente');
+    await expect(page.getByRole('list', { name: 'Mis feeds' })).toContainText('Equipo Operaciones');
+    await page.getByRole('button', { name: 'Feed de mis turnos' }).click();
+    await expect(page.getByLabel('Dirección del feed')).toHaveValue(/\/api\/v1\/soporte\/ics\/.+\.ics$/);
+    await sinScrollHorizontal(page, '/soporte/microsoft-365');
+    await sinErroresCriticosDeAxe(page, '/soporte/microsoft-365');
+    expect(violaciones).toEqual([]);
+  });
 });
 
 test.describe('responsables (HU 2.3 a 2.5)', () => {

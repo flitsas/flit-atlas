@@ -201,6 +201,34 @@ function apiFalsa(opciones: Opciones) {
           avisos: [],
         });
       if (ruta0 === '/api/v1/soporte/generacion/confirmar') return json({ generacionId: 'g1', creados: 1, eliminados: 0 });
+      // HU 2.10: Microsoft 365 apagado en este ambiente y feeds .ics.
+      if (ruta0 === '/api/v1/soporte/microsoft-365')
+        return json({
+          calendario: {
+            activo: false,
+            motivo: 'Este ambiente no tiene Entra ID configurado: no hay acceso a Microsoft Graph.',
+            nombreCalendario: 'Soporte TI sábados',
+            pendientes: 0,
+            conErrores: 0,
+            ultimaSincronizacion: null,
+          },
+          teams: { activo: false, motivo: 'Falta la URL del flujo de Workflows del canal de Teams (Plataforma__Teams__Canales__soporte).', pendientes: 0 },
+        });
+      if (ruta0 === '/api/v1/soporte/feeds' && init?.method === 'POST')
+        return json(
+          {
+            id: 'f1',
+            tipo: 'personal',
+            equipo: null,
+            url: 'https://atlas.ejemplo.com/api/v1/soporte/ics/token-ficticio.ics',
+            urlWebcal: 'webcal://atlas.ejemplo.com/api/v1/soporte/ics/token-ficticio.ics',
+            creadoEn: '2026-10-23T15:00:00Z',
+          },
+          201,
+        );
+      if (ruta0 === '/api/v1/soporte/feeds')
+        return json([{ id: 'f0', tipo: 'equipo', equipo: DESARROLLO, creadoEn: '2026-10-22T15:00:00Z', ultimoUsoEn: null }]);
+      if (ruta0.startsWith('/api/v1/soporte/feeds/') && init?.method === 'DELETE') return new Response(null, { status: 204 });
       return new Response('', { status: 404 });
     }),
   );
@@ -392,6 +420,30 @@ describe('pantallas de soporte', () => {
     expect(cuerpo).toMatchObject({ turnoId: 't1', reemplazoPersonaId: 'p-t1' });
     expect(cuerpo.llaveIdempotencia).toMatch(/^[0-9a-f-]{36}$/);
     expect(cuerpo.hechaEn).toBeTruthy();
+  });
+
+  it('Microsoft 365 apagado lo dice con su motivo y el feed .ics muestra su dirección una sola vez', async () => {
+    const llamadas = apiFalsa({ permisos: ['atlas.soporte.ver'] });
+    window.history.pushState({}, '', '/soporte/microsoft-365');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Outlook, Teams y calendarios' })).toBeInTheDocument();
+    const calendario = await screen.findByRole('region', { name: /Calendario compartido de Outlook/ });
+    expect(within(calendario).getByText('Apagado')).toBeInTheDocument();
+    expect(within(calendario).getByRole('note')).toHaveTextContent('no tiene Entra ID');
+    expect(screen.getByRole('region', { name: /Avisos en el canal de Teams/ })).toHaveTextContent('Plataforma__Teams__Canales__soporte');
+
+    const mios = await screen.findByRole('list', { name: 'Mis feeds' });
+    expect(mios).toHaveTextContent('Equipo Desarrollo TI');
+    fireEvent.click(screen.getByRole('button', { name: 'Feed de mis turnos' }));
+    expect(await screen.findByDisplayValue('https://atlas.ejemplo.com/api/v1/soporte/ics/token-ficticio.ics')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Abrir en la app de calendario' })).toHaveAttribute('href', 'webcal://atlas.ejemplo.com/api/v1/soporte/ics/token-ficticio.ics');
+    const creado = llamadas.find((l) => l.ruta === '/api/v1/soporte/feeds' && l.init?.method === 'POST');
+    expect(JSON.parse(String(creado?.init?.body))).toEqual({ tipo: 'personal', equipoId: null });
+
+    fireEvent.click(within(mios).getByRole('button', { name: 'Revocar' }));
+    expect(await screen.findByText('Feed revocado: su dirección ya no funciona.')).toBeInTheDocument();
+    expect(llamadas.some((l) => l.ruta === '/api/v1/soporte/feeds/f0' && l.init?.method === 'DELETE')).toBe(true);
   });
 
   it('el reemplazo acepta desde Cambios de turno y quien aprueba ve la solicitud por aprobar', async () => {
