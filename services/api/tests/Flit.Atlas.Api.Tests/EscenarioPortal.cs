@@ -30,7 +30,8 @@ public sealed class EscenarioPortal : IAsyncDisposable
     private readonly GitHubActionsSimulado _github = new();
     private readonly ResponsablesDePrueba _responsables = new();
 
-    public EscenarioPortal(EntornoApi entorno, IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null)
+    public EscenarioPortal(
+        EntornoApi entorno, IReadOnlyDictionary<string, string>? configuracion = null, TimeProvider? reloj = null, Action<IServiceCollection>? servicios = null)
     {
         _entorno = entorno;
         var claves = new Dictionary<string, string>
@@ -48,6 +49,7 @@ public sealed class EscenarioPortal : IAsyncDisposable
             s.AddPlataformaPublicacionDePruebaEnApi(_github);
             s.AddSingleton(_responsables);
             s.Replace(ServiceDescriptor.Scoped<IProveedorRolesImplicitos, ProveedorDePrueba>());
+            servicios?.Invoke(s);
         });
     }
 

@@ -455,11 +455,11 @@ internal static class EndpointsPortal
 
     private static string Texto(NivelPortal nivel) => nivel == NivelPortal.Tecnico ? "tecnico" : "resumen";
 
-    private static IResult SoloResumen() => Results.Json(new ErrorPortal("solo_resumen",
+    internal static IResult SoloResumen() => Results.Json(new ErrorPortal("solo_resumen",
         "Tu rol ve el resumen de este paquete, sin el detalle técnico. Si lo necesitas, pide a FLIT que te comparta el paquete."), statusCode: StatusCodes.Status403Forbidden);
 
     /// <summary>404 sin revelar si el paquete existe (de otra organización, vencido, revocado o fuera del alcance), auditado.</summary>
-    private static async Task<IResult> NegadoAsync(
+    internal static async Task<IResult> NegadoAsync(
         HttpContext http, PlataformaDbContext plataforma, TimeProvider reloj, VistaPortal vista, Guid paqueteId, string? detalle, CancellationToken ct)
     {
         await AuditarAsync(http, plataforma, reloj, AccionNegado, vista, paqueteId.ToString(), null, new { detalle }, ct);
@@ -467,7 +467,7 @@ internal static class EndpointsPortal
     }
 
     /// <summary>Toda vista de un externo queda en la auditoría (§8.9): quién, qué, versión, cuándo, IP y organización.</summary>
-    private static async Task AuditarAsync(
+    internal static async Task AuditarAsync(
         HttpContext http, PlataformaDbContext plataforma, TimeProvider reloj, string accion, VistaPortal vista, string? recurso, int? revision, object datos,
         CancellationToken ct)
     {

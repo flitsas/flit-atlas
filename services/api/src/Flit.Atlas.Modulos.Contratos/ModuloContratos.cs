@@ -70,7 +70,8 @@ public static class EventosContratos
 /// restauración y publicación aprobada por el responsable (ATLAS-ADR-0040). HU 4.1: paquetes con revisiones inmutables,
 /// publicación y fijación de una revisión anterior (ATLAS-ADR-0041). HU 4.2: la poda de specs para clientes
 /// (<see cref="Poda.Podadores"/>, ATLAS-ADR-0038). HU 4.3 y 4.4: comparticiones de paquetes con organizaciones y el portal
-/// de clientes en <c>/api/v1/portal</c> (ATLAS-ADR-0043). Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
+/// de clientes en <c>/api/v1/portal</c> (ATLAS-ADR-0043). HU 4.7: el sandbox nivel 1 con Microcks, con el spec podado y un
+/// proxy con llave en atlas-api (ATLAS-ADR-0045). Viene encendido (bandera <c>modulo.contratos</c>), como su entrada en la PWA.
 /// </summary>
 public sealed class ModuloContratos : IModuloAtlas
 {
@@ -104,6 +105,13 @@ public sealed class ModuloContratos : IModuloAtlas
         servicios.AddSingleton<Portal.CachePodas>();
         servicios.AddScoped<Portal.AccesoPortal>();
         servicios.AddScoped<Portal.SpecsDelPortal>();
+        // Sandbox nivel 1 con Microcks (HU 4.7, ATLAS-ADR-0045): sin Contratos:Sandbox:UrlMicrocks no está disponible (503)
+        // y el trabajo periódico no hace nada.
+        servicios.AddOptions<Sandbox.OpcionesSandbox>().BindConfiguration(Sandbox.OpcionesSandbox.Seccion);
+        servicios.AddHttpClient(Sandbox.ClienteMicrocks.NombreCliente).RemoveAllLoggers();
+        servicios.AddSingleton<Sandbox.IClienteMicrocks, Sandbox.ClienteMicrocks>();
+        servicios.AddScoped<Sandbox.ServicioSandbox>();
+        servicios.AddHostedService<Sandbox.TrabajoSandbox>();
     }
 
     public void MapearEndpoints(RouteGroupBuilder grupo)
@@ -116,7 +124,12 @@ public sealed class ModuloContratos : IModuloAtlas
         EndpointsVistaContrato.Mapear(grupo);
         Paquetes.EndpointsPaquetes.Mapear(grupo);
         Comparticiones.EndpointsComparticiones.Mapear(grupo);
+        Sandbox.EndpointsSandbox.Mapear(grupo);
     }
 
-    public void MapearEndpointsPortal(RouteGroupBuilder portal) => Portal.EndpointsPortal.Mapear(portal);
+    public void MapearEndpointsPortal(RouteGroupBuilder portal)
+    {
+        Portal.EndpointsPortal.Mapear(portal);
+        Sandbox.EndpointsSandbox.MapearPortal(portal);
+    }
 }

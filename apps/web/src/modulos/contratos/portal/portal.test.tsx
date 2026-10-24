@@ -87,13 +87,44 @@ paths:
           description: El trámite.
 `;
 
-function apiFalsa(paq: PaqueteCompartido = paquete()) {
+const SANDBOX = {
+  id: 's1',
+  paqueteId: 'p1',
+  paquete: 'Paquete Integradores Demo',
+  revision: 2,
+  nivel: 1,
+  estado: 'activo' as const,
+  motivoApagado: null,
+  activadoEn: '2026-10-24T10:00:00-05:00',
+  llaveCreadaEn: '2026-10-24T10:00:00-05:00',
+  expiraEn: '2027-01-31T23:59:59-05:00',
+  ultimoUsoEn: null,
+  cabecera: 'Authorization: Bearer $LLAVE_SANDBOX',
+  contratos: [{ contratoId: 'c1', codigo: 'api-tramites', nombre: 'API de Trámites Demo', version: '1.2.0', urlBase: 'https://sandbox.ejemplo.com/api/v1/contratos/sandbox/0123456789abcdef0123456789abcdef/api-tramites', operaciones: 1 }],
+  instrucciones: 'Guarda la llave en la variable de entorno LLAVE_SANDBOX.',
+  ejemploCurl: 'curl -g -X GET -H "Authorization: Bearer $LLAVE_SANDBOX" "https://sandbox.ejemplo.com/api/v1/contratos/sandbox/0123456789abcdef0123456789abcdef/api-tramites/tramites/{id}"',
+};
+
+interface OpcionesApi {
+  /** `false`: el ambiente sin Microcks. */
+  sandboxDisponible?: boolean;
+  /** Sandboxes que ya tiene la organización. */
+  sandboxes?: (typeof SANDBOX)[];
+}
+
+function apiFalsa(paq: PaqueteCompartido = paquete(), { sandboxDisponible = true, sandboxes = [] }: OpcionesApi = {}) {
   const llamadas: string[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (ruta: string) => {
-      llamadas.push(ruta);
+    vi.fn(async (ruta: string, opciones?: RequestInit) => {
+      llamadas.push(opciones?.method === 'POST' ? `POST ${ruta}` : ruta);
       const url = new URL(ruta, 'https://atlas.ejemplo.com');
+      if (url.pathname === '/api/v1/portal/sandbox' && opciones?.method === 'POST')
+        return sandboxDisponible
+          ? json({ sandbox: SANDBOX, llave: 'atlsbx_llaveFicticiaDePrueba' }, 201)
+          : json({ codigo: 'sandbox_no_disponible', mensaje: 'El sandbox no está disponible en este ambiente.' }, 503);
+      if (url.pathname === '/api/v1/portal/sandbox')
+        return json({ disponible: sandboxDisponible, motivo: sandboxDisponible ? null : 'El sandbox no está disponible en este ambiente.', sandboxes });
       if (url.pathname === '/api/v1/portal/inicio') return json(INICIO);
       if (url.pathname === '/api/v1/portal/paquetes/p1') return json(detalle(paq));
       if (url.pathname === '/api/v1/portal/paquetes/p1/contratos/c1/spec') return new Response(SPEC_PODADO, { headers: { 'Content-Type': 'application/yaml' } });
@@ -183,18 +214,52 @@ describe('pantallas del portal', () => {
     expect(llamadas.some((l) => l.startsWith('/api/v1/portal/buscar?q=tramite'))).toBe(true);
   });
 
-  it('paquete técnico: operaciones y guías compartidas; Exportar deshabilitado con su motivo y Sandbox «pronto»', async () => {
+  it('paquete técnico: operaciones y guías compartidas; Exportar deshabilitado con su motivo y Sandbox conectado (HU 4.7)', async () => {
     apiFalsa();
     montar('/portal/paquetes/p1');
 
-    expect(await screen.findByRole('heading', { name: 'Paquete Integradores Demo' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Paquete Integradores Demo', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'API de Trámites Demo' })).toHaveAttribute('href', '/portal/paquetes/p1/contratos/c1');
     expect(screen.getByRole('link', { name: /Cómo autenticarte/ })).toHaveAttribute('href', '/portal/paquetes/p1/guias/g1');
     const acciones = screen.getByRole('group', { name: 'Acciones del paquete' });
     expect(within(acciones).getByRole('button', { name: /Exportar/ })).toBeDisabled();
-    expect(within(acciones).getByRole('button', { name: /Sandbox/ })).toBeDisabled();
     expect(screen.getByText(/Exportar: la compartición con tu organización o tu rol no incluyen exportar/)).toBeInTheDocument();
-    expect(screen.getByText(/Sandbox: pronto podrás probar/)).toBeInTheDocument();
+    await waitFor(() => expect(within(acciones).getByRole('button', { name: /Sandbox/ })).toBeEnabled());
+    expect(await screen.findByRole('button', { name: 'Activar el sandbox' })).toBeInTheDocument();
+  });
+
+  it('sandbox: activarlo muestra la llave una sola vez para copiar, la URL base y el ejemplo con curl con $LLAVE_SANDBOX', async () => {
+    const llamadas = apiFalsa();
+    montar('/portal/paquetes/p1/contratos/c1');
+
+    const panel = await screen.findByRole('region', { name: 'Sandbox' }, { timeout: 10_000 });
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Activar el sandbox' }));
+    expect(await within(panel).findByLabelText('Llave del sandbox')).toHaveTextContent('atlsbx_llaveFicticiaDePrueba');
+    expect(within(panel).getByText(/no la volverás a ver/)).toBeInTheDocument();
+    expect(within(panel).getByText(SANDBOX.contratos[0]!.urlBase)).toBeInTheDocument();
+    expect(within(panel).getByText(/curl -g -X GET -H "Authorization: Bearer \$LLAVE_SANDBOX"/)).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Generar una llave nueva' })).toBeInTheDocument();
+    expect(llamadas).toContain('POST /api/v1/portal/sandbox');
+  });
+
+  it('sandbox ya activo: muestra la URL sin la llave y permite generar una nueva', async () => {
+    apiFalsa(paquete(), { sandboxes: [SANDBOX] });
+    montar('/portal/paquetes/p1/contratos/c1');
+
+    const panel = await screen.findByRole('region', { name: 'Sandbox' }, { timeout: 10_000 });
+    expect(await within(panel).findByText(SANDBOX.contratos[0]!.urlBase)).toBeInTheDocument();
+    expect(within(panel).queryByLabelText('Llave del sandbox')).not.toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Generar una llave nueva' })).toBeInTheDocument();
+  });
+
+  it('sin Microcks en el ambiente: el botón Sandbox deshabilitado con «El sandbox no está disponible»', async () => {
+    apiFalsa(paquete(), { sandboxDisponible: false });
+    montar('/portal/paquetes/p1');
+
+    const acciones = await screen.findByRole('group', { name: 'Acciones del paquete' });
+    await waitFor(() => expect(within(acciones).getByRole('button', { name: /Sandbox/ })).toBeDisabled());
+    expect(screen.getByText('El sandbox no está disponible.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Activar el sandbox' })).not.toBeInTheDocument();
   });
 
   it('paquete en resumen: sin enlaces al detalle técnico ni acciones', async () => {

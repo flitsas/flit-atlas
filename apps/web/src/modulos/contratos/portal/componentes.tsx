@@ -77,16 +77,23 @@ const TEXTOS: Record<TipoAccionPortal, { etiqueta: string; icono: ReactNode }> =
  * (`puedeExportar`, `puedeSandbox`, que calcula el servidor) y la acción ya está conectada (`acciones.ts`). Deshabilitados,
  * dicen por qué.
  */
-export function AccionesPaquete({ paquete }: { paquete: PaqueteCompartido }) {
-  const acciones: Array<{ tipo: TipoAccionPortal; permitida: boolean }> = [
-    { tipo: 'exportar', permitida: paquete.puedeExportar },
-    { tipo: 'sandbox', permitida: paquete.puedeSandbox },
+export function AccionesPaquete({
+  paquete,
+  disponibles = {},
+}: {
+  paquete: PaqueteCompartido;
+  /** Lo que el ambiente no tiene (p. ej. `{ sandbox: false }` sin Microcks); por defecto, todo disponible. */
+  disponibles?: Partial<Record<TipoAccionPortal, boolean>>;
+}) {
+  const acciones: Array<{ tipo: TipoAccionPortal; permitida: boolean; disponible: boolean }> = [
+    { tipo: 'exportar', permitida: paquete.puedeExportar, disponible: disponibles.exportar ?? true },
+    { tipo: 'sandbox', permitida: paquete.puedeSandbox, disponible: disponibles.sandbox ?? true },
   ];
   return (
     <div role="group" aria-label="Acciones del paquete" className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
-        {acciones.map(({ tipo, permitida }) => {
-          const estado = estadoAccion(tipo, permitida);
+        {acciones.map(({ tipo, permitida, disponible }) => {
+          const estado = estadoAccion(tipo, permitida, disponible);
           return (
             <button
               key={tipo}
@@ -102,11 +109,11 @@ export function AccionesPaquete({ paquete }: { paquete: PaqueteCompartido }) {
           );
         })}
       </div>
-      {acciones.map(({ tipo, permitida }) => {
-        const { motivo } = estadoAccion(tipo, permitida);
+      {acciones.map(({ tipo, permitida, disponible }) => {
+        const { motivo, completo } = estadoAccion(tipo, permitida, disponible);
         return motivo ? (
           <p key={tipo} id={`motivo-${tipo}`} className="text-xs text-atlas-texto-suave">
-            {TEXTOS[tipo].etiqueta}: {motivo}
+            {completo ? motivo : `${TEXTOS[tipo].etiqueta}: ${motivo}`}
           </p>
         ) : null;
       })}

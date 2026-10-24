@@ -27,15 +27,25 @@ const PRONTO: Record<TipoAccionPortal, string> = {
   sandbox: 'pronto podrás probar el paquete en el sandbox desde aquí.',
 };
 
+/** El ambiente no tiene la pieza (p. ej. Microcks para el sandbox, HU 4.7): la frase va sola, sin el nombre de la acción delante. */
+const NO_DISPONIBLE: Record<TipoAccionPortal, string> = {
+  exportar: 'La exportación no está disponible.',
+  sandbox: 'El sandbox no está disponible.',
+};
+
 export interface EstadoAccionPortal {
   habilitada: boolean;
   /** Por qué está deshabilitada; `null` si está habilitada. */
   motivo: string | null;
+  /** El motivo es una frase completa (no se le antepone el nombre de la acción). */
+  completo?: boolean;
   ejecutar?: EjecutarAccionPortal;
 }
 
-export function estadoAccion(tipo: TipoAccionPortal, permitida: boolean): EstadoAccionPortal {
+/** `disponible = false`: el servidor dice que el ambiente no tiene con qué (el sandbox sin Microcks responde 503). */
+export function estadoAccion(tipo: TipoAccionPortal, permitida: boolean, disponible = true): EstadoAccionPortal {
   if (!permitida) return { habilitada: false, motivo: NO_PERMITIDA[tipo] };
+  if (!disponible) return { habilitada: false, motivo: NO_DISPONIBLE[tipo], completo: true };
   const ejecutar = conectadas.get(tipo);
   return ejecutar ? { habilitada: true, motivo: null, ejecutar } : { habilitada: false, motivo: PRONTO[tipo] };
 }

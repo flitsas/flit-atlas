@@ -1,12 +1,14 @@
 using System.Net;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Modulos.Contratos.Sandbox;
 using Flit.Atlas.Plataforma.Busqueda;
 using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using static Flit.Atlas.Api.Tests.EscenarioPortal;
 
 namespace Flit.Atlas.Api.Tests;
@@ -44,7 +46,8 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
         Lista,
     }
 
-    private sealed record Llamada(string Url, Esperado Esperado);
+    /// <param name="Metodo">GET si no se da; con otro, <paramref name="Cuerpo"/> va en JSON.</param>
+    private sealed record Llamada(string Url, Esperado Esperado, HttpMethod? Metodo = null, object? Cuerpo = null);
 
     /// <summary>Términos que encuentran algo de cada organización y de lo que está fuera del alcance.</summary>
     private static readonly string[] Terminos = ["alfa", "fuera", "exclusiva", "demo", "api", "pagos", "obtener", "guía"];
@@ -66,7 +69,24 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
             ["GET /api/v1/portal/paquetes/{paqueteId:guid}/guias/{guiaId:guid}"] =
                 p => Combinar(p, (paquete, _, guia) => $"/api/v1/portal/paquetes/{paquete}/guias/{guia}"),
             ["GET /api/v1/portal/buscar"] = _ => Terminos.Select(t => new Llamada($"/api/v1/portal/buscar?q={Uri.EscapeDataString(t)}", Esperado.Lista)),
+            // HU 4.7 (ATLAS-ADR-0045): activar el sandbox de lo propio puede dar 201/200 o un rechazo (la compartición sin
+            // sandbox), nunca algo ajeno; de lo ajeno, siempre un rechazo. Luego la lista de sandboxes solo trae lo propio.
+            ["POST /api/v1/portal/sandbox"] = ActivarSandbox,
+            ["GET /api/v1/portal/sandbox"] = _ => [new("/api/v1/portal/sandbox", Esperado.Lista)],
         };
+
+    private static IEnumerable<Llamada> ActivarSandbox(Perspectiva p)
+    {
+        if (p.Propio is { } propio)
+        {
+            yield return new("/api/v1/portal/sandbox", Esperado.Lista, HttpMethod.Post, new { paqueteId = propio.Paquete });
+        }
+        foreach (var ajeno in p.Ajenos)
+        {
+            yield return new("/api/v1/portal/sandbox", Esperado.Ajeno, HttpMethod.Post, new { paqueteId = ajeno.Paquete });
+        }
+        yield return new("/api/v1/portal/sandbox", Esperado.Ajeno, HttpMethod.Post, new { paqueteId = Guid.NewGuid() });
+    }
 
     private static IEnumerable<Llamada> Combinar(Perspectiva p, Func<Guid, Guid, Guid, string> url, bool conMezclas = true)
     {
@@ -108,7 +128,8 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
     [Fact]
     public async Task Nadie_obtiene_del_portal_datos_de_otra_organizacion_ni_fuera_de_su_alcance_ni_tras_revocar_o_vencer()
     {
-        await using var escenario = new EscenarioPortal(entorno);
+        // El sandbox con un Microcks en memoria: lo que se prueba aquí es el aislamiento (SandboxMicrocksTests prueba los mocks).
+        await using var escenario = new EscenarioPortal(entorno, servicios: s => s.Replace(ServiceDescriptor.Singleton<IClienteMicrocks, MicrocksEnMemoria>()));
         var (lider, _) = await escenario.EmpleadoAsync(RolesAtlas.LiderTecnico);
         var (aplicativoA, slugA) = await AplicativoAsync(lider, "Aplicativo Alfa Demo");
         var (aplicativoB, slugB) = await AplicativoAsync(lider, "Aplicativo Exclusivo Demo");
@@ -156,7 +177,9 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
                 {
                     foreach (var llamada in caso(p))
                     {
-                        var respuesta = await p.Quien.GetAsync(llamada.Url);
+                        var respuesta = llamada.Metodo is null
+                            ? await p.Quien.GetAsync(llamada.Url)
+                            : await Enviar(p.Quien, llamada.Metodo, llamada.Url, llamada.Cuerpo);
                         var cuerpo = await respuesta.Content.ReadAsStringAsync(Ct);
                         var donde = $"[{fase} · {p.Nombre}] {endpoint} → {llamada.Url}: {(int)respuesta.StatusCode}";
                         var prohibido = p.Prohibidos.Concat(internos).FirstOrDefault(m => cuerpo.Contains(m, StringComparison.OrdinalIgnoreCase));
@@ -168,13 +191,13 @@ public sealed class AislamientoPortalTests(EntornoApi entorno)
                         var negado = estado is HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized;
                         switch (llamada.Esperado)
                         {
-                            case Esperado.Propio when estado != HttpStatusCode.OK || !p.Propio!.Marcas.Any(m => cuerpo.Contains(m, StringComparison.OrdinalIgnoreCase)):
+                            case Esperado.Propio when !respuesta.IsSuccessStatusCode || !p.Propio!.Marcas.Any(m => cuerpo.Contains(m, StringComparison.OrdinalIgnoreCase)):
                                 fallas.Add($"{donde}: se esperaba 200 con lo propio");
                                 break;
                             case Esperado.Ajeno when !negado:
                                 fallas.Add($"{donde}: se esperaba 404");
                                 break;
-                            case Esperado.Lista when estado != HttpStatusCode.OK && !negado:
+                            case Esperado.Lista when !respuesta.IsSuccessStatusCode && !negado:
                                 fallas.Add($"{donde}: se esperaba 200 o un rechazo");
                                 break;
                         }

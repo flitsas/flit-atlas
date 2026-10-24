@@ -39,6 +39,14 @@ var correo = builder.AddContainer("correo", "axllent/mailpit", "v1.31.4")
     .WithHttpHealthCheck("/livez", endpointName: "http");
 var smtp = correo.GetEndpoint("smtp");
 
+// Sandbox nivel 1 (HU 4.7, ATLAS-ADR-0045): Microcks (Apache-2.0, CNCF) en su imagen «uber» nativa, 1.15.0 del 05/08/2026,
+// fijada por digest. Guarda en memoria y no pide autenticación; atlas-api vuelve a importar lo que pierda al reiniciarse.
+// Solo lo llama atlas-api (el proxy con la llave del sandbox): no se publica un puerto fijo.
+var microcks = builder.AddContainer("microcks", "quay.io/microcks/microcks-uber", "1.15.0-native")
+    .WithImageSHA256("b36c02f9e52bd6dfad939bbbd75dfd3f27c3196a046caa34fabd82e76924f670")
+    .WithHttpEndpoint(targetPort: 8080, name: "http")
+    .WithHttpHealthCheck("/api/health", endpointName: "http");
+
 // --- Servicios de Atlas ---
 
 // CommunityToolkit marca AddGolangApp como obsoleto a favor de Aspire.Hosting.Go, que aún no está publicado
@@ -94,6 +102,11 @@ var api = builder.AddProject<Projects.Flit_Atlas_Api>("api")
     .WithEnvironment("Identidad__LimiteTasa__ExternosPorIp", "120")
     .WithEnvironment("Identidad__LimiteTasa__IngresoPorIp", "120")
     .WithEnvironment("Identidad__LimiteTasa__PorIp", "1000")
+    // El sandbox: Microcks por la red de Aspire y la URL que ve el cliente, la de la PWA (Vite reenvía /api a atlas-api).
+    .WithEnvironment("Contratos__Sandbox__UrlMicrocks", microcks.GetEndpoint("http"))
+    .WithEnvironment("Contratos__Sandbox__UrlPublica", "https://localhost:4032")
+    .WithEnvironment("Contratos__Sandbox__Intervalo", "00:01:00")
+    .WaitFor(microcks)
     .WaitFor(correo)
     .WithReference(atlasDb).WaitFor(atlasDb)
     .WithReference(redis).WaitFor(redis)
