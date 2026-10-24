@@ -118,7 +118,10 @@ internal static class OraculoPoda
         return [.. faltantes.Distinct(StringComparer.Ordinal)];
     }
 
-    /// <summary>Rutas de los nodos marcados como internos.</summary>
+    /// <summary>Extensiones de procedencia interna que nunca salen en un spec podado (escritas aquí aparte del podador).</summary>
+    private static readonly string[] Procedencia = ["x-flit-fuente", "x-flit-ambientes"];
+
+    /// <summary>Rutas de los nodos marcados como internos y de las extensiones de procedencia interna.</summary>
     public static List<string> Internos(JsonObject raiz)
     {
         var lista = new List<string>();
@@ -127,6 +130,13 @@ internal static class OraculoPoda
             if (Marcado(o["x-internal"]) || Marcado(o["x-interno"]))
             {
                 lista.Add(ruta);
+            }
+            foreach (var extension in Procedencia)
+            {
+                if (o.ContainsKey(extension))
+                {
+                    lista.Add($"{ruta}/{extension}");
+                }
             }
         });
         return lista;

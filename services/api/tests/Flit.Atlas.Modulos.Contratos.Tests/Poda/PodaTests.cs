@@ -146,6 +146,22 @@ public class PodaTests
     }
 
     [Fact]
+    public void Quita_la_procedencia_interna_en_cualquier_nivel()
+    {
+        var spec = OpenApi
+            .Replace("  version: 1.0.0\n", "  version: 1.0.0\n  x-flit-fuente: { repo: flitsas-demo/demo }\n  x-flit-ambientes: { qa: qa.ejemplo.com }\n", StringComparison.Ordinal)
+            .Replace("Estado: { type: string, enum: [A] }", "Estado: { type: string, enum: [A], x-flit-fuente: hoja 2 }", StringComparison.Ordinal);
+        Assert.Contains("x-flit-fuente: { repo", spec, StringComparison.Ordinal);
+
+        var podado = Podar(spec, "GET /tramites/{id}");
+
+        Assert.DoesNotContain("x-flit-fuente", podado.Contenido, StringComparison.Ordinal);
+        Assert.DoesNotContain("x-flit-ambientes", podado.Contenido, StringComparison.Ordinal);
+        Assert.Contains("x-flit-obligatoriedad", podado.Contenido, StringComparison.Ordinal);
+        Assert.Contains("x-enum-descriptions", podado.Contenido, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Reescribe_los_servers_y_quita_los_anidados_y_los_links_a_lo_no_compartido()
     {
         var podado = Podar(OpenApi, "GET /tramites/{id}");
@@ -309,6 +325,10 @@ public class PodaTests
         Assert.Equal(publicas.Order(StringComparer.Ordinal), podado.Resumen.Operaciones.Order(StringComparer.Ordinal));
         Assert.Contains("x-flit-obligatoriedad", podado.Contenido, StringComparison.Ordinal);
         Assert.Contains("x-enum-descriptions", podado.Contenido, StringComparison.Ordinal);
+        Assert.Contains("x-flit-fuente", spec, StringComparison.Ordinal);
+        Assert.DoesNotContain("x-flit-fuente", podado.Contenido, StringComparison.Ordinal);
+        Assert.DoesNotContain("x-flit-ambientes", podado.Contenido, StringComparison.Ordinal);
+        Assert.DoesNotContain("appsettings", podado.Contenido, StringComparison.Ordinal);
         Assert.Empty(Internos(Leer(podado.Contenido)));
         Assert.Equal(["https://api.ejemplo.com"], ((JsonArray)Leer(podado.Contenido)["servers"]!).Select(s => (string)s!["url"]!));
     }
@@ -500,6 +520,7 @@ public class PodaTests
         Assert.Equal(["components/schemas/Solo"], Huerfanos(malo, false));
         Assert.Equal(["#/components/responses/NoExiste"], ReferenciasRotas(malo));
         Assert.Equal(["/paths//a/get"], Internos(malo));
+        Assert.Equal(["/info/x-flit-fuente"], Internos(Leer("""{"info":{"x-flit-fuente":{"repo":"x"},"x-flit-obligatoriedad":{}}}""")));
         Assert.False(Subconjunto(JsonNode.Parse("""{"a":[1,3]}"""), JsonNode.Parse("""{"a":[3,1]}""")));
         Assert.True(Subconjunto(JsonNode.Parse("""{"a":[1,3]}"""), JsonNode.Parse("""{"a":[1,2,3],"b":0}""")));
     }
