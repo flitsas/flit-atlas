@@ -111,6 +111,8 @@ public sealed class EntornoApi : IAsyncLifetime
             // HU 2.11: sin la corrida diaria de recordatorios (la base es compartida y mandaría correos y avisos a otras
             // pruebas); las pruebas la piden con «Enviar ahora» o llaman al servicio.
             b.UseSetting("Soporte:Recordatorios:Habilitados", "false");
+            // HU 4.5: sin abrir las colas que atlas-api consume (no hay broker); las pruebas de exportaciones lo encienden.
+            b.UseSetting("Plataforma:Mensajeria:Consumo:Habilitado", "false");
             foreach (var (clave, valor) in configuracion ?? new Dictionary<string, string>())
             {
                 b.UseSetting(clave, valor);
@@ -132,8 +134,12 @@ public sealed class EntornoApi : IAsyncLifetime
             });
             b.UseSetting("ConnectionStrings:atlas", baseDeDatos ?? Postgres.GetConnectionString());
             b.UseSetting("ConnectionStrings:redis", Redis.GetConnectionString());
-            // No se usa en estas pruebas: la outbox solo abre la conexión cuando hay eventos por publicar.
-            b.UseSetting("ConnectionStrings:rabbitmq", "amqp://x:x@127.0.0.1:1");
+            // No se usa en estas pruebas (salvo las que traen su broker): la outbox solo abre la conexión cuando hay eventos
+            // por publicar.
+            if (configuracion?.ContainsKey("ConnectionStrings:rabbitmq") != true)
+            {
+                b.UseSetting("ConnectionStrings:rabbitmq", "amqp://x:x@127.0.0.1:1");
+            }
             b.UseSetting("Atlas:Ambiente", ambiente);
             b.UseSetting(ExtensionesIdentidad.ClaveSimulado, simulado ? "true" : "false");
         });

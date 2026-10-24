@@ -114,6 +114,8 @@ public static class ServidorTokens
                     b.UseScopedHandler<AuditoriaTokens>().SetOrder(int.MinValue + 100_000).SetType(OpenIddictServerHandlerType.Custom));
                 o.AddEventHandler<ApplyAuthorizationResponseContext>(b =>
                     b.UseScopedHandler<AuditoriaTokens>().SetOrder(int.MinValue + 100_000).SetType(OpenIddictServerHandlerType.Custom));
+                // Servicios internos (ATLAS-ADR-0044): sus tokens van firmados y sin cifrar para validarlos con el JWKS.
+                o.AddEventHandler(TokensParaServicios.Descriptor);
             })
             .AddValidation(o =>
             {

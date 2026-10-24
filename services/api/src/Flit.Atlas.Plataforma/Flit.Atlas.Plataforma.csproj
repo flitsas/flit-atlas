@@ -6,6 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- S3 (MinIO o RustFS en local y dev/qa, Contabo en pdn) para las exportaciones (ATLAS-ADR-0042). -->
+    <PackageReference Include="AWSSDK.S3" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Lib.Net.Http.WebPush" />
     <PackageReference Include="MailKit" />

@@ -9,6 +9,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <!-- HU 4.5: RabbitMQ real para la prueba de punta a punta de las exportaciones. -->
+    <PackageReference Include="Testcontainers.RabbitMq" />
     <PackageReference Include="Testcontainers.Redis" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>

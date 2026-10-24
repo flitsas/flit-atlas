@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,12 +15,9 @@ namespace Flit.Atlas.Identidad.Seguridad;
 /// vencida y lleva al usuario a <c>GET /api/v1/identidad/entrar/microsoft?reautenticar=true&amp;volver=…</c>, que
 /// fuerza a Entra a pedir las credenciales otra vez (<c>prompt=login</c>).
 /// </summary>
-/// <summary>Metadato de los endpoints que exigen reautenticación (lo lee el contrato OpenAPI).</summary>
-public sealed class MetadatoReautenticacion;
-
 public static class Reautenticacion
 {
-    public const string Codigo = "reautenticacion_requerida";
+    public const string Codigo = ExtensionesIngresoReciente.CodigoReautenticacion;
 
     private static readonly TimeSpan DesfaseTolerado = TimeSpan.FromMinutes(5);
 
@@ -68,4 +66,15 @@ public static class Reautenticacion
         long.TryParse(usuario.FindFirstValue(ClaimsAtlas.AuthTime), NumberStyles.Integer, CultureInfo.InvariantCulture, out var segundos)
             ? DateTimeOffset.FromUnixTimeSeconds(segundos)
             : null;
+}
+
+/// <summary>
+/// La reautenticación de la identidad expuesta al núcleo (<see cref="IReautenticacion"/>), para que los módulos la exijan
+/// con <see cref="ExtensionesIngresoReciente.ExigeIngresoReciente{TBuilder}"/> (p. ej. exportar paquetes, HU 4.5).
+/// </summary>
+internal sealed class ReautenticacionDeSesion : IReautenticacion
+{
+    public bool EsReciente(HttpContext http) => Reautenticacion.EsReciente(http);
+
+    public Task<IResult> RechazarAsync(HttpContext http) => Reautenticacion.RechazarAsync(http);
 }

@@ -32,6 +32,9 @@ public static partial class ExtensionesModulos
 
     public static string Bandera(string id) => $"modulo.{id}";
 
+    /// <summary>Prefijo de los endpoints del portal de clientes (<see cref="IModuloAtlas.MapearEndpointsPortal"/>).</summary>
+    public const string RutaPortal = "/api/v1/portal";
+
     public static string TablaHistorial(string id) => $"__ef_migraciones_{id}";
 
     /// <summary>
@@ -127,6 +130,14 @@ public static partial class ExtensionesModulos
                 .WithMetadata(new MetadatoModulo(modulo.Id))
                 .AddEndpointFilter(new FiltroBandera(modulo));
             modulo.MapearEndpoints(grupo);
+
+            // Portal de clientes (F4): mismas reglas, bajo /api/v1/portal.
+            var portal = rutas.MapGroup(RutaPortal)
+                .WithTags(modulo.Nombre)
+                .RequireAuthorization()
+                .WithMetadata(new MetadatoModulo(modulo.Id))
+                .AddEndpointFilter(new FiltroBandera(modulo));
+            modulo.MapearEndpointsPortal(portal);
         }
         return rutas;
     }

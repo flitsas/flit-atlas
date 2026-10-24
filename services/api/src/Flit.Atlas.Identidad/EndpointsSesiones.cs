@@ -5,6 +5,7 @@ using Flit.Atlas.Identidad.Seguridad;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
+using Flit.Atlas.Plataforma.Permisos;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;

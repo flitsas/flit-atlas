@@ -202,8 +202,7 @@ jobs:
           - { nombre: atlas-api, contexto: ., dockerfile: services/api/Dockerfile, target: api }
           - { nombre: atlas-migrador, contexto: ., dockerfile: services/api/Dockerfile, target: migrador }
           - { nombre: atlas-web, contexto: apps/web, dockerfile: apps/web/Dockerfile, target: "" }
-          # atlas-docs (HU 4.5): cd.yml la publicará con la cola de exportaciones (ola 2); aquí solo se comprueba que
-          # construye, con las librerías de WeasyPrint.
+          # atlas-docs (HU 4.5): la publica cd.yml; aquí se comprueba que construye, con las librerías de WeasyPrint.
           - { nombre: atlas-docs, contexto: ., dockerfile: services/docs/Dockerfile, target: docs }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

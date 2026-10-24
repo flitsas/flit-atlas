@@ -22,6 +22,10 @@ public static class EndpointsPlataforma
     /// <summary>Mismos nombres de claim que <c>ClaimsAtlas</c> de Identidad (lo verifica una prueba).</summary>
     public const string ClaimPersona = "persona_id";
     public const string ClaimOrganizacion = "organizacion_id";
+    public const string ClaimTipoPrincipal = "tipo_principal";
+
+    /// <summary>Valor de <see cref="ClaimTipoPrincipal"/> de una persona externa (cliente, asesor, proveedor).</summary>
+    public const string TipoExterno = "externo";
 
     public const int LimiteBandeja = 100;
 
