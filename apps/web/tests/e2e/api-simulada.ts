@@ -239,6 +239,72 @@ const CONSOLIDADO_CONTRATOS = [
   },
 ];
 
+/**
+ * HU 3.6 y 3.9: el contrato real de ICT de FLIT 2 enriquecido con el Excel (`contracts/ict/core-ict.enriquecido.v1.yaml`,
+ * ATLAS-ADR-0037), con dos versiones, su diff y sus canales (HU 3.4).
+ */
+const VERSIONES_ICT = [
+  { ...versionSimulada('3.0.0', true, '2026-10-20T15:00:00Z'), tieneBreaking: true },
+  versionSimulada('2.9.0', true, '2026-09-01T15:00:00Z'),
+];
+const CONTRATO_ICT = {
+  id: 'c3', codigo: 'core-ict', nombre: 'API de ICT · Integración con Terceros (core-ict)', descripcion: null, tipo: 'openapi',
+  visibilidad: 'compartible', aplicativo: { id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0' }, repositorio: 'flitsas-demo/flit',
+  versiones: 2, ultimaVersion: VERSIONES_ICT[0], ultimaEstable: VERSIONES_ICT[0],
+};
+const DIFF_ICT = {
+  contratoId: 'c3', desde: '2.9.0', hasta: '3.0.0', motor: 'oasdiff v1.33.0', sinDiferencias: false, changelog: '', desdeCache: true,
+  resumen: { total: 2, errores: 1, advertencias: 0, informativos: 1, breaking: 1, hayBreaking: true },
+  cambios: [
+    { regla: 'api-path-removed-without-deprecation', nivel: 'error', breaking: true, texto: 'Se quitó la ruta /api/v1/ict/antigua sin deprecarla', comentario: null, metodo: 'GET', ruta: '/api/v1/ict/antigua', operationId: null, seccion: 'paths' },
+    { regla: 'endpoint-added', nivel: 'info', breaking: false, texto: 'Se agregó la ruta de reproceso', comentario: null, metodo: 'POST', ruta: '/api/v1/ict/reprocess/{id}', operationId: null, seccion: 'paths' },
+  ],
+};
+/** Canales ficticios de c3 (HU 3.4): la 3.0.0 en pdn y en qa, nada en dev. */
+const CANALES_ICT = {
+  ambientes: ['dev', 'qa', 'pdn'],
+  canales: [
+    { ambiente: 'qa', versionId: 'v-3.0.0', version: '3.0.0', esEstable: true, desplegadoEn: '2026-10-20T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@staging', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '11' },
+    { ambiente: 'pdn', versionId: 'v-3.0.0', version: '3.0.0', esEstable: true, desplegadoEn: '2026-10-21T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@release', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '12' },
+  ],
+  historial: [
+    { ambiente: 'pdn', version: '3.0.0', versionAnterior: '2.9.0', desplegadoEn: '2026-10-21T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@release', repositorio: 'flitsas-demo/flit', rama: 'release', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '12' },
+    { ambiente: 'qa', version: '3.0.0', versionAnterior: '2.9.0', desplegadoEn: '2026-10-20T16:00:00Z', desplegadoPor: 'github:flitsas-demo/flit@staging', repositorio: 'flitsas-demo/flit', rama: 'staging', commit: '0123456789abcdef0123456789abcdef01234567', ejecucion: '11' },
+  ],
+};
+const OPENAPI_SIMULADO = `openapi: 3.1.0
+info: { title: API Demo, version: 1.3.0-dev.a1b2c3d }
+paths:
+  /tramites/{id}:
+    get:
+      summary: Obtener un trámite
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: El trámite. }, '404': { description: No existe. } }
+`;
+const ASYNCAPI_SIMULADO = `asyncapi: 3.0.0
+info: { title: Eventos Demo, version: 1.2.0 }
+channels:
+  radicados:
+    address: tramites.radicado.con.una.direccion.de.canal.larga
+    messages:
+      radicado: { $ref: '#/components/messages/Radicado' }
+operations:
+  publicarRadicado:
+    action: send
+    summary: Se radicó un trámite.
+    channel: { $ref: '#/channels/radicados' }
+components:
+  messages:
+    Radicado:
+      name: TramiteRadicado
+      payload:
+        type: object
+        required: [id]
+        properties:
+          id: { type: string, description: Id del trámite }
+          organismo: { type: string, description: Organismo Demo que lo radicó }
+`;
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
@@ -571,6 +637,22 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
           }, 201);
         return json(route, [{ id: 'f0', tipo: 'equipo', equipo: { id: 'e2', nombre: 'Operaciones' }, creadoEn: '2026-10-22T15:00:00Z', ultimoUsoEn: '2026-10-23T10:00:00Z' }]);
       default: {
+        // Pantalla del contrato (HU 3.6 y 3.9): c3 es el contrato real de ICT (saneado) y c2 un AsyncAPI ficticio.
+        const deContrato = /^\/api\/v1\/contratos\/(c[123])(\/.*)?$/.exec(url.pathname);
+        if (deContrato) {
+          if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+          const [, id, resto = ''] = deContrato;
+          const contrato = id === 'c3' ? CONTRATO_ICT : CONTRATOS.find((c) => c.id === id)!;
+          if (resto === '') return json(route, contrato);
+          if (resto === '/versiones') return json(route, id === 'c3' ? VERSIONES_ICT : id === 'c1' ? VERSIONES_CONTRATO : [VERSIONES_CONTRATO[1]]);
+          if (resto.endsWith('/operaciones')) return json(route, []);
+          if (resto.endsWith('/spec')) {
+            const texto = id === 'c3' ? readFileSync(resolve(RAIZ, 'contracts/ict/core-ict.enriquecido.v1.yaml'), 'utf8') : id === 'c2' ? ASYNCAPI_SIMULADO : OPENAPI_SIMULADO;
+            return route.fulfill({ status: 200, contentType: 'application/yaml', body: texto });
+          }
+          if (resto === '/diff') return json(route, DIFF_ICT);
+          if (resto === '/canales') return json(route, CANALES_ICT);
+        }
         const ficha = /^\/api\/v1\/catalogo\/aplicativos\/([a-z0-9-]+)$/.exec(url.pathname);
         const aplicativo = ficha && aplicativos.find((a) => a.slug === ficha[1]);
         if (aplicativo) {

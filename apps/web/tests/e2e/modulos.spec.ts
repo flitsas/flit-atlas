@@ -293,6 +293,112 @@ test.describe('consolidado de contratos (HU 3.4)', () => {
   });
 });
 
+test.describe('pantalla del contrato (HU 3.6 y 3.9)', () => {
+  test('operaciones, obligatoriedad, tablas, diff y canales del contrato de ICT: hoja inferior en el móvil, accesible y sin scroll a 360 px', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    const movil = esMovil(info);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.contratos.ver_internos'] });
+    if (movil) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/contratos/c3');
+
+    await expect(page.getByRole('heading', { level: 1, name: /API de ICT/ })).toBeVisible();
+    const operaciones = page.getByRole('navigation', { name: 'Operaciones' });
+    await expect(operaciones.getByRole('button').first()).toBeVisible();
+    await page.getByRole('searchbox', { name: 'Buscar operaciones' }).fill('external-transaction/register');
+    await operaciones.getByRole('button', { name: /\/api\/v1\/external-transaction\/register/ }).first().click();
+    // En el móvil, la ficha va en una hoja inferior; en escritorio, al lado de la lista.
+    const ficha = movil ? page.getByRole('dialog', { name: /POST \/api\/v1\/external-transaction\/register/ }) : page.locator('article').first();
+    await expect(ficha.getByRole('heading', { name: 'Errores' })).toBeVisible();
+    await expect(ficha.getByText(/curl --request POST/)).toContainText('{{baseUrl}}');
+    await ficha.getByRole('tab', { name: 'Go' }).click();
+    await expect(ficha.getByText(/package main/)).toBeVisible();
+    if (movil) await sinScrollHorizontal(page, 'ficha de la operación a 360 px');
+    await sinErroresCriticosDeAxe(page, 'operación del contrato');
+    if (movil) await page.keyboard.press('Escape');
+
+    await page.getByRole('tab', { name: 'Obligatoriedad' }).click();
+    const matriz = page.getByRole('region', { name: 'Matriz de obligatoriedad de SolicitudRegistroTramite' });
+    await matriz.getByRole('searchbox', { name: 'Buscar campo' }).fill('vin');
+    if (movil) {
+      // En el móvil, por tipo de trámite como lista.
+      await matriz.getByText('Matricula inicial (1)', { exact: true }).click();
+      await expect(matriz.getByRole('region', { name: 'Obligatorio en Matricula inicial' }).getByText('vin', { exact: true })).toBeVisible();
+      await sinScrollHorizontal(page, 'matriz de obligatoriedad a 360 px');
+    } else {
+      await expect(matriz.getByRole('table').getByRole('columnheader', { name: 'Matricula tipo leasing' })).toBeVisible();
+    }
+    await sinErroresCriticosDeAxe(page, 'matriz de obligatoriedad');
+
+    await page.getByRole('tab', { name: /Tablas de referencia/ }).click();
+    await page.getByRole('searchbox', { name: 'Buscar en las tablas de referencia' }).fill('pasaporte');
+    await expect(page.locator('summary').getByText('Tabla Tipo Documento', { exact: true })).toBeVisible();
+    if (movil) await sinScrollHorizontal(page, 'tablas de referencia a 360 px');
+    await sinErroresCriticosDeAxe(page, 'tablas de referencia');
+
+    await page.getByRole('tab', { name: /Versiones/ }).click();
+    await expect(page.getByRole('region', { name: 'Rompen compatibilidad' }).getByText(/Se quitó la ruta/)).toBeVisible();
+    await expect(page.getByText('Breaking: sí')).toBeVisible();
+    if (movil) await sinScrollHorizontal(page, 'versiones y diff a 360 px');
+    await sinErroresCriticosDeAxe(page, 'versiones y diff');
+
+    // Canales (HU 3.4): versión por ambiente e historial, apilados en el móvil.
+    await page.getByRole('tab', { name: 'Canales' }).click();
+    await expect(page.getByRole('list', { name: 'Versión por ambiente' }).getByRole('listitem', { name: 'dev' })).toContainText('Sin versión desplegada');
+    await expect(page.getByRole('list', { name: 'Historial de canales' }).getByRole('listitem')).toHaveCount(2);
+    if (movil) await sinScrollHorizontal(page, 'canales a 360 px');
+    await sinErroresCriticosDeAxe(page, 'canales');
+    expect(violaciones).toEqual([]);
+  });
+
+  test('referencia interactiva con Scalar en un iframe aislado, solo en escritorio y solo hacia QA', async ({ page }, info) => {
+    test.skip(esMovil(info), 'En el móvil se usa la vista propia de operaciones; Scalar es solo de escritorio.');
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.contratos.ver_internos'] });
+    await page.goto('/contratos/c3?pestana=referencia');
+
+    const marco = page.locator('iframe[title^="Referencia interactiva"]');
+    await expect(marco).toHaveAttribute('sandbox', 'allow-scripts');
+    const visor = page.frameLocator('iframe[title^="Referencia interactiva"]');
+    await expect(visor.getByRole('heading', { name: /ICT/ }).first()).toBeVisible({ timeout: 20_000 });
+    await expect(visor.getByText('https://ict.qa.flitsas.com').first()).toBeVisible();
+    await expect(page.getByText(/«Probar» solo llama a https:\/\/ict\.qa\.flitsas\.com/)).toBeVisible();
+    // El iframe no tiene el origen de Atlas: no puede leer su cookie ni su DOM.
+    const origen = await page.frames().find((f) => f.url().includes('/visor/'))!.evaluate(() => window.origin);
+    expect(origen).toBe('null');
+    await sinErroresCriticosDeAxe(page, 'referencia interactiva');
+    expect(violaciones).toEqual([]);
+  });
+
+  test('en el tema oscuro, la matriz, las tablas y el diff pasan axe (contraste incluido)', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.contratos.ver_internos'] });
+    for (const pestana of ['obligatoriedad', 'tablas', 'versiones', 'canales']) {
+      await page.goto(`/contratos/c3?pestana=${pestana}`);
+      await expect(page.getByRole('tab', { selected: true })).toBeVisible();
+      await expect(page.getByRole('status', { name: /Cargando/ })).toHaveCount(0);
+      await sinErroresCriticosDeAxe(page, `contrato en oscuro (${pestana})`);
+    }
+    await page.goto('/contratos/c3?op=POST%20%2Fapi%2Fv1%2Fict%2Freprocess%2F%7Bid%7D');
+    await expect(page.getByRole('heading', { name: 'Errores' })).toBeVisible();
+    await sinErroresCriticosDeAxe(page, 'operación en oscuro');
+  });
+
+  test('AsyncAPI: canales, operaciones y mensajes legibles, sin scroll a 360 px', async ({ page }, info) => {
+    const violaciones = await vigilarCsp(page);
+    await simularApi(page, { permisos: ['atlas.lector', 'atlas.contratos.ver_internos'] });
+    if (esMovil(info)) await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/contratos/c2');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Eventos Demo' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'TramiteRadicado' })).toBeVisible();
+    await expect(page.getByText('tramites.radicado.con.una.direccion.de.canal.larga').first()).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Referencia interactiva' })).toHaveCount(0);
+    if (esMovil(info)) await sinScrollHorizontal(page, 'AsyncAPI a 360 px');
+    await sinErroresCriticosDeAxe(page, 'AsyncAPI');
+    expect(violaciones).toEqual([]);
+  });
+});
+
 test.describe('soporte de los sábados', () => {
   test('calendario y gestión: lista en el móvil, filtro por equipo, accesible y sin scroll horizontal', async ({ page }, info) => {
     const violaciones = await vigilarCsp(page);

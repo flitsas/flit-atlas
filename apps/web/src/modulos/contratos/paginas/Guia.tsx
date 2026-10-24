@@ -11,8 +11,8 @@ export default function Guia() {
   const { contratoId = '', guiaId } = useParams();
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">
-      <Link to={`/contratos?contrato=${encodeURIComponent(contratoId)}`} className="inline-flex min-h-toque items-center gap-2 self-start text-sm underline">
-        <ArrowLeft className="size-4" aria-hidden="true" /> Contratos
+      <Link to={`/contratos/${encodeURIComponent(contratoId)}?pestana=guias`} className="inline-flex min-h-toque items-center gap-2 self-start text-sm underline">
+        <ArrowLeft className="size-4" aria-hidden="true" /> Contrato
       </Link>
       <GuiasDelContrato key={`${contratoId}/${guiaId ?? ''}`} contratoId={contratoId} guiaId={guiaId} />
     </div>

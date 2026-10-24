@@ -29,6 +29,7 @@
     "src",
     "tests",
     "vite.config.ts",
+    "vite.visor.config.ts",
     "playwright.config.ts"
   ],
   "exclude": [

@@ -224,15 +224,15 @@ internal static class EndpointsContratos
         string CommitSha, string? Workflow, string WorkflowDelJob, string? Ejecucion, string PublicadoPor, DateTimeOffset PublicadoEn, bool TieneBreaking,
         EstadoVersion Estado, DateOnly? RetiroEn);
 
-    private static IQueryable<VersionContratoSinContenido> SinContenido(IQueryable<VersionContrato> consulta) =>
+    internal static IQueryable<VersionContratoSinContenido> SinContenido(IQueryable<VersionContrato> consulta) =>
         consulta.Select(v => new VersionContratoSinContenido(v.Id, v.ContratoId, v.Version, v.EsEstable, v.Sha256, v.Formato, v.Tamano, v.Repositorio,
             v.Rama, v.CommitSha, v.Workflow, v.WorkflowDelJob, v.Ejecucion, v.PublicadoPor, v.PublicadoEn, v.TieneBreaking, v.Estado, v.RetiroEn));
 
-    private static VersionResumen Version(VersionContratoSinContenido v) => new(
+    internal static VersionResumen Version(VersionContratoSinContenido v) => new(
         v.Id, v.Version, v.EsEstable, v.Sha256, Valores.Texto(v.Formato), v.Tamano, v.Repositorio, v.Rama, v.CommitSha, v.Workflow, v.WorkflowDelJob,
         v.Ejecucion, v.PublicadoPor, v.PublicadoEn, v.TieneBreaking, Valores.Texto(v.Estado), v.RetiroEn);
 
-    private static ContratoResumen Resumen(Contrato c, AplicativoLeido? aplicativo, List<VersionContratoSinContenido> versiones)
+    internal static ContratoResumen Resumen(Contrato c, AplicativoLeido? aplicativo, List<VersionContratoSinContenido> versiones)
     {
         var ordenadas = versiones.OrderByDescending(v => v.PublicadoEn).ThenByDescending(v => v.Id).ToList();
         var ultima = ordenadas.FirstOrDefault();

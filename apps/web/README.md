@@ -51,6 +51,7 @@ Para apagar un módulo en un ambiente: `INSERT INTO atlas.plataforma_modulo (id,
 ## Seguridad
 
 - CSP de `deploy/atlas-seguridad.conf`: sin scripts ni estilos en línea. El tema se aplica antes de pintar con `public/tema.js` (archivo aparte) y no se usan componentes que inyecten `<style>` (ATLAS-ADR-0020). `tests/e2e/csp.spec.ts` lo comprueba contra la imagen nginx.
+- Visor de contratos con Scalar (ATLAS-ADR-0039): build aparte (`vite.visor.config.ts`, lo corre `pnpm build`) en `dist/visor/`, cargado solo en un iframe con `sandbox="allow-scripts"`. Su CSP (`location /visor/` de `deploy/nginx.conf.template`) es la única con estilos en línea y solo conecta a `ATLAS_VISOR_CONEXIONES` (hosts de QA y sandbox, por defecto `https://*.qa.flitsas.online https://*.qa.flitsas.com`). Ni Scalar ni Vue entran al bundle de la PWA.
 - La única clave en `localStorage` es la preferencia de tema (`atlas.tema`); la sesión vive solo en la cookie `HttpOnly`.
 
 ## Pruebas de extremo a extremo

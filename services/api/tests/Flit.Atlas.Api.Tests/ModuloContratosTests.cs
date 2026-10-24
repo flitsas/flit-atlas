@@ -450,6 +450,85 @@ public sealed class ModuloContratosTests(EntornoApi entorno) : IDisposable
         await Canal("qa", "1.2.0", "staging");
     }
 
+    private sealed record CambioDiff(string Regla, string Nivel, bool Breaking, string Texto, string? Ruta);
+
+    private sealed record Diff(Guid ContratoId, string Desde, string Hasta, string Motor, bool SinDiferencias, CambioDiff[] Cambios, string Changelog);
+
+    [Fact]
+    public async Task La_pantalla_del_contrato_lee_su_ficha_y_el_diff_de_atlas_render_con_lo_que_rompe_primero()
+    {
+        var render = new RenderDiffSimulado();
+        await using var api = entorno.Api(
+            configuracion: new Dictionary<string, string>
+            {
+                [$"{OpcionesPublicacion.Seccion}:Audiencia"] = GitHubActionsSimulado.Audiencia,
+                [$"{OpcionesPublicacion.Seccion}:Propietarios:0"] = GitHubActionsSimulado.Propietario,
+                [$"{OpcionesPublicacion.Seccion}:WorkflowsReutilizables:0"] = GitHubActionsSimulado.PatronWorkflowOficial,
+            },
+            servicios: s =>
+            {
+                s.AddPlataformaPublicacionDePruebaEnApi(_github);
+                s.RemoveAll<IRenderDiff>();
+                s.AddSingleton<IRenderDiff>(render);
+            });
+        var lider = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
+        var (aplicativo, repositorio) = await FuenteAsync(lider, ["openapi", "asyncapi"]);
+        var nueva = SpecsDeEjemplo.OpenApiYaml.Replace("1.2.0", "2.0.0", StringComparison.Ordinal);
+        var v1 = (await (await PublicarAsync(api, Token(repositorio), Cuerpo(aplicativo))).Content.ReadFromJsonAsync<Publicada>(Ct))!;
+        Assert.Equal(HttpStatusCode.Created, (await PublicarAsync(api, Token(repositorio), Cuerpo(aplicativo, version: "2.0.0-dev.a1b2c3d", spec: nueva))).StatusCode);
+        render.Programar(SpecsDeEjemplo.OpenApiYaml, nueva, s => new ResultadoDiff
+        {
+            Tipo = s.Tipo, Motor = "oasdiff v1.33.0", Idioma = s.Idioma, HashBase = "a", HashRevision = "b",
+            Resumen = new ResumenDiff(3, 1, 0, 2, 1, true),
+            Cambios =
+            [
+                new CambioContrato { Regla = "endpoint-added", Nivel = NivelesCambio.Informativo, Texto = "Se agregó una ruta", Huella = "h1" },
+                new CambioContrato { Regla = "api-path-removed-without-deprecation", Nivel = NivelesCambio.Error, Breaking = true, Texto = "Se quitó una ruta", Ruta = "/tramites/{id}", Huella = "h2" },
+            ],
+            Breaking = [new CambioContrato { Regla = "api-path-removed-without-deprecation", Nivel = NivelesCambio.Error, Breaking = true, Texto = "Se quitó una ruta", Huella = "h2" }],
+            Changelog = "- Se quitó una ruta\n",
+        });
+
+        var desarrollador = await EmpleadoAsync(api, RolesAtlas.Desarrollador);
+        var ficha = (await (await desarrollador.GetAsync($"/api/v1/contratos/{v1.ContratoId}")).Content.ReadFromJsonAsync<ContratoResumen>(Ct))!;
+        Assert.Equal(("api-externa", aplicativo, 2, "2.0.0-dev.a1b2c3d"), (ficha.Codigo, ficha.Aplicativo.Slug, ficha.Versiones, ficha.UltimaVersion?.Version));
+        Assert.Equal(HttpStatusCode.NotFound, (await desarrollador.GetAsync($"/api/v1/contratos/{Guid.NewGuid()}")).StatusCode);
+
+        var respuesta = await desarrollador.GetAsync($"/api/v1/contratos/{v1.ContratoId}/diff?desde=1.2.0-dev.a1b2c3d&hasta=2.0.0-dev.a1b2c3d");
+        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+        var diff = (await respuesta.Content.ReadFromJsonAsync<Diff>(Ct))!;
+        Assert.Equal(("1.2.0-dev.a1b2c3d", "2.0.0-dev.a1b2c3d", "oasdiff v1.33.0"), (diff.Desde, diff.Hasta, diff.Motor));
+        // Sin repetir el de breaking, y lo que rompe va primero.
+        Assert.Equal(["api-path-removed-without-deprecation", "endpoint-added"], diff.Cambios.Select(c => c.Regla));
+        Assert.True(diff.Cambios[0].Breaking);
+        var recibida = Assert.Single(render.Recibidas);
+        Assert.Equal(("openapi", SpecsDeEjemplo.OpenApiYaml, nueva), (recibida.Tipo, recibida.Base, recibida.Revision));
+
+        async Task<(HttpStatusCode, string?)> Pedir(string url)
+        {
+            var r = await desarrollador.GetAsync(url);
+            var texto = await r.Content.ReadAsStringAsync(Ct);
+            return (r.StatusCode, r.StatusCode is HttpStatusCode.UnprocessableEntity or HttpStatusCode.ServiceUnavailable
+                ? JsonDocument.Parse(texto).RootElement.GetProperty("codigo").GetString() : null);
+        }
+
+        Assert.Equal((HttpStatusCode.BadRequest, null), await Pedir($"/api/v1/contratos/{v1.ContratoId}/diff?desde=1.2.0-dev.a1b2c3d"));
+        Assert.Equal((HttpStatusCode.NotFound, null), await Pedir($"/api/v1/contratos/{v1.ContratoId}/diff?desde=1.2.0-dev.a1b2c3d&hasta=9.9.9"));
+        Assert.Equal((HttpStatusCode.NotFound, null), await Pedir($"/api/v1/contratos/{Guid.NewGuid()}/diff?desde=1.0.0&hasta=2.0.0"));
+
+        // atlas-render caído: 503 con su código.
+        render.Responder = _ => throw new RenderDiffException("caído", MotivoErrorDiff.NoDisponible);
+        Assert.Equal((HttpStatusCode.ServiceUnavailable, "render_no_disponible"), await Pedir($"/api/v1/contratos/{v1.ContratoId}/diff?desde=2.0.0-dev.a1b2c3d&hasta=1.2.0-dev.a1b2c3d"));
+        render.Responder = _ => throw new RenderDiffException("inválida", MotivoErrorDiff.SpecInvalida, 422, "base");
+        Assert.Equal((HttpStatusCode.UnprocessableEntity, "spec_invalida"), await Pedir($"/api/v1/contratos/{v1.ContratoId}/diff?desde=2.0.0-dev.a1b2c3d&hasta=1.2.0-dev.a1b2c3d"));
+
+        // AsyncAPI: 422 sin llamar a atlas-render.
+        var eventos = (await (await PublicarAsync(api, Token(repositorio), Cuerpo(aplicativo, contrato: "eventos", tipo: "asyncapi", version: "2.0.0-dev.a1b2c3d", spec: SpecsDeEjemplo.AsyncApi3))).Content.ReadFromJsonAsync<Publicada>(Ct))!;
+        var antes = render.Recibidas.Count;
+        Assert.Equal((HttpStatusCode.UnprocessableEntity, "diff_no_soportado"), await Pedir($"/api/v1/contratos/{eventos.ContratoId}/diff?desde=2.0.0-dev.a1b2c3d&hasta=2.0.0-dev.a1b2c3d"));
+        Assert.Equal(antes, render.Recibidas.Count);
+    }
+
     [Fact]
     public async Task El_lider_administra_la_lista_blanca_con_auditoria_y_un_lector_no_la_ve()
     {

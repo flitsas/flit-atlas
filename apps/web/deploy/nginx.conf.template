@@ -43,6 +43,25 @@ server {
         try_files $uri =404;
     }
 
+    # Visor de contratos con Scalar (HU 3.6, ATLAS-ADR-0039): otra página, cargada solo en un iframe con
+    # sandbox="allow-scripts" desde /contratos. Su CSP es la del shell más estilos en línea (Scalar los inyecta),
+    # el sandbox también por cabecera (aunque se abra suelto, su origen es opaco: sin cookie del BFF ni acceso a la API),
+    # solo se deja enmarcar por Atlas y solo conecta a los hosts de QA y sandbox (ATLAS_VISOR_CONEXIONES), adonde
+    # apunta la consola «Probar». Sin unsafe-eval.
+    location ^~ /visor/ {
+        include /etc/nginx/atlas-seguridad-visor.conf;
+        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${ATLAS_VISOR_CONEXIONES}; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; sandbox allow-scripts" always;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location ^~ /visor/assets/ {
+        include /etc/nginx/atlas-seguridad-visor.conf;
+        add_header Content-Security-Policy "default-src 'none'; sandbox allow-scripts" always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
     # Manifiesto con su tipo (la lista de tipos de la imagen no siempre trae .webmanifest).
     location = /manifest.webmanifest {
         include /etc/nginx/atlas-seguridad.conf;
