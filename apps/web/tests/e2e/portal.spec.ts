@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, type Route, test } from '@playwright/test';
 
-import { esMovil } from './ayudas';
+import { esMovil, vigilarCsp } from './ayudas';
 
 /**
  * HU 4.4 (ATLAS-ADR-0043): el portal de clientes de una persona externa (`ext.integrador`) en los tres perfiles, con la
@@ -143,19 +143,6 @@ async function simularPortal(page: Page) {
         return json(route, { codigo: 'no_encontrado', mensaje: 'No tienes este paquete compartido.' }, 404);
     }
   });
-}
-
-async function vigilarCsp(page: Page): Promise<string[]> {
-  const violaciones: string[] = [];
-  page.on('console', (mensaje) => {
-    if (/Content.Security.Policy/i.test(mensaje.text())) violaciones.push(mensaje.text());
-  });
-  await page.addInitScript(() => {
-    document.addEventListener('securitypolicyviolation', (e) => {
-      console.error(`Content-Security-Policy: ${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`);
-    });
-  });
-  return violaciones;
 }
 
 async function sinErroresCriticosDeAxe(page: Page, pantalla: string) {

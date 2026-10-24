@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
 
-import { esMovil } from './ayudas';
+import { esMovil, vigilarCsp } from './ayudas';
 import { simularApi } from './api-simulada';
 
 /**
@@ -12,20 +12,6 @@ import { simularApi } from './api-simulada';
 
 // El service worker de producción atiende fetch: se bloquea para que page.route vea todas las peticiones.
 test.use({ serviceWorkers: 'block' });
-
-/** Registra las violaciones de la CSP (si el servidor la envía). */
-async function vigilarCsp(page: Page): Promise<string[]> {
-  const violaciones: string[] = [];
-  page.on('console', (mensaje) => {
-    if (/Content.Security.Policy/i.test(mensaje.text())) violaciones.push(mensaje.text());
-  });
-  await page.addInitScript(() => {
-    document.addEventListener('securitypolicyviolation', (e) => {
-      console.error(`Content-Security-Policy: ${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`);
-    });
-  });
-  return violaciones;
-}
 
 async function sinErroresCriticosDeAxe(page: Page, pantalla: string) {
   // A mitad de una animación (la hoja que sube con opacidad) axe mide colores más claros que los reales.

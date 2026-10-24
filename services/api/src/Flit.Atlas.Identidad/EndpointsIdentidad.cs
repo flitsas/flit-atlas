@@ -191,6 +191,7 @@ public static class EndpointsIdentidad
         rutas.MapDirectorio();
         rutas.MapAdministracionExternos();
         rutas.MapErroresCliente();
+        rutas.MapReportesCsp();
         return rutas;
     }
 
@@ -202,6 +203,8 @@ public static class EndpointsIdentidad
     /// de correlación de OIDC. Tampoco se exige a las peticiones con <c>Authorization: Bearer</c> (HU 1.3c): esa cabecera
     /// ya prueba lo mismo que la propia (un sitio ajeno no puede ponerla sin CORS) y el token no es una credencial que el
     /// navegador mande solo; esas peticiones solo valen en endpoints con <c>RequiereScope</c>, nunca con la cookie.
+    /// Ni a los informes de la CSP (<see cref="EndpointsReportesCsp.Ruta"/>, ATLAS-ADR-0048): los manda el navegador sin
+    /// cabeceras propias (desde el visor, con <c>Origin: null</c>), no usan la sesión y solo escriben en el log, con tope.
     /// </summary>
     public static IApplicationBuilder UseAntifalsificacionApi(this IApplicationBuilder app) =>
         app.Use(async (http, siguiente) =>
@@ -210,6 +213,7 @@ public static class EndpointsIdentidad
             var cambia = !(HttpMethods.IsGet(peticion.Method) || HttpMethods.IsHead(peticion.Method) || HttpMethods.IsOptions(peticion.Method));
             if (cambia && peticion.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
                 && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase)
+                && !peticion.Path.Equals(EndpointsReportesCsp.Ruta, StringComparison.OrdinalIgnoreCase)
                 && !peticion.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
                 var origen = peticion.Headers.Origin.ToString();

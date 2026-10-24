@@ -1,29 +1,24 @@
 import { expect, test } from '@playwright/test';
 
-import { entrar, esMovil } from './ayudas';
+import { entrar, esMovil, vigilarCsp } from './ayudas';
 
 /**
  * La CSP de atlas-web (deploy/atlas-seguridad.conf) no permite scripts ni estilos en línea. Esta prueba recorre el shell
- * con la imagen nginx (o el build de producción detrás de ella) y falla con cualquier violación. Contra el servidor de
- * Vite no hay CSP y se omite:
+ * con un ingreso real (proveedor simulado) y falla con cualquier violación que la política bloquee; las de Trusted Types
+ * (solo informe) quedan como anotación. Necesita atlas-api: contra la imagen nginx o `vite preview` con la API del AppHost
+ * (sin API se omite; los recorridos con la API simulada de modulos.spec.ts y portal.spec.ts también vigilan la CSP):
  *   ATLAS_E2E_URL=http://localhost:5032 pnpm e2e csp
  */
 test('el shell no viola la Content-Security-Policy', async ({ page }, info) => {
   const respuesta = await page.goto('/');
   const csp = respuesta?.headers()['content-security-policy'];
-  test.skip(!csp, 'Sin CSP: corre contra la imagen nginx (ATLAS_E2E_URL)');
+  test.skip(!csp, 'Sin CSP: corre contra la imagen nginx o vite preview (ATLAS_E2E_URL)');
+  const api = await page.request.get('/api/v1/identidad/proveedores').catch(() => null);
+  test.skip(!api?.ok(), 'Sin atlas-api: el ingreso simulado necesita la API');
   expect(csp).toContain("style-src 'self'");
   expect(csp).toContain("script-src 'self'");
 
-  const violaciones: string[] = [];
-  page.on('console', (mensaje) => {
-    if (/Content.Security.Policy/i.test(mensaje.text())) violaciones.push(mensaje.text());
-  });
-  await page.addInitScript(() => {
-    document.addEventListener('securitypolicyviolation', (e) => {
-      console.error(`Content-Security-Policy: ${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`);
-    });
-  });
+  const violaciones = await vigilarCsp(page);
 
   await page.reload();
   await expect(page.getByRole('form', { name: /simulado/ })).toBeVisible();

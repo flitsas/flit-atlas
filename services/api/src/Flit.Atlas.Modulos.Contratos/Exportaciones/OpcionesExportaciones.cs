@@ -29,6 +29,19 @@ public sealed class OpcionesExportaciones
     /// usan el ambiente del portal (<c>Contratos:Portal:Ambiente</c>).
     /// </summary>
     public string Ambiente { get; set; } = AmbientesPoda.Qa;
+
+    /// <summary>
+    /// Exportaciones pendientes o en proceso que puede tener a la vez una organización externa desde el portal (HU 4.10,
+    /// ATLAS-ADR-0048). atlas-docs genera de a una por pod (ATLAS-ADR-0042): sin este tope, una organización llenaría la
+    /// cola de todos. La siguiente responde 429 con <c>Retry-After</c>.
+    /// </summary>
+    public int MaximoEnCursoPorOrganizacion { get; set; } = 2;
+
+    /// <summary>Lo mismo por persona (interna o externa).</summary>
+    public int MaximoEnCursoPorPersona { get; set; } = 2;
+
+    /// <summary>Lo que se le pide esperar (<c>Retry-After</c>) a quien llega al tope de exportaciones en curso.</summary>
+    public TimeSpan EsperaEnCurso { get; set; } = TimeSpan.FromSeconds(30);
 }
 
 internal sealed class ValidadorOpcionesExportaciones : IValidateOptions<OpcionesExportaciones>
@@ -48,6 +61,14 @@ internal sealed class ValidadorOpcionesExportaciones : IValidateOptions<Opciones
         if (options.IntervaloVencimiento <= TimeSpan.Zero || options.TiempoMaximo <= TimeSpan.Zero)
         {
             errores.Add($"{OpcionesExportaciones.Seccion}:IntervaloVencimiento y TiempoMaximo deben ser positivos.");
+        }
+        if (options.MaximoEnCursoPorOrganizacion < 1 || options.MaximoEnCursoPorPersona < 1)
+        {
+            errores.Add($"{OpcionesExportaciones.Seccion}:MaximoEnCursoPorOrganizacion y MaximoEnCursoPorPersona deben ser de al menos 1.");
+        }
+        if (options.EsperaEnCurso < TimeSpan.FromSeconds(1))
+        {
+            errores.Add($"{OpcionesExportaciones.Seccion}:EsperaEnCurso debe ser de al menos 1 segundo.");
         }
         if (!AmbientesPoda.Todos.Contains(options.Ambiente))
         {

@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Page, test, type TestInfo } from '@playwright/test';
 
 /** Perfiles móviles de playwright.config.ts (el resto es escritorio). */
 export const esMovil = (info: TestInfo): boolean => info.project.name !== 'escritorio';
@@ -28,4 +28,28 @@ export async function cerrarSesion(page: Page, info: TestInfo): Promise<void> {
     await page.getByRole('menuitem', { name: 'Cerrar sesión' }).click();
   }
   await expect(page.getByRole('form', { name: /simulado/ })).toBeVisible();
+}
+
+/**
+ * Registra las violaciones de la CSP que la política bloquea (si el servidor la envía: la imagen nginx o `vite preview`,
+ * que sirve las mismas cabeceras). Las de `Content-Security-Policy-Report-Only` (Trusted Types, ATLAS-ADR-0048) no fallan
+ * la prueba: quedan como anotación para medir qué rompería exigirlas.
+ */
+export async function vigilarCsp(page: Page): Promise<string[]> {
+  const violaciones: string[] = [];
+  page.on('console', (mensaje) => {
+    const texto = mensaje.text();
+    if (texto.startsWith('Content-Security-Policy (report):') || texto.includes('[Report Only]')) {
+      test.info().annotations.push({ type: 'csp-informe', description: texto });
+    } else if (/Content.Security.Policy/i.test(texto)) {
+      violaciones.push(texto);
+    }
+  });
+  await page.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', (e) => {
+      const tipo = e.disposition === 'report' ? ' (report)' : '';
+      console.error(`Content-Security-Policy${tipo}: ${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`);
+    });
+  });
+  return violaciones;
 }

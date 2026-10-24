@@ -79,6 +79,32 @@ export const MANIFIESTO: Partial<ManifestOptions> = {
   ],
 };
 
+/**
+ * Cabeceras de seguridad de la imagen nginx (`deploy/`), leídas de los mismos archivos, para que `vite preview` (E2E)
+ * sirva la PWA y el visor con su CSP y las pruebas vean las mismas violaciones que en qa (HU 4.10, ATLAS-ADR-0048). Las
+ * variables de nginx toman su valor de local: sin HSTS ni S3 público; el visor, con los hosts por defecto de la imagen.
+ */
+function cabecerasDeNginx(): (ruta: string) => [string, string][] {
+  const leer = (archivo: string) => readFileSync(fileURLToPath(new URL(`./deploy/${archivo}`, import.meta.url)), 'utf8');
+  const variables: Record<string, string> = {
+    $atlas_hsts: '',
+    $atlas_s3_publico: '',
+    '${ATLAS_VISOR_CONEXIONES}': 'https://*.qa.flitsas.online https://*.qa.flitsas.com',
+  };
+  const cabeceras = (texto: string): [string, string][] =>
+    [...texto.matchAll(/^\s*add_header\s+(\S+)\s+(?:"([^"]*)"|'([^']*)'|(\S+))\s+always;/gm)]
+      .map((m): [string, string] => [m[1]!, Object.entries(variables).reduce((v, [k, r]) => v.split(k).join(r), m[2] ?? m[3] ?? m[4] ?? '').trim()])
+      .filter(([nombre, valor]) => valor !== '' && nombre !== 'Cache-Control');
+  const plantilla = leer('nginx.conf.template');
+  // El bloque termina en la llave de cierre sola en su línea (la CSP del visor lleva ${…}).
+  const bloque = (location: string) => cabeceras(plantilla.split(`location ${location} {`)[1]!.split(/\r?\n\s*\}/)[0]!);
+  const pwa = cabeceras(leer('atlas-seguridad.conf'));
+  const visor = cabeceras(leer('atlas-seguridad-visor.conf'));
+  const documentoVisor = [...visor, ...bloque('^~ /visor/')];
+  const archivosVisor = [...visor, ...bloque('^~ /visor/assets/')];
+  return (ruta) => (ruta.startsWith('/visor/assets/') ? archivosVisor : ruta.startsWith('/visor/') ? documentoVisor : pwa);
+}
+
 export default defineConfig(({ command, mode }) => {
   const servidor = command === 'serve' && mode !== 'test';
   const api = servidor ? urlDeLaApi(process.env) : '';
@@ -107,6 +133,19 @@ export default defineConfig(({ command, mode }) => {
         },
         devOptions: { enabled: false },
       }),
+      {
+        name: 'atlas-cabeceras-preview',
+        configurePreviewServer(previa) {
+          const cabeceras = cabecerasDeNginx();
+          previa.middlewares.use((peticion, respuesta, siguiente) => {
+            const ruta = (peticion.url ?? '/').split('?')[0]!;
+            if (!RUTAS_DE_LA_API.some((r) => ruta.startsWith(`${r}/`))) {
+              for (const [nombre, valor] of cabeceras(ruta)) respuesta.setHeader(nombre, valor);
+            }
+            siguiente();
+          });
+        },
+      },
     ],
     server: {
       port: Number(process.env.PORT ?? 4032),

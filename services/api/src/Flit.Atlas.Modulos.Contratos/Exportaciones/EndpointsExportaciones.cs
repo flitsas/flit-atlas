@@ -101,9 +101,10 @@ internal static class EndpointsExportaciones
         grupo.MapPost("/exportaciones", SolicitarAsync)
             .RequierePermiso(PermisosContratos.ExportacionesSolicitar)
             .RequiereReautenticacion()
+            .ConLimiteDeExportacion()
             .WithName("SolicitarExportacionContratos")
             .WithSummary("Solicitar una exportación")
-            .WithDescription("Arma el paquete a exportar (specs de la revisión podados a su selección, guías y changelog; o, para una versión, el spec completo), lo deja en el S3 y encola la generación: responde 202 sin esperarla. El estado se consulta en GET /exportaciones/{id} y al terminar llega un aviso. 409 no_exportable si la poda falla o el contrato no se exporta (proto). Requiere atlas.exportaciones.solicitar, atlas.contratos.ver_internos y un ingreso reciente.")
+            .WithDescription("Arma el paquete a exportar (specs de la revisión podados a su selección, guías y changelog; o, para una versión, el spec completo), lo deja en el S3 y encola la generación: responde 202 sin esperarla. El estado se consulta en GET /exportaciones/{id} y al terminar llega un aviso. 409 no_exportable si la poda falla o el contrato no se exporta (proto). 429 exportaciones_en_curso si la persona ya tiene el máximo de exportaciones pendientes o en proceso (2 por defecto), con Retry-After. Requiere atlas.exportaciones.solicitar, atlas.contratos.ver_internos y un ingreso reciente.")
             .Produces<ExportacionDto>(StatusCodes.Status202Accepted)
             .Produces<ErrorExportacion>(StatusCodes.Status403Forbidden)
             .Produces<ErrorExportacion>(StatusCodes.Status404NotFound)
@@ -143,9 +144,10 @@ internal static class EndpointsExportaciones
         grupo.MapPost("/exportaciones", SolicitarPortalAsync)
             .RequierePermiso(PermisosContratos.PortalVer)
             .RequiereReautenticacion()
+            .ConLimiteDeExportacion()
             .WithName("SolicitarExportacionPortal")
             .WithSummary("Solicitar una exportación desde el portal")
-            .WithDescription("Exporta un paquete compartido con la organización de la persona, en la revisión que ella ve, con sus specs podados: responde 202 y la generación sigue en la cola. 403 si la compartición no está vigente o no permite exportar. Requiere atlas.portal.ver, la compartición con puede_exportar y un ingreso reciente.")
+            .WithDescription("Exporta un paquete compartido con la organización de la persona, en la revisión que ella ve, con sus specs podados: responde 202 y la generación sigue en la cola. 403 si la compartición no está vigente o no permite exportar. 429 exportaciones_en_curso si la persona o su organización ya tienen el máximo de exportaciones pendientes o en proceso (2 por defecto en cada caso), con Retry-After. Requiere atlas.portal.ver, la compartición con puede_exportar y un ingreso reciente.")
             .Produces<ExportacionDto>(StatusCodes.Status202Accepted)
             .Produces<ErrorExportacion>(StatusCodes.Status403Forbidden)
             .Produces<ErrorExportacion>(StatusCodes.Status404NotFound)
@@ -212,6 +214,11 @@ internal static class EndpointsExportaciones
         {
             return SinAlmacen();
         }
+        var tope = Tope(http.User, null, opciones.Value);
+        if (await ExcedeTopeAsync(contexto, tope, ct) is { } porOrganizacion)
+        {
+            return EnCurso(http, porOrganizacion, opciones.Value);
+        }
 
         var ahora = reloj.GetUtcNow();
         var id = Guid.CreateVersion7();
@@ -254,7 +261,7 @@ internal static class EndpointsExportaciones
         {
             return NoExportable(ex);
         }
-        return await CrearYResponderAsync(http, contexto, plataforma, almacen, borrador, armada, ahora, "/api/v1/contratos", ct);
+        return await CrearYResponderAsync(http, contexto, plataforma, almacen, borrador, armada, ahora, "/api/v1/contratos", tope, opciones.Value, ct);
     }
 
     private static async Task<IResult> ListarAsync(
@@ -300,7 +307,7 @@ internal static class EndpointsExportaciones
     private static async Task<IResult> SolicitarPortalAsync(
         [Description("El paquete compartido y los formatos.")] SolicitudExportacionPortal solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, IAlmacenObjetos almacen,
-        AccesoPortal acceso, SpecsDelPortal specs, TimeProvider reloj, CancellationToken ct)
+        AccesoPortal acceso, SpecsDelPortal specs, IOptions<OpcionesExportaciones> opciones, TimeProvider reloj, CancellationToken ct)
     {
         var formatos = FormatosExportacion.Normalizar(solicitud?.Formatos);
         if (formatos is null || solicitud!.PaqueteId == Guid.Empty)
@@ -326,6 +333,11 @@ internal static class EndpointsExportaciones
         {
             return SinAlmacen();
         }
+        var tope = Tope(http.User, organizacionId, opciones.Value);
+        if (await ExcedeTopeAsync(contexto, tope, ct) is { } porOrganizacion)
+        {
+            return EnCurso(http, porOrganizacion, opciones.Value);
+        }
         var organizacion = await plataforma.Organizaciones.AsNoTracking().Where(o => o.Id == organizacionId).Select(o => o.Nombre).FirstOrDefaultAsync(ct);
         if (organizacion is null)
         {
@@ -346,7 +358,7 @@ internal static class EndpointsExportaciones
         }
         var borrador = Borrador(Guid.CreateVersion7(), http.User, organizacionId, true, OrigenExportacion.Paquete, decision.Paquete.Paquete.Id,
             decision.Paquete.Revision, null, armada, formatos);
-        return await CrearYResponderAsync(http, contexto, plataforma, almacen, borrador, armada, ahora, ExtensionesRutaPortal, ct);
+        return await CrearYResponderAsync(http, contexto, plataforma, almacen, borrador, armada, ahora, ExtensionesRutaPortal, tope, opciones.Value, ct);
     }
 
     /// <summary>no_encontrado → 404 sin revelar el paquete; lo demás (solo_resumen, no_permitido_por_comparticion, sin_permiso) → 403.</summary>
@@ -411,18 +423,46 @@ internal static class EndpointsExportaciones
 
     private static async Task<IResult> CrearYResponderAsync(
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, IAlmacenObjetos almacen, ExportacionContratos borrador,
-        EntradaArmada armada, DateTimeOffset ahora, string baseRuta, CancellationToken ct)
+        EntradaArmada armada, DateTimeOffset ahora, string baseRuta, TopeEnCurso tope, OpcionesExportaciones opciones, CancellationToken ct)
     {
         try
         {
-            var exportacion = await CrearAsync(contexto, plataforma, almacen, borrador, armada.Entrada, Actor(http), ahora, ct);
+            var exportacion = await CrearAsync(contexto, plataforma, almacen, borrador, armada.Entrada, Actor(http), ahora, ct, tope);
             return Results.Accepted($"{baseRuta}/exportaciones/{exportacion.Id}", Dto(exportacion));
         }
         catch (AlmacenNoDisponibleException)
         {
             return SinAlmacen();
         }
+        catch (ExportacionesEnCursoException ex)
+        {
+            // Otra solicitud simultánea tomó el último cupo; la entrada subida queda huérfana (como si fallara la base).
+            return EnCurso(http, ex.PorOrganizacion, opciones);
+        }
     }
+
+    private static TopeEnCurso Tope(ClaimsPrincipal usuario, Guid? organizacionId, OpcionesExportaciones opciones) =>
+        new(Persona(usuario), organizacionId, opciones.MaximoEnCursoPorPersona, opciones.MaximoEnCursoPorOrganizacion);
+
+    /// <summary>
+    /// 429 con <c>Retry-After</c> y problem+json en español (como el limitador de tasa), con <c>codigo</c>
+    /// <c>exportaciones_en_curso</c>: la PWA muestra el título.
+    /// </summary>
+    private static IResult EnCurso(HttpContext http, bool porOrganizacion, OpcionesExportaciones opciones)
+    {
+        var segundos = Math.Max(1, (int)Math.Ceiling(opciones.EsperaEnCurso.TotalSeconds));
+        var maximo = porOrganizacion ? opciones.MaximoEnCursoPorOrganizacion : opciones.MaximoEnCursoPorPersona;
+        var titulo = porOrganizacion
+            ? $"Tu organización ya tiene {maximo} exportaciones en curso. Espera a que terminen e intenta de nuevo."
+            : $"Ya tienes {maximo} exportaciones en curso. Espera a que terminen e intenta de nuevo.";
+        http.Response.Headers.RetryAfter = segundos.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return Results.Problem(
+            statusCode: StatusCodes.Status429TooManyRequests,
+            title: titulo,
+            extensions: new Dictionary<string, object?> { ["codigo"] = CodigoEnCurso, ["reintentarEnSegundos"] = segundos });
+    }
+
+    public const string CodigoEnCurso = "exportaciones_en_curso";
 
     private static async Task<IResult> UrlAsync(
         HttpContext http, PlataformaDbContext plataforma, IAlmacenObjetos almacen, OpcionesExportaciones opciones, TimeProvider reloj,

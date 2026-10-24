@@ -26,32 +26,7 @@ paths:
         '401':
           description: No hay una sesión activa o venció.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
   /api/v1/plataforma/errores-cliente:
@@ -88,35 +63,47 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+  /api/v1/plataforma/csp-reportes:
+    post:
+      tags:
+        - Plataforma
+      summary: Informar una violación de la CSP
+      description: 'Destino de report-uri y report-to de la Content-Security-Policy de la PWA, del visor de contratos y de la API (ATLAS-ADR-0048). Lo llama el navegador, no la PWA: no requiere sesión ni la cabecera antifalsificación. Acepta el formato de report-uri (application/csp-report) y el del Reporting API (application/reports+json, un arreglo; solo se registran los primeros 10). Escribe cada violación en el log estructurado sin datos personales: directiva, origen de lo bloqueado, rutas sin consulta, línea y columna (advertencia si la política bloqueó; informativo si solo informa). Cuerpo de máximo 16 KB y límites de tasa por IP y en total.'
+      operationId: ReportarViolacionCsp
+      requestBody:
+        description: 'Informe de una violación de la Content-Security-Policy con el formato de report-uri (application/csp-report). Con report-to llega, en cambio, un arreglo del Reporting API (application/reports+json) de elementos {type: csp-violation, body} con los mismos datos en camelCase; también se acepta.'
+        content:
+          application/csp-report:
+            schema:
+              $ref: '#/components/schemas/InformeCsp'
+          application/reports+json:
+            schema:
+              $ref: '#/components/schemas/InformeCsp'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InformeCsp'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '413':
+          description: Payload Too Large
+        '415':
+          description: Unsupported Media Type
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
   /api/v1/version:
     get:
       tags:
@@ -131,6 +118,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionApi'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
   /api/v1/identidad/proveedores:
     get:
       tags:
@@ -146,32 +135,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProveedoresHabilitados'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
   /api/v1/identidad/entrar/microsoft:
     get:
       tags:
@@ -194,32 +158,7 @@ paths:
         '302':
           description: Found
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
   /api/v1/identidad/salir:
     post:
       tags:
@@ -233,32 +172,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/token/yo:
@@ -280,32 +194,7 @@ paths:
         '403':
           description: 'El token no tiene ninguno de los scopes que exige la operación (atlas.contratos.exportar, atlas.mcp, atlas.publicar, atlas.widget).'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - tokenAtlas:
             - atlas.contratos.exportar
@@ -329,32 +218,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/DocumentoVigente'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
   /api/v1/identidad/sesiones:
     get:
       tags:
@@ -374,32 +238,7 @@ paths:
         '401':
           description: No hay una sesión activa o venció.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
   '/api/v1/identidad/sesiones/{id}':
@@ -427,32 +266,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -475,32 +289,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -533,32 +322,7 @@ paths:
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -591,32 +355,7 @@ paths:
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -647,32 +386,7 @@ paths:
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -708,32 +422,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/invitaciones/passkey/opciones:
@@ -766,32 +455,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/invitaciones/totp/clave:
@@ -824,32 +488,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/invitaciones/aceptar:
@@ -894,32 +533,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/entrar/local:
@@ -956,32 +570,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorExternos'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/entrar/local/segundo-factor:
@@ -1020,32 +609,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorExternos'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/entrar/passkey/opciones:
@@ -1065,32 +629,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/entrar/passkey:
@@ -1129,32 +668,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorExternos'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/entrar/terminos:
@@ -1189,32 +703,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/recuperacion:
@@ -1237,32 +726,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/recuperacion/consultar:
@@ -1295,32 +759,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/recuperacion/passkey/opciones:
@@ -1353,32 +792,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/recuperacion/totp/clave:
@@ -1411,32 +825,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/recuperacion/completar:
@@ -1475,32 +864,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   '/api/v1/identidad/admin/personas/{personaId}/restablecer':
@@ -1542,32 +906,7 @@ paths:
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -1603,32 +942,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/emergencia/passkey/opciones:
@@ -1661,32 +975,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/emergencia/totp/clave:
@@ -1719,32 +1008,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/identidad/emergencia/activar:
@@ -1783,32 +1047,7 @@ paths:
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
         '429':
-          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
-          headers:
-            Retry-After:
-              description: Segundos que hay que esperar antes de reintentar.
-              schema:
-                minimum: 1
-                type: integer
-                format: int32
-          content:
-            application/problem+json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: integer
-                    format: int32
-                  title:
-                    maxLength: 200
-                    type: string
-                  codigo:
-                    maxLength: 50
-                    type: string
-                  reintentarEnSegundos:
-                    type: integer
-                    format: int32
-                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
       security:
         - csrfAtlas: [ ]
   /api/v1/plataforma/roles:
@@ -1831,6 +1070,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.roles.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -1853,6 +1094,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.roles.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -1907,6 +1150,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.roles.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -1945,6 +1190,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -1985,6 +1232,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.roles.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2039,6 +1288,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2064,6 +1315,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.roles.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2104,6 +1357,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2137,6 +1392,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2186,6 +1443,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2218,6 +1477,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2270,6 +1531,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2292,6 +1555,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.identidad.administrar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2315,6 +1580,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2340,6 +1607,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.organizaciones.gestionar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2380,6 +1649,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2436,6 +1707,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2474,6 +1747,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2517,6 +1792,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2554,6 +1831,8 @@ paths:
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.organizaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2586,6 +1865,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.invitaciones.gestionar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2626,6 +1907,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2649,6 +1932,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.invitaciones.gestionar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -2691,6 +1976,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2734,6 +2021,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2790,6 +2079,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2827,6 +2118,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.invitaciones.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2850,6 +2143,8 @@ paths:
                   type: boolean
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
   /api/v1/plataforma/notificaciones:
@@ -2878,6 +2173,8 @@ paths:
                 $ref: '#/components/schemas/BandejaDto'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
   '/api/v1/plataforma/notificaciones/{id}/leida':
@@ -2903,6 +2200,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2920,6 +2219,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2941,6 +2242,8 @@ paths:
                   $ref: '#/components/schemas/PreferenciaTipoDto'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
     put:
@@ -2971,6 +2274,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -2990,6 +2295,8 @@ paths:
                 $ref: '#/components/schemas/ClavePushDto'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
   /api/v1/plataforma/push/suscripciones:
@@ -3019,6 +2326,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3043,6 +2352,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3064,6 +2375,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3133,6 +2446,8 @@ paths:
           description: La sesión no tiene el permiso atlas.catalogo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3179,6 +2494,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3211,6 +2528,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.catalogo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3266,6 +2585,8 @@ paths:
                 $ref: '#/components/schemas/ErrorCatalogo'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3304,6 +2625,8 @@ paths:
                 $ref: '#/components/schemas/ErrorCatalogo'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3337,6 +2660,8 @@ paths:
           description: La sesión no tiene el permiso atlas.catalogo.gestionar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3379,6 +2704,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.catalogo.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.catalogo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3431,6 +2758,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.catalogo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3459,6 +2788,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.catalogo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -3519,6 +2850,8 @@ paths:
           description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - githubActions: [ ]
   /api/v1/contratos/publicaciones/base:
@@ -3566,6 +2899,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - githubActions: [ ]
   '/api/v1/contratos/canales/{ambiente}':
@@ -3622,6 +2957,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - githubActions: [ ]
   '/api/v1/contratos/{id}/canales':
@@ -3652,6 +2989,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3703,6 +3042,8 @@ paths:
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3749,6 +3090,8 @@ paths:
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3783,6 +3126,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3827,6 +3172,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3867,6 +3214,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3914,6 +3263,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -3966,6 +3317,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4003,6 +3356,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4061,6 +3416,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4100,6 +3457,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4146,6 +3505,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4215,6 +3576,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4269,6 +3632,8 @@ paths:
                 $ref: '#/components/schemas/ErrorGuia'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4302,6 +3667,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4356,6 +3723,8 @@ paths:
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4398,6 +3767,8 @@ paths:
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4438,6 +3809,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4463,6 +3836,8 @@ paths:
           description: La sesión no tiene el permiso atlas.paquetes.gestionar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4513,6 +3888,8 @@ paths:
                 $ref: '#/components/schemas/ErrorPaquete'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4549,6 +3926,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4595,6 +3974,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4654,6 +4035,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4708,6 +4091,8 @@ paths:
                 $ref: '#/components/schemas/ErrorPaquete'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4765,6 +4150,8 @@ paths:
                 $ref: '#/components/schemas/ErrorPaquete'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4812,6 +4199,8 @@ paths:
                 $ref: '#/components/schemas/ErrorPaquete'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4849,6 +4238,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4907,6 +4298,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -4940,6 +4333,8 @@ paths:
           description: La sesión no tiene el permiso atlas.contratos.ver_internos.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -4966,6 +4361,8 @@ paths:
           description: La sesión no tiene el permiso atlas.paquetes.gestionar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5032,6 +4429,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -5085,6 +4484,8 @@ paths:
                 $ref: '#/components/schemas/ErrorComparticion'
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -5095,7 +4496,7 @@ paths:
       tags:
         - Contratos
       summary: Solicitar una exportación
-      description: 'Arma el paquete a exportar (specs de la revisión podados a su selección, guías y changelog; o, para una versión, el spec completo), lo deja en el S3 y encola la generación: responde 202 sin esperarla. El estado se consulta en GET /exportaciones/{id} y al terminar llega un aviso. 409 no_exportable si la poda falla o el contrato no se exporta (proto). Requiere atlas.exportaciones.solicitar, atlas.contratos.ver_internos y un ingreso reciente.'
+      description: 'Arma el paquete a exportar (specs de la revisión podados a su selección, guías y changelog; o, para una versión, el spec completo), lo deja en el S3 y encola la generación: responde 202 sin esperarla. El estado se consulta en GET /exportaciones/{id} y al terminar llega un aviso. 409 no_exportable si la poda falla o el contrato no se exporta (proto). 429 exportaciones_en_curso si la persona ya tiene el máximo de exportaciones pendientes o en proceso (2 por defecto), con Retry-After. Requiere atlas.exportaciones.solicitar, atlas.contratos.ver_internos y un ingreso reciente.'
       operationId: SolicitarExportacionContratos
       requestBody:
         description: Qué exportar y en qué formatos.
@@ -5143,6 +4544,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '429':
+          $ref: '#/components/responses/DemasiadasExportaciones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -5180,6 +4583,8 @@ paths:
           description: La sesión no tiene el permiso atlas.exportaciones.solicitar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5216,6 +4621,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.exportaciones.solicitar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5275,6 +4682,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.exportaciones.solicitar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5299,6 +4708,8 @@ paths:
           description: La sesión no tiene el permiso atlas.portal.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5335,6 +4746,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.portal.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5396,6 +4809,8 @@ paths:
                 $ref: '#/components/schemas/ErrorPortal'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5443,6 +4858,8 @@ paths:
                 $ref: '#/components/schemas/ErrorPortal'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5490,6 +4907,8 @@ paths:
                 $ref: '#/components/schemas/ErrorPortal'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5528,6 +4947,8 @@ paths:
           description: La sesión no tiene el permiso atlas.portal.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.contratos).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5537,7 +4958,7 @@ paths:
       tags:
         - Portal de clientes
       summary: Solicitar una exportación desde el portal
-      description: 'Exporta un paquete compartido con la organización de la persona, en la revisión que ella ve, con sus specs podados: responde 202 y la generación sigue en la cola. 403 si la compartición no está vigente o no permite exportar. Requiere atlas.portal.ver, la compartición con puede_exportar y un ingreso reciente.'
+      description: 'Exporta un paquete compartido con la organización de la persona, en la revisión que ella ve, con sus specs podados: responde 202 y la generación sigue en la cola. 403 si la compartición no está vigente o no permite exportar. 429 exportaciones_en_curso si la persona o su organización ya tienen el máximo de exportaciones pendientes o en proceso (2 por defecto en cada caso), con Retry-After. Requiere atlas.portal.ver, la compartición con puede_exportar y un ingreso reciente.'
       operationId: SolicitarExportacionPortal
       requestBody:
         description: El paquete compartido y los formatos.
@@ -5585,6 +5006,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '429':
+          $ref: '#/components/responses/DemasiadasExportaciones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -5622,6 +5045,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.portal.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5685,6 +5110,8 @@ paths:
                 $ref: '#/components/schemas/ErrorExportacion'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5709,6 +5136,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5751,6 +5180,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -5776,6 +5207,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5812,6 +5245,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5836,6 +5271,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5871,6 +5308,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5906,6 +5345,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5930,6 +5371,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -5956,6 +5399,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6005,6 +5450,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6044,6 +5491,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6102,6 +5551,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6156,6 +5607,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6194,6 +5647,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6238,6 +5693,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6265,6 +5722,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6320,6 +5779,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6363,6 +5824,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6388,6 +5851,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6425,6 +5890,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6481,6 +5948,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6537,6 +6006,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.equipo.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6562,6 +6033,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6598,6 +6071,8 @@ paths:
           description: La sesión no tiene el permiso atlas.equipo.gestionar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.equipo).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6633,6 +6108,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.equipo.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6659,6 +6136,8 @@ paths:
           description: La sesión no tiene el permiso atlas.hola.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.hola).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6695,6 +6174,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.hola.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.hola).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6728,6 +6209,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.hola.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6752,6 +6235,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6792,6 +6277,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6819,6 +6306,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -6865,6 +6354,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6925,6 +6416,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -6964,6 +6457,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.soporte.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7022,6 +6517,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7078,6 +6575,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7126,6 +6625,8 @@ paths:
                 $ref: '#/components/schemas/ErrorSoporte'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7171,6 +6672,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.gestionar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7220,6 +6723,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7266,6 +6771,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7291,6 +6798,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7350,6 +6859,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7410,6 +6921,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7470,6 +6983,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7518,6 +7033,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7566,6 +7083,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7600,6 +7119,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.gestionar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7636,6 +7157,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7669,6 +7192,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7712,6 +7237,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7754,6 +7281,8 @@ paths:
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.gestionar.'
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7787,6 +7316,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7837,6 +7368,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7861,6 +7394,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver_canal.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -7902,6 +7437,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7950,6 +7487,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -7989,6 +7528,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8045,6 +7586,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8082,6 +7625,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: La sesión no tiene el permiso atlas.soporte.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8141,6 +7686,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8201,6 +7748,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8261,6 +7810,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8312,6 +7863,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8362,6 +7915,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8394,6 +7949,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8447,6 +8004,8 @@ paths:
                 $ref: '#/components/schemas/HttpValidationProblemDetails'
         '401':
           description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8472,6 +8031,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8498,6 +8059,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8538,6 +8101,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.ver.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8571,6 +8136,8 @@ paths:
           description: No hay una sesión activa o venció.
         '403':
           description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.soporte.ver.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -8599,6 +8166,8 @@ paths:
                 type: string
         '404':
           description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.soporte).'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
   /api/v1/soporte/recordatorios:
     get:
       tags:
@@ -8619,6 +8188,8 @@ paths:
           description: La sesión no tiene el permiso atlas.soporte.gestionar.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
@@ -8649,6 +8220,8 @@ paths:
           description: No hay una sesión activa o venció.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.soporte).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
@@ -10577,6 +10150,65 @@ components:
         mensaje:
           type: string
       description: Diferencia entre dos ambientes vecinos en el orden de promoción (dev → qa → pdn).
+    DetalleInformeCsp:
+      required:
+        - document-uri
+        - violated-directive
+        - effective-directive
+        - blocked-uri
+        - source-file
+        - line-number
+        - column-number
+        - disposition
+      type: object
+      properties:
+        document-uri:
+          type:
+            - 'null'
+            - string
+          description: Documento donde ocurrió; se registra solo su ruta.
+        violated-directive:
+          type:
+            - 'null'
+            - string
+          description: Directiva violada (navegadores antiguos).
+        effective-directive:
+          type:
+            - 'null'
+            - string
+          description: 'Directiva que se aplicó (script-src-elem, style-src-attr…).'
+        blocked-uri:
+          type:
+            - 'null'
+            - string
+          description: 'Lo bloqueado: una URL (se registra solo su origen) o una palabra clave (inline, eval…).'
+        source-file:
+          type:
+            - 'null'
+            - string
+          description: Archivo que hizo la petición o tiene el código; se registra sin consulta.
+        line-number:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Línea en la fuente.
+          format: int64
+        column-number:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Columna en la fuente.
+          format: int64
+        disposition:
+          type:
+            - 'null'
+            - string
+          description: 'enforce (la política bloqueó) o report (solo informa, Content-Security-Policy-Report-Only).'
+      description: 'Datos de la violación tal como los manda el navegador. El servidor solo registra la directiva, el origen de lo bloqueado, las rutas sin consulta, la línea y la columna.'
     DetallePaquetePortal:
       required:
         - paquete
@@ -12325,6 +11957,17 @@ components:
           description: Aplicados sobre sus turnos ya pasados (0 a 1); vacío si aún no tiene turnos pasados.
           format: double
       description: Indicadores de una persona en el rango.
+    InformeCsp:
+      required:
+        - csp-report
+      type: object
+      properties:
+        csp-report:
+          oneOf:
+            - type: 'null'
+            - description: La violación.
+              $ref: '#/components/schemas/DetalleInformeCsp'
+      description: 'Informe de una violación de la Content-Security-Policy con el formato de report-uri (application/csp-report). Con report-to llega, en cambio, un arreglo del Reporting API (application/reports+json) de elementos {type: csp-violation, body} con los mismos datos en camelCase; también se acepta.'
     InicioPortal:
       required:
         - organizacion
@@ -16851,6 +16494,88 @@ components:
             - string
           description: 'URL relativa de la foto de la persona (sincronizada con Graph, ATLAS-ADR-0030), versionada por su hash; vacía si no tiene.'
       description: 'Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.'
+  responses:
+    DemasiadasPeticiones:
+      description: 'Demasiadas peticiones de esta persona, de su organización o, sin sesión, de esta IP (problem+json con codigo «limite_de_tasa»).'
+      headers:
+        Retry-After:
+          description: Segundos que hay que esperar antes de reintentar.
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: integer
+                format: int32
+              title:
+                maxLength: 200
+                type: string
+              codigo:
+                maxLength: 50
+                type: string
+              reintentarEnSegundos:
+                type: integer
+                format: int32
+            description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+    DemasiadasPeticionesIdentidad:
+      description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+      headers:
+        Retry-After:
+          description: Segundos que hay que esperar antes de reintentar.
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: integer
+                format: int32
+              title:
+                maxLength: 200
+                type: string
+              codigo:
+                maxLength: 50
+                type: string
+              reintentarEnSegundos:
+                type: integer
+                format: int32
+            description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+    DemasiadasExportaciones:
+      description: 'Demasiadas solicitudes de esta persona o de su organización (codigo «limite_de_tasa»), o ya tienen el máximo de exportaciones en curso (codigo «exportaciones_en_curso»).'
+      headers:
+        Retry-After:
+          description: Segundos que hay que esperar antes de reintentar.
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: integer
+                format: int32
+              title:
+                maxLength: 200
+                type: string
+              codigo:
+                maxLength: 50
+                type: string
+              reintentarEnSegundos:
+                type: integer
+                format: int32
+            description: Problem Details (RFC 9457) con el código que interpreta la PWA.
   securitySchemes:
     sesionAtlas:
       type: apiKey

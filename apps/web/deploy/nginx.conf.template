@@ -7,6 +7,17 @@ map $http_upgrade $atlas_connection {
     ''      '';
 }
 
+# HSTS de atlas-web (HU 4.10): ATLAS_HSTS en qa y pdn (la imagen trae un año); vacío en local, y entonces nginx no envía
+# la cabecera. Detrás del nginx del host, que termina TLS, el navegador la recibe por HTTPS.
+map $host $atlas_hsts {
+    default "${ATLAS_HSTS}";
+}
+
+# Origen público del S3 que firma las URL de descarga (HU 4.6 y 4.10): va en connect-src de la PWA. Vacío = solo 'self'.
+map $host $atlas_s3_publico {
+    default "${ATLAS_S3_PUBLICO}";
+}
+
 server {
     listen ${ATLAS_WEB_PORT};
     listen [::]:${ATLAS_WEB_PORT};
@@ -50,14 +61,14 @@ server {
     # apunta la consola «Probar». Sin unsafe-eval.
     location ^~ /visor/ {
         include /etc/nginx/atlas-seguridad-visor.conf;
-        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${ATLAS_VISOR_CONEXIONES}; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; sandbox allow-scripts" always;
+        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${ATLAS_VISOR_CONEXIONES}; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; sandbox allow-scripts; report-uri /api/v1/plataforma/csp-reportes; report-to csp" always;
         add_header Cache-Control "no-cache" always;
         try_files $uri =404;
     }
 
     location ^~ /visor/assets/ {
         include /etc/nginx/atlas-seguridad-visor.conf;
-        add_header Content-Security-Policy "default-src 'none'; sandbox allow-scripts" always;
+        add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'self'; sandbox allow-scripts" always;
         add_header Cache-Control "public, max-age=31536000, immutable" always;
         try_files $uri =404;
     }

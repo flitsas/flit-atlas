@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Flit.Atlas.Identidad.Sesiones;
+using Flit.Atlas.Plataforma.Modulos;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -49,18 +50,66 @@ public sealed class OpcionesLimiteTasa
     /// sesión, que responden 401). Una oficina comparte IP: es más holgado.
     /// </summary>
     public int ErroresClientePorIp { get; set; } = 60;
+
+    // --- Resto de la API (HU 4.10, ATLAS-ADR-0048): se suman a los de identidad ---
+
+    /// <summary>
+    /// Peticiones a <c>/api/v1/**</c> y <c>/hubs/**</c> por empleado (persona con la sesión de la PWA) y ventana. La PWA
+    /// pide entre 5 y 10 recursos por pantalla: 600 por minuto deja navegar rápido y corta un script que recorra la API.
+    /// </summary>
+    public int PorEmpleado { get; set; } = 600;
+
+    /// <summary>Lo mismo por persona externa: más estricto (prompt maestro §12).</summary>
+    public int PorExterno { get; set; } = 240;
+
+    /// <summary>
+    /// Peticiones a <c>/api/v1/portal/**</c> de todas las personas externas de una misma organización y ventana: una
+    /// organización con muchas cuentas no suma más que esto.
+    /// </summary>
+    public int PortalPorOrganizacion { get; set; } = 600;
+
+    /// <summary>Solicitudes de exportación (<c>POST …/exportaciones</c>, interna o del portal) por persona y ventana.</summary>
+    public int ExportacionesPorPersona { get; set; } = 5;
+
+    /// <summary>
+    /// Solicitudes de exportación del portal por organización externa y ventana. Además, cada organización tiene un tope
+    /// de exportaciones en curso (<c>Contratos:Exportaciones:MaximoEnCursoPorOrganizacion</c>).
+    /// </summary>
+    public int ExportacionesPorOrganizacion { get; set; } = 10;
+
+    /// <summary>
+    /// Peticiones a <c>/api/v1/**</c> y <c>/hubs/**</c> sin la sesión de la PWA (rutas públicas, tokens Bearer de
+    /// OpenIddict y de GitHub Actions) por IP y ventana, fuera de las rutas de identidad, que tienen las suyas.
+    /// </summary>
+    public int AnonimoPorIp { get; set; } = 300;
+
+    /// <summary>
+    /// Peticiones al proxy del sandbox (<c>/api/v1/contratos/sandbox/**</c>, HU 4.7) por llave de sandbox (una por
+    /// compartición, en <c>Authorization: Bearer</c>) y ventana: más estricto que el portal, porque no lleva sesión.
+    /// </summary>
+    public int SandboxPorLlave { get; set; } = 60;
+
+    /// <summary>Peticiones al proxy del sandbox por IP y ventana, con o sin llave (corta a quien prueba llaves).</summary>
+    public int SandboxPorIp { get; set; } = 120;
+
+    /// <summary>Informes de violaciones de la CSP por IP y ventana (<c>POST /api/v1/plataforma/csp-reportes</c>, sin sesión).</summary>
+    public int ReportesCspPorIp { get; set; } = 30;
+
+    /// <summary>Informes de violaciones de la CSP de todas las IP juntas, por réplica y ventana: el log no crece sin tope.</summary>
+    public int ReportesCspTotal { get; set; } = 300;
 }
 
-/// <summary>
-/// Limitación de tasa de las rutas de identidad (ATLAS-ADR-0022) con <c>Microsoft.AspNetCore.RateLimiting</c>: por IP
-/// (la del cliente, resuelta por <c>UseForwardedHeaders</c> solo desde los proxies confiables de
-/// <c>Atlas:Proxy:RedesConfiables</c>) y por usuario. Responde 429 con <c>Retry-After</c> y registra
-/// <c>identidad.limite_tasa</c>, una vez por cliente y ventana, para que un ataque no inunde la auditoría.
-/// Los contadores viven en memoria de cada réplica.
-/// </summary>
 /// <summary>Metadato de los endpoints con límite de tasa (lo lee el contrato OpenAPI para declarar el 429).</summary>
 public sealed class MetadatoLimiteTasa;
 
+/// <summary>
+/// Limitación de tasa de Atlas con <c>Microsoft.AspNetCore.RateLimiting</c>. Rutas de identidad (ATLAS-ADR-0022): por IP
+/// (la del cliente, resuelta por <c>UseForwardedHeaders</c> solo desde los proxies confiables de
+/// <c>Atlas:Proxy:RedesConfiables</c>) y por usuario. Resto de la API (HU 4.10, ATLAS-ADR-0048): por persona (más estricto
+/// para externos), por organización externa en el portal y al exportar, y por IP sin sesión. Responde 429 con
+/// <c>Retry-After</c> y problem+json, y registra <c>identidad.limite_tasa</c>, una vez por cliente y ventana, para que un
+/// ataque no inunde la auditoría. Los contadores viven en memoria de cada réplica.
+/// </summary>
 public static partial class LimitacionTasa
 {
     public const string Codigo = "limite_de_tasa";
@@ -81,22 +130,37 @@ public static partial class LimitacionTasa
                 Particion(l.ErroresClientePorIp, l.Ventana, http => EsErroresCliente(http.Request.Path) ? "errores:" + Ip(http) : null),
                 Particion(l.ErroresClientePorPersona, l.Ventana, http => EsErroresCliente(http.Request.Path) && Persona(http) is { } p ? "errores-persona:" + p : null),
                 Particion(l.PorIp, l.Ventana, http => EsIdentidad(http.Request.Path) ? "ip:" + Ip(http) : null),
-                Particion(l.PorUsuario, l.Ventana, http => EsIdentidad(http.Request.Path) && Usuario(http) is { } sub ? "usuario:" + sub : null));
+                Particion(l.PorUsuario, l.Ventana, http => EsIdentidad(http.Request.Path) && Usuario(http) is { } sub ? "usuario:" + sub : null),
+                Particion(l.PorEmpleado, l.Ventana, http => EsApi(http.Request.Path) && !EsExterno(http) && Persona(http) is { } p ? "empleado:" + p : null),
+                Particion(l.PorExterno, l.Ventana, http => EsApi(http.Request.Path) && EsExterno(http) && Persona(http) is { } p ? "externo:" + p : null),
+                Particion(l.PortalPorOrganizacion, l.Ventana, http =>
+                    EsPortal(http.Request.Path) && EsExterno(http) && Organizacion(http) is { } org ? "portal:" + org : null),
+                Particion(l.ExportacionesPorPersona, l.Ventana, http => EsSolicitudExportacion(http) && Persona(http) is { } p ? "exportar:" + p : null),
+                Particion(l.ExportacionesPorOrganizacion, l.Ventana, http =>
+                    EsSolicitudExportacion(http) && EsExterno(http) && Organizacion(http) is { } org ? "exportar-org:" + org : null),
+                Particion(l.AnonimoPorIp, l.Ventana, http =>
+                    EsApi(http.Request.Path) && !EsIdentidad(http.Request.Path) && Persona(http) is null ? "anonimo:" + Ip(http) : null),
+                Particion(l.SandboxPorLlave, l.Ventana, http => EsSandbox(http.Request.Path) && LlaveSandbox(http) is { } llave ? "sandbox:" + llave : null),
+                Particion(l.SandboxPorIp, l.Ventana, http => EsSandbox(http.Request.Path) ? "sandbox-ip:" + Ip(http) : null),
+                Particion(l.ReportesCspPorIp, l.Ventana, http => EsReporteCsp(http.Request.Path) ? "csp:" + Ip(http) : null),
+                Particion(l.ReportesCspTotal, l.Ventana, http => EsReporteCsp(http.Request.Path) ? "csp" : null));
             o.OnRejected = AlRechazarAsync;
         });
     }
 
     /// <summary>
     /// Va <b>antes</b> de <c>UseAuthentication</c> para cubrir también el retorno de Entra (lo atiende el middleware de
-    /// autenticación). Para limitar por usuario o por persona, lee aquí la sesión de las rutas de identidad y del reporte
-    /// de errores de la PWA; el manejador de la cookie guarda el resultado y <c>UseAuthentication</c> no vuelve a
+    /// autenticación). Para limitar por usuario, por persona o por organización, lee aquí la sesión de la PWA en las rutas
+    /// de identidad y del resto de la API (salvo las que inician un ingreso, que apartan la cookie anterior, y los informes
+    /// de la CSP, que no la usan); el manejador de la cookie guarda el resultado y <c>UseAuthentication</c> no vuelve a
     /// consultar la base.
     /// </summary>
     internal static IApplicationBuilder Usar(IApplicationBuilder app)
     {
         app.Use(async (http, siguiente) =>
         {
-            if ((EsIdentidad(http.Request.Path) && !EsIngreso(http.Request.Path)) || EsErroresCliente(http.Request.Path))
+            var ruta = http.Request.Path;
+            if ((EsIdentidad(ruta) || EsApi(ruta)) && !EsIngreso(ruta) && !EsReporteCsp(ruta))
             {
                 var resultado = await http.AuthenticateAsync(ClaimsAtlas.EsquemaCookie);
                 if (resultado.Succeeded)
@@ -119,6 +183,44 @@ public static partial class LimitacionTasa
         || ruta.StartsWithSegments("/api/v1/plataforma/yo", StringComparison.OrdinalIgnoreCase)
         || ruta.StartsWithSegments("/connect", StringComparison.OrdinalIgnoreCase)
         || ruta.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>El resto de la API de la PWA y de los clientes con token: <c>/api/v1/**</c> y SignalR (<c>/hubs/**</c>).</summary>
+    internal static bool EsApi(PathString ruta) =>
+        ruta.StartsWithSegments("/api/v1", StringComparison.OrdinalIgnoreCase)
+        || ruta.StartsWithSegments("/hubs", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>El portal de clientes (ATLAS-ADR-0043), que los módulos montan bajo un prefijo reservado.</summary>
+    internal static bool EsPortal(PathString ruta) =>
+        ruta.StartsWithSegments(ExtensionesModulos.RutaPortal, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Un endpoint que encola una exportación: el módulo lo marca con <c>ConLimiteDeExportacion</c>. El limitador corre
+    /// después del enrutamiento (que <c>WebApplication</c> pone al principio), así que el endpoint ya está elegido.
+    /// </summary>
+    internal static bool EsSolicitudExportacion(HttpContext http) =>
+        http.GetEndpoint()?.Metadata.GetMetadata<MetadatoSolicitudExportacion>() is not null;
+
+    /// <summary>Proxy del sandbox de contratos (HU 4.7): sin sesión, con su llave de sandbox como Bearer.</summary>
+    internal static bool EsSandbox(PathString ruta) =>
+        ruta.StartsWithSegments("/api/v1/contratos/sandbox", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// La partición de la llave de sandbox: su SHA-256 (los contadores en memoria no guardan la llave). Sin llave, solo
+    /// cuenta el límite por IP.
+    /// </summary>
+    private static string? LlaveSandbox(HttpContext http)
+    {
+        var autorizacion = http.Request.Headers.Authorization.ToString();
+        if (!autorizacion.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) || autorizacion.Length <= 7)
+        {
+            return null;
+        }
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(autorizacion[7..].Trim())));
+    }
+
+    /// <summary>Informes de violaciones de la CSP: sin sesión, con límites propios por IP y en total.</summary>
+    internal static bool EsReporteCsp(PathString ruta) =>
+        ruta.StartsWithSegments(EndpointsReportesCsp.Ruta, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Reporte de errores de la PWA: con sesión y límites propios por persona y por IP.</summary>
     internal static bool EsErroresCliente(PathString ruta) =>
@@ -154,6 +256,12 @@ public static partial class LimitacionTasa
 
     private static string? Persona(HttpContext http) =>
         http.User.Identity?.IsAuthenticated == true ? http.User.FindFirstValue(ClaimsAtlas.PersonaId) : null;
+
+    private static bool EsExterno(HttpContext http) =>
+        http.User.Identity?.IsAuthenticated == true && http.User.FindFirstValue(ClaimsAtlas.TipoPrincipal) == ClaimsAtlas.TipoExterno;
+
+    private static string? Organizacion(HttpContext http) =>
+        http.User.Identity?.IsAuthenticated == true ? http.User.FindFirstValue(ClaimsAtlas.OrganizacionId) : null;
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo registrar el evento de límite de tasa")]
     private static partial void NoSeRegistro(ILogger log, Exception error);
