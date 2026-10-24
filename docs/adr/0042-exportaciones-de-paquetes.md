@@ -406,7 +406,8 @@ enlace interno, el PDF llega a la hoja como `File`, axe sin errores críticos y 
 - [por verificar] Con el líder (HU 4.6): para compartir el **archivo** en qa y pdn hace falta agregar el host público
   del S3 a `connect-src` de la CSP de la PWA y declarar CORS (`GET` desde el origen de Atlas) en el bucket. Sin eso,
   «Preparar» responde «No pudimos preparar el archivo» y se ofrece descargar o compartir el enlace. No se cambió la CSP:
-  ampliarla es una decisión de seguridad.
+  ampliarla es una decisión de seguridad. Resuelto en ATLAS-ADR-0048: `connect-src` suma `ATLAS_S3_PUBLICO` de la imagen de
+  atlas-web; falta fijar la variable y el CORS del bucket en flit-gitops.
 - [por verificar] Probar en un iPhone real (Safari y la PWA instalada, iOS 17 y 18) y en un Android de gama media la
   descarga en la misma pestaña y la hoja con archivos; Playwright emula WebKit, no iOS.
 - [por verificar] Las URL públicas por ambiente y contrato para los `servers` del spec podado
