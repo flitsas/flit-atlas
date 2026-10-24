@@ -39,5 +39,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0033](0033-soporte-en-microsoft-365.md) | Soporte en Microsoft 365: calendario compartido por Graph con marca de pendiente en la transacción y trabajo con reintentos, aviso en Teams por un flujo de Workflows y feeds .ics con token guardado como hash | propuesto | §8.3, §8.9, §9, HU 2.10 |
 | [ATLAS-ADR-0034](0034-datos-sin-conexion.md) | Datos sin conexión: respuestas de la API guardadas en IndexedDB por recurso, con permiso y TTL, sin teléfonos y de una sola persona por dispositivo | propuesto | §11, §12, HU 2.12 |
 | [ATLAS-ADR-0036](0036-diff-de-contratos-en-render.md) | Diff de contratos en atlas-render: oasdiff como librería con la configuración de la CLI, caché LRU en memoria por par de SHA-256 y cliente tipado IRenderDiff en Plataforma | propuesto | A-09, §8.4, HU 3.5 |
+| [ATLAS-ADR-0037](0037-conversion-del-legado-ict.md) | Conversión del legado ICT: swagger de tsoa como base, Excel como enriquecimiento, un OpenAPI 3.1 por repo en contracts/legado/ y reglas de vacuum para lo compartible | propuesto | §8.4, HU 3.8 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).

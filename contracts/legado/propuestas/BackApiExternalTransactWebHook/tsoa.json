@@ -1,0 +1,31 @@
+{
+  "entryFile": "src/index.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "controllerPathGlobs": [
+    "src/**/*Controller.ts"
+  ],
+  "spec": {
+    "outputDirectory": "./",
+    "specVersion": 3,
+    "securityDefinitions": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "name": "API externa ICT · Webhooks (BackApiExternalTransactWebHook)",
+    "version": "1.0.0",
+    "description": "Notificaciones que FLIT envía a la URL del gestor cuando cambia el estado de un trámite o de una placa.",
+    "contact": {
+      "name": "FLIT S.A.S."
+    }
+  },
+  "ignore": [
+    "**/node_modules/**"
+  ],
+  "routes": {
+    "routesDir": "build",
+    "authenticationModule": "src/app/middlewares/authenticationMiddleware.ts"
+  }
+}
