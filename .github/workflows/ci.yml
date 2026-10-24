@@ -83,6 +83,17 @@ jobs:
         run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi.yaml --ignore-file contracts/vacuum/openapi-excepciones.yaml contracts/openapi/atlas.v1.yaml
       - name: Lint AsyncAPI
         run: vacuum lint --no-banner --details --no-clip -r contracts/vacuum/asyncapi.yaml contracts/asyncapi/atlas-events.v1.yaml
+      - name: Lint de los contratos legados ICT (reglas de lo compartible)
+        # HU 3.8 (ATLAS-ADR-0037): valida los specs ya generados en contracts/legado/; el Excel no está en el CI.
+        # Que ningún dato sensible sobreviva y que cada campo del Excel esté en un spec o en el informe lo
+        # comprueba services/docs/tests/legado/test_specs_versionados.py (job python).
+        run: |
+          set -euo pipefail
+          fallo=0
+          for spec in contracts/legado/*.yaml; do
+            vacuum lint --no-banner --details --no-clip -r contracts/vacuum/openapi-compartible.yaml "$spec" || fallo=1
+          done
+          exit "$fallo"
       - name: Cambios incompatibles frente a la rama base (solo advierte en F1)
         if: github.event_name == 'pull_request'
         env:
