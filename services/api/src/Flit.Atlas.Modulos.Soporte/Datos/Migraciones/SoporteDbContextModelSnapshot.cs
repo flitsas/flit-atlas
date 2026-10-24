@@ -119,15 +119,18 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                     b.HasKey("Id")
                         .HasName("pk_soporte_compensacion");
 
-                    b.HasIndex("TurnoId")
-                        .HasDatabaseName("ix_soporte_compensacion_turno_id");
-
                     b.HasIndex("PersonaId", "Estado")
                         .HasDatabaseName("ix_soporte_compensacion_persona_id_estado");
 
+                    b.HasIndex("TurnoId", "PersonaId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_soporte_compensacion_turno_id_persona_id");
+
                     b.ToTable("soporte_compensacion", "atlas", t =>
                         {
-                            t.HasComment("Días compensados por turnos; el flujo llega en la HU 2.9.");
+                            t.HasComment("Días compensados por turnos: a quién, qué día, quién aprobó y si ya se tomó (HU 2.9).");
+
+                            t.HasCheckConstraint("ck_soporte_compensacion_tomada", "estado <> 'tomada' OR fecha_compensada IS NOT NULL");
                         });
                 });
 
@@ -280,6 +283,64 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.EventoSolicitudCambio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Accion")
+                        .IsRequired()
+                        .HasMaxLength(23)
+                        .HasColumnType("character varying(23)")
+                        .HasColumnName("accion");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTimeOffset?>("HechaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hecha_en");
+
+                    b.Property<Guid>("LlaveIdempotencia")
+                        .HasColumnType("uuid")
+                        .HasColumnName("llave_idempotencia");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("nota")
+                        .HasComment("@pii");
+
+                    b.Property<Guid>("PersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_id");
+
+                    b.Property<Guid>("SolicitudId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitud_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_soporte_solicitud_evento");
+
+                    b.HasIndex("LlaveIdempotencia")
+                        .IsUnique()
+                        .HasDatabaseName("ux_soporte_solicitud_evento_llave");
+
+                    b.HasIndex("SolicitudId")
+                        .HasDatabaseName("ix_soporte_solicitud_evento_solicitud_id");
+
+                    b.ToTable("soporte_solicitud_evento", "atlas", t =>
+                        {
+                            t.HasComment("Historial de cada solicitud de cambio, con la llave de idempotencia de cada acción.");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.FestivoAdicional", b =>
                 {
                     b.Property<Guid>("Id")
@@ -357,6 +418,92 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                     b.ToTable("soporte_participante", "atlas", t =>
                         {
                             t.HasComment("Personas internas de la rotación de cada equipo, con su orden y estado.");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.SolicitudCambio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid>("EquipoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("equipo_id");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha");
+
+                    b.Property<string>("Motivo")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("motivo")
+                        .HasComment("@pii");
+
+                    b.Property<Guid>("ReemplazoPersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reemplazo_persona_id");
+
+                    b.Property<DateTimeOffset?>("ResueltaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resuelta_en");
+
+                    b.Property<Guid?>("ResueltaPorPersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resuelta_por_persona_id");
+
+                    b.Property<Guid>("SolicitantePersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitante_persona_id");
+
+                    b.Property<Guid>("TurnoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("turno_id");
+
+                    b.Property<Guid?>("TurnoNuevoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("turno_nuevo_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_soporte_solicitud_cambio");
+
+                    b.HasIndex("ReemplazoPersonaId")
+                        .HasDatabaseName("ix_soporte_solicitud_cambio_reemplazo_persona_id");
+
+                    b.HasIndex("SolicitantePersonaId")
+                        .HasDatabaseName("ix_soporte_solicitud_cambio_solicitante_persona_id");
+
+                    b.HasIndex("TurnoId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_soporte_solicitud_cambio_abierta")
+                        .HasFilter("estado IN ('pendiente_reemplazo', 'pendiente_aprobacion')");
+
+                    b.HasIndex("TurnoNuevoId")
+                        .HasDatabaseName("ix_soporte_solicitud_cambio_turno_nuevo_id");
+
+                    b.HasIndex("EquipoId", "Estado")
+                        .HasDatabaseName("ix_soporte_solicitud_cambio_equipo_id_estado");
+
+                    b.ToTable("soporte_solicitud_cambio", "atlas", t =>
+                        {
+                            t.HasComment("Solicitudes de cambio de turno: solicitud, aceptación del reemplazo y aprobación (HU 2.9).");
+
+                            t.HasCheckConstraint("ck_soporte_solicitud_cambio_personas", "solicitante_persona_id <> reemplazo_persona_id");
                         });
                 });
 
@@ -463,6 +610,16 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                         .HasConstraintName("fk_soporte_compensacion_soporte_turno_turno_id");
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.EventoSolicitudCambio", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Soporte.Datos.SolicitudCambio", null)
+                        .WithMany()
+                        .HasForeignKey("SolicitudId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_soporte_solicitud_evento_soporte_solicitud_cambio_solicitud");
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.Participante", b =>
                 {
                     b.HasOne("Flit.Atlas.Modulos.Soporte.Datos.EquipoSoporte", null)
@@ -471,6 +628,29 @@ namespace Flit.Atlas.Modulos.Soporte.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_soporte_participante_soporte_equipo_equipo_id");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.SolicitudCambio", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Soporte.Datos.EquipoSoporte", null)
+                        .WithMany()
+                        .HasForeignKey("EquipoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_soporte_solicitud_cambio_soporte_equipo_equipo_id");
+
+                    b.HasOne("Flit.Atlas.Modulos.Soporte.Datos.Turno", null)
+                        .WithMany()
+                        .HasForeignKey("TurnoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_soporte_solicitud_cambio_soporte_turno_turno_id");
+
+                    b.HasOne("Flit.Atlas.Modulos.Soporte.Datos.Turno", null)
+                        .WithMany()
+                        .HasForeignKey("TurnoNuevoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_soporte_solicitud_cambio_soporte_turno_turno_nuevo_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Soporte.Datos.Turno", b =>

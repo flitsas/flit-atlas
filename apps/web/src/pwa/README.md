@@ -4,5 +4,6 @@
 - `push.ts`: suscripción Web Push por dispositivo con la llave VAPID del servidor, con la guía para iOS (solo con Atlas instalado).
 - `almacen.ts`: caché sin conexión en IndexedDB (`idb`) con TTL, que se borra al cerrar sesión.
 - `conexion.ts`: estado de la red para el indicador «Sin conexión».
+- `cola.ts`: acciones hechas sin conexión, con su llave de idempotencia, en IndexedDB; se envían al reconectar o con «Reintentar ahora» (ATLAS-ADR-0032).
 
-Ver ATLAS-ADR-0020.
+Ver ATLAS-ADR-0020 y ATLAS-ADR-0032.

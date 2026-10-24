@@ -42,11 +42,35 @@ public enum TipoAusencia
     Otra,
 }
 
-/// <summary>Estado de una compensación (prompt maestro §8.3). El flujo de registro y aprobación llega en la HU 2.9.</summary>
+/// <summary>Estado de una compensación (prompt maestro §8.3).</summary>
 public enum EstadoCompensacion
 {
     Pendiente,
     Tomada,
+}
+
+/// <summary>
+/// Estado de una solicitud de cambio de turno (HU 2.9): <c>pendiente_reemplazo → pendiente_aprobacion → aprobada</c>, o
+/// <c>rechazada</c> (por el reemplazo o por quien aprueba) / <c>cancelada</c> (por quien la pidió).
+/// </summary>
+public enum EstadoSolicitud
+{
+    PendienteReemplazo,
+    PendienteAprobacion,
+    Aprobada,
+    Rechazada,
+    Cancelada,
+}
+
+/// <summary>Paso del historial de una solicitud de cambio.</summary>
+public enum AccionSolicitud
+{
+    Solicitada,
+    Aceptada,
+    RechazadaPorReemplazo,
+    Aprobada,
+    Rechazada,
+    Cancelada,
 }
 
 /// <summary>Reglas de los estados de un turno y textos estables para la API.</summary>

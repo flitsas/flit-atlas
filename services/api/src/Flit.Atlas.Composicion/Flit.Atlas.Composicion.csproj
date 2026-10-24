@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
     <!-- Módulos funcionales (uno por línea). -->
     <ProjectReference Include="..\Flit.Atlas.Modulos.Catalogo\Flit.Atlas.Modulos.Catalogo.csproj" />
+    <ProjectReference Include="..\Flit.Atlas.Modulos.Equipo\Flit.Atlas.Modulos.Equipo.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Modulos.Hola\Flit.Atlas.Modulos.Hola.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Modulos.Soporte\Flit.Atlas.Modulos.Soporte.csproj" />
   </ItemGroup>

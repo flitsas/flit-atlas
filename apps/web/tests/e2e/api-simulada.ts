@@ -77,6 +77,68 @@ const APLICATIVOS = [
   },
 ];
 
+/** Responsables (HU 2.3): un producto y un módulo, con nombres largos para probar el móvil a 360 px. */
+const PERSONA_LARGA = {
+  id: 'p7',
+  nombre: 'Persona Demo Con Un Nombre Bastante Largo Para El Móvil',
+  correo: 'persona.demo.con.un.correo.bastante.largo@ejemplo.com',
+  cargo: 'Desarrolladora',
+  foto: null,
+  telefono: null,
+  usuarioGitHub: null,
+  activa: true,
+};
+const PERSONA_CORTA = { ...PERSONA_LARGA, id: 'p8', nombre: 'Persona Demo Ocho', correo: 'persona.ocho@ejemplo.com' };
+const responsableSimulado = (id: string, tipo: 'principal' | 'secundario', persona: typeof PERSONA_LARGA) => ({
+  id,
+  tipo,
+  persona,
+  dedicacion: tipo === 'secundario' ? 20 : null,
+  vigenteDesde: '2026-10-20',
+  vigenteHasta: null,
+  vigente: true,
+  estadoTraspaso: tipo === 'secundario' ? 'en_acompanamiento' : 'habilitado',
+});
+const REF_FLIT2 = { id: 'a1', slug: 'flit2', nombre: 'FLIT 2.0', tipo: 'producto' };
+const REF_NOTIFICACIONES = { id: 'a2', slug: 'flit2-notificaciones', nombre: 'Notificaciones', tipo: 'modulo' };
+const DEFINICIONES_SIMULADAS = [
+  { rol: 'principal', titulo: 'Responsable principal', puntos: ['Revisa (o delega la revisión de) todo PR que toque su módulo.'] },
+  { rol: 'secundario', titulo: 'Responsable secundario', puntos: ['Dedicación orientativa: ~20 % de su tiempo en ese módulo.'] },
+];
+const PRINCIPAL_FLIT2 = responsableSimulado('r1', 'principal', PERSONA_LARGA);
+const SECUNDARIO_FLIT2 = responsableSimulado('r2', 'secundario', PERSONA_CORTA);
+const REPARTO_SIMULADO = {
+  version: {
+    numero: 5,
+    origen: 'importacion',
+    restauradaDe: null,
+    fechaDocumento: '2026-10-20',
+    definidoPor: 'Persona Demo (Líder técnico)',
+    autor: 'Líder Demo',
+    nota: 'Importación del documento de responsables.',
+    creadaEn: '2026-10-23T15:00:00Z',
+    huella: 'a'.repeat(64),
+    responsabilidades: 4,
+  },
+  definiciones: DEFINICIONES_SIMULADAS,
+  porPersona: [
+    { persona: PERSONA_LARGA, principalDe: [REF_FLIT2], secundarioDe: [REF_NOTIFICACIONES] },
+    { persona: PERSONA_CORTA, principalDe: [REF_NOTIFICACIONES], secundarioDe: [REF_FLIT2] },
+  ],
+  productos: [{ aplicativo: REF_FLIT2, principal: PRINCIPAL_FLIT2, secundario: SECUNDARIO_FLIT2 }],
+  modulos: [
+    {
+      aplicativo: REF_NOTIFICACIONES,
+      principal: responsableSimulado('r3', 'principal', PERSONA_CORTA),
+      secundario: responsableSimulado('r4', 'secundario', PERSONA_LARGA),
+    },
+  ],
+  servicios: [],
+  huerfanas: 0,
+  veContacto: false,
+  puedeGestionar: false,
+};
+
 /** Simula la sesión de una empleada con los permisos dados y los endpoints que usan el shell, la matriz y «hola». */
 export async function simularApi(page: Page, opciones: OpcionesApi): Promise<void> {
   const matriz = matrizDelRepositorio();
@@ -122,6 +184,55 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         const elementos = APLICATIVOS.filter((a) => !grupo || a.grupo === grupo);
         return json(route, { total: elementos.length, elementos });
       }
+      // Responsables (HU 2.3 a 2.5).
+      case '/api/v1/equipo/responsabilidades':
+        if (!opciones.permisos.includes('atlas.equipo.ver')) return route.fulfill({ status: 403 });
+        return json(route, { ...REPARTO_SIMULADO, puedeGestionar: opciones.permisos.includes('atlas.equipo.gestionar') });
+      case '/api/v1/equipo/revisiones':
+        return json(route, {
+          proxima: { id: 'v1', fecha: '2027-01-20', estado: 'pendiente', recordatorioEnviadoEn: null, hechaEn: null, hechaPor: null, nota: null },
+          historial: [],
+          diasAnticipacion: 7,
+        });
+      case '/api/v1/equipo/carga':
+        return json(route, {
+          media: 1.2,
+          umbralAlto: 1.56,
+          umbralBajo: 0.84,
+          personas: [
+            { persona: PERSONA_LARGA, principales: 1, secundarias: 1, puntaje: 1.2, nivel: 'normal' },
+            { persona: PERSONA_CORTA, principales: 1, secundarias: 1, puntaje: 1.2, nivel: 'normal' },
+          ],
+        });
+      case '/api/v1/equipo/yo/responsabilidades':
+        return json(route, { persona: PERSONA_LARGA, principalDe: [], secundarioDe: [] });
+      case '/api/v1/equipo/aplicativos/flit2/responsables':
+        return json(route, {
+          aplicativo: REF_FLIT2,
+          principal: PRINCIPAL_FLIT2,
+          secundario: SECUNDARIO_FLIT2,
+          heredadoDe: null,
+          definiciones: DEFINICIONES_SIMULADAS,
+          traspaso: null,
+          version: 5,
+          puedeGestionar: false,
+          veContacto: false,
+        });
+      case '/api/v1/equipo/aplicativos/flit2/a-quien-llamo':
+        return json(route, {
+          aplicativo: REF_FLIT2,
+          hoy: '2026-10-24',
+          esSabado: true,
+          soporte: {
+            fecha: '2026-10-24',
+            festivo: null,
+            equipos: [{ id: 'e1', nombre: 'Desarrollo TI', area: 'TI', horaInicio: '08:00', horaFin: '12:00', personas: [PERSONA_LARGA] }],
+          },
+          principal: PRINCIPAL_FLIT2,
+          secundario: SECUNDARIO_FLIT2,
+          heredadoDe: null,
+          veContacto: false,
+        });
       // Soporte de los sábados (HU 2.6): los dos equipos de la migración y un turno con nombre y correo largos.
       case '/api/v1/soporte/equipos':
         return json(
@@ -188,6 +299,74 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         ]);
       case '/api/v1/soporte/ausencias':
         return json(route, []);
+      // Cambios de turno y compensaciones (HU 2.9): una solicitud por aprobar con nombres largos y una compensación.
+      case '/api/v1/soporte/solicitudes-cambio': {
+        const persona = (id: string, nombre: string) => ({ id, nombre, correo: null, cargo: null, telefono: null });
+        return json(route, [
+          {
+            id: 'sc1',
+            turno: {
+              id: 't1', equipo: { id: 'e2', nombre: 'Operaciones' }, fecha: '2026-10-31', persona: persona('p2', 'Persona Demo Con Un Nombre Bastante Largo'),
+              horaInicio: '08:00', horaFin: '12:00', estado: 'programado', origen: 'manual', turnoReemplazadoId: null, festivo: null, observacion: null, requiereRevision: false,
+            },
+            solicitante: persona('p2', 'Persona Demo Con Un Nombre Bastante Largo'),
+            reemplazo: persona('p3', 'Otra Persona Demo Con Apellidos Largos'),
+            estado: 'pendiente_aprobacion', motivo: 'Cita médica programada desde hace semanas', turnoNuevoId: null, resueltaPor: null, resueltaEn: null,
+            creadaEn: '2026-10-23T15:00:00Z',
+            historial: [
+              { accion: 'solicitada', persona: { id: 'p2', nombre: 'Persona Demo Con Un Nombre Bastante Largo' }, nota: 'Cita médica', ocurridoEn: '2026-10-23T15:00:00Z', hechaEn: null },
+              { accion: 'aceptada', persona: { id: 'p3', nombre: 'Otra Persona Demo Con Apellidos Largos' }, nota: null, ocurridoEn: '2026-10-23T16:00:00Z', hechaEn: '2026-10-23T15:30:00Z' },
+            ],
+            puedeResponder: false, puedeResolver: opciones.permisos.includes('atlas.soporte.aprobar'), puedeCancelar: false,
+          },
+        ]);
+      }
+      case '/api/v1/soporte/compensaciones/pendientes':
+        return json(route, {
+          equipoId: null,
+          total: 1,
+          personas: [
+            {
+              persona: { id: 'p3', nombre: 'Otra Persona Demo Con Apellidos Largos', correo: null, cargo: null, telefono: null },
+              pendientes: 1, sinFecha: 1, proxima: null,
+              compensaciones: [
+                {
+                  id: 'c1', turno: { id: 't0', fecha: '2026-10-17', equipo: { id: 'e1', nombre: 'Desarrollo TI' } },
+                  persona: { id: 'p3', nombre: 'Otra Persona Demo Con Apellidos Largos', correo: null, cargo: null, telefono: null },
+                  fechaCompensada: null, estado: 'pendiente', aprobadaPor: null, nota: null, puedeCambiar: opciones.permisos.includes('atlas.soporte.aprobar'),
+                  creadaEn: '2026-10-18T12:00:00Z',
+                },
+              ],
+            },
+          ],
+        });
+      // Importador del Excel (HU 2.7): una vista previa ficticia con interpretaciones, un caso ambiguo y una persona nueva.
+      case '/api/v1/soporte/importacion/vista-previa':
+        return json(route, {
+          equipo: { id: 'e1', nombre: 'Desarrollo TI' },
+          hoja: 'Rotacion Soporte',
+          huella: 'h1',
+          resumen: { filas: 2, importadas: 1, yaImportadas: 0, omitidas: 1, turnos: 2, compensaciones: 1, personasInactivas: 0, participantes: 1, generadosQuitados: 0, interpretaciones: 3, ambiguos: 1 },
+          filas: [
+            {
+              fila: 2, fecha: '2026-06-27', textoFecha: '46200', estado: 'aplicado', observacion: 'Compensado: lo cubrió alguien del equipo de soporte del sábado',
+              responsable: { texto: 'persona demo con un nombre bastante largo', clave: 'persona demo con un nombre bastante largo', coincidencia: 'exacta', personaId: 'p2', nombre: 'Persona Demo Con Un Nombre Bastante Largo', nueva: false },
+              reemplazo: null, compensacion: null, requiereRevision: true, accion: 'crear', motivo: null,
+              interpretaciones: ['Fecha serial de Excel 46200 → 27/06/2026.', '«persona demo con un nombre bastante largo» es Persona Demo Con Un Nombre Bastante Largo (sin tildes ni mayúsculas).'],
+              ambiguedades: ['Compensado «lo cubrió alguien del equipo de soporte del sábado» no es una fecha ni dice «reemplazo»: queda en la observación para revisión.'],
+            },
+            {
+              fila: 3, fecha: '2026-07-04', textoFecha: '2026-07-04', estado: 'aplicado', observacion: null,
+              responsable: { texto: 'Persona Ficticia', clave: 'persona ficticia', coincidencia: 'ninguna', personaId: null, nombre: null, nueva: false },
+              reemplazo: null, compensacion: null, requiereRevision: false, accion: 'omitir',
+              motivo: '«Persona Ficticia» no existe en Atlas: confirma crearla como persona inactiva para importar la fila.', interpretaciones: [], ambiguedades: [],
+            },
+          ],
+          personasNuevas: [{ clave: 'persona ficticia', nombre: 'Persona Ficticia', filas: 1, ultimaFecha: '2026-07-04', confirmada: false }],
+          nombresAmbiguos: [],
+          participantesNuevos: [{ personaId: 'p2', nombre: 'Persona Demo Con Un Nombre Bastante Largo', activo: true }],
+          avisos: ['Hay personas del Excel que no existen en Atlas: confirma crearlas inactivas o sus filas no se importan.'],
+        });
       case '/api/v1/soporte/festivos':
         return json(route, [{ fecha: '2026-12-25', nombre: 'Navidad', tipo: 'fijo', trasladado: false, id: null }]);
       default: {

@@ -9,7 +9,7 @@ elementos: []
 reemplaza: []
 reemplazado_por: []
 alias: []
-fuentes: [prompt maestro §7, §8.3, §9, §10 y §11, HU 2.6, HU 2.8, ATLAS-ADR-0020, ATLAS-ADR-0023, ATLAS-ADR-0026]
+fuentes: [prompt maestro §7, §8.3, §9, §10 y §11, HU 2.6, HU 2.7, HU 2.8, HU 2.9, ATLAS-ADR-0020, ATLAS-ADR-0023, ATLAS-ADR-0026, ATLAS-ADR-0032]
 ---
 
 # ATLAS-ADR-0029 · Soporte de los sábados
@@ -76,9 +76,11 @@ Opción 1 en las cuatro.
 | `soporte_turno` | Equipo, sábado, persona, horario propio, estado, origen, turno reemplazado, generación, observación (`@pii`) y «requiere revisión» (HU 2.7). Índice único parcial: una persona con a lo sumo un turno vigente por equipo y sábado; el máximo del equipo lo controla la aplicación |
 | `soporte_ausencia` | Persona y rango (vacaciones, incapacidad, otra; el motivo es `@pii` y solo lo ve quien gestiona). Vale en todos sus equipos |
 | `soporte_festivo` | Días no laborables adicionales (los de ley se calculan) |
-| `soporte_compensacion` | Solo el modelo (turno, persona, día compensado, `pendiente \| tomada`, quién aprobó); el flujo es de la HU 2.9 |
+| `soporte_compensacion` | Turno, persona, día compensado, `pendiente \| tomada` (tomada exige el día), quién aprobó y nota (`@pii`); una por turno y persona (HU 2.9) |
+| `soporte_solicitud_cambio` | Solicitud de cambio de turno (HU 2.9): turno, equipo, fecha, solicitante, reemplazo, estado, motivo (`@pii`), turno nuevo, quién resolvió y cuándo. Una abierta por turno (índice único parcial) |
+| `soporte_solicitud_evento` | Historial de cada solicitud: acción, persona, nota (`@pii`), hora del dispositivo y la llave de idempotencia (única, ATLAS-ADR-0032) |
 
-Las llaves foráneas hacia `plataforma_persona` van a mano en la migración. Ninguna tabla tiene `organizacion_id`: la rotación es de empleados de FLIT y ningún externo llega a sus filas (los endpoints lo hacen cumplir con permisos que solo tienen los internos); por eso no llevan RLS. `solicitud_cambio`, `evento_calendario` y `feed_ics` del §9 llegan con sus HU (2.9 y 2.10). Toda acción que cambia datos queda en `plataforma_auditoria` **en la misma transacción** (el contexto de la plataforma usa la conexión y la transacción del de soporte), sin observaciones ni motivos de ausencia.
+Las llaves foráneas hacia `plataforma_persona` van a mano en la migración. Ninguna tabla tiene `organizacion_id`: la rotación es de empleados de FLIT y ningún externo llega a sus filas (los endpoints lo hacen cumplir con permisos que solo tienen los internos); por eso no llevan RLS. `evento_calendario` y `feed_ics` del §9 llegan con la HU 2.10. Toda acción que cambia datos queda en `plataforma_auditoria` **en la misma transacción** (el contexto de la plataforma usa la conexión y la transacción del de soporte), sin observaciones ni motivos de ausencia.
 
 ### Festivos (`FestivosColombia`)
 
@@ -90,8 +92,32 @@ Puro y determinista, por equipo: recorre los sábados de la ventana; uno festivo
 
 ### API y PWA
 
-- 26 endpoints: configuración, equipos, participantes y orden, candidatos, turnos (por rango y equipo), este sábado (por equipo), turnos a mano, horario, estado, reemplazo, ausencias, festivos, vista previa y confirmación, indicadores y canal.
+- 26 endpoints en las HU 2.6 y 2.8 (38 con los 12 de las HU 2.7 y 2.9): configuración, equipos, participantes y orden, candidatos, turnos (por rango y equipo), este sábado (por equipo), turnos a mano, horario, estado, reemplazo, ausencias, festivos, vista previa y confirmación, indicadores y canal.
 - PWA `apps/web/src/modulos/soporte/`: calendario en lista (por defecto en el móvil), semana y mes, filtrable por equipo con «Todos»; gestión (configuración, equipos, participantes, generación, ausencias y festivos); indicadores; widget «Soporte de este sábado» con a quién llamar por equipo; para externos, la página y el widget del canal. Todo con carga diferida; sin librería de calendario (las conocidas inyectan estilos que la CSP no permite, ATLAS-ADR-0020).
+
+## Importador del Excel y cambios de turno (HU 2.7 y 2.9)
+
+Agregado el 23/10/2026. Mismo módulo, migración propia `CambiosEImportacion` (dos tablas nuevas y el índice único de compensaciones).
+
+### Importador del Excel (HU 2.7)
+
+- **Lectura**: SDK de Open XML de Microsoft (`DocumentFormat.OpenXml` 3.5.1, MIT, 18/03/2026; solo depende de `System.IO.Packaging`). Se prefirió a ClosedXML por tener menos dependencias. Límites: 1 MB, 1000 filas de datos y 10 millones de caracteres por parte del paquete (contra archivos que se inflan al descomprimir). Busca la hoja «Rotacion Soporte» (o la primera) y la fila de encabezados con «Fecha» y «Responsable» en las 20 primeras; las demás columnas son opcionales.
+- **Interpretación** (`InterpreteRotacion`, puro y con pruebas sin base): fechas en texto (`aaaa-mm-dd`, `dd/mm/aaaa`) o seriales de Excel, que deben ser sábados; nombres sin tildes, mayúsculas ni signos contra `plataforma_persona` (igual → esa persona; un nombre parcial que encaja con una sola persona → esa; con varias → quien importa elige; ninguna → se propone crearla); «Estado» vacío es programado y, si la fecha ya pasó, queda para revisión; «Compensado» con fecha es una compensación del responsable (tomada si el día ya pasó), con «reemplazo» y un nombre claro es un turno reemplazado por esa persona y, si además dice «compensa», una compensación pendiente para ella; lo demás va a la observación con «requiere revisión». Cada interpretación y cada caso ambiguo salen en el informe, por fila.
+- **Persona que no existe en Atlas**: la vista previa la propone y quien importa la confirma; se crea **inactiva** (con un correo de relleno en un dominio reservado, `@personas.invalid`, que nunca coincide con Entra) y entra al equipo como participante inactiva: queda en el historial y la generación no la usa. Ningún nombre está en el código: es genérico.
+- **Participantes**: por defecto, los responsables de las filas que se importan y aún no están en el equipo entran a su rotación en el orden del Excel (activos si la persona está activa).
+- **Revisión y confirmación**: `POST /importacion/vista-previa` no guarda nada; `POST /importacion/confirmar` recibe lo mismo (el archivo en base64 y las decisiones) más la huella SHA-256 de la vista previa, recalcula y responde 409 si algo cambió. Equipo destino a elección (por defecto Desarrollo TI, el del Excel), con `atlas.soporte.gestionar` global o con alcance al equipo.
+- **Reimportar no duplica**: la clave natural es equipo + fecha + persona con origen `importado`; una fila ya importada queda `ya_importado`. Un turno generado y programado del mismo sábado se quita (el Excel manda); uno manual, confirmado o aplicado se respeta y, si el equipo queda completo, la fila se omite.
+- La auditoría guarda solo conteos y el hash del archivo, nunca nombres.
+
+### Cambios de turno y compensaciones (HU 2.9)
+
+- **Flujo**: la persona de turno (de hoy en adelante, programado o confirmado) solicita y propone un reemplazo activo de la rotación del mismo equipo (`atlas.soporte.solicitar_cambio`) → el reemplazo acepta o rechaza (solo él) → alguien con `atlas.soporte.aprobar` global o con alcance al equipo aprueba o rechaza. Al aprobar, en una transacción, el turno original queda `reemplazado` y se crea el del reemplazo (manual, programado, mismo horario) enlazado al original; 409 si el turno cambió entretanto. Quien pidió puede cancelar mientras esté abierta. Una solicitud abierta por turno.
+- **Historial completo** en `soporte_solicitud_evento` (quién, cuándo, nota y la hora del dispositivo) y en la auditoría.
+- **Avisos** en el centro de notificaciones (HU 1.6), con el tipo `soporte.cambio_turno` que declara el módulo, en la misma transacción que la acción: al reemplazo cuando se le propone; a quien pidió y a quienes pueden aprobar cuando el reemplazo acepta (personas activas con un rol vigente que da `aprobar`, global o con alcance al equipo, hasta 50); a los dos al aprobar o rechazar; al reemplazo si se cancela; a la persona cuando se le registra una compensación. Por ahora solo en la app: el envío por push sigue pendiente de la outbox, como en ATLAS-ADR-0020.
+- **Sin conexión** (ATLAS-ADR-0032): cada acción lleva una llave de idempotencia que el servidor guarda con el evento (índice único); reenviarla devuelve la solicitud tal como quedó.
+- **Compensaciones**: las registra quien tiene `aprobar` sobre el equipo del turno (queda como quien aprobó), para la persona del turno vigente, una por turno y persona; se cambia el día y el estado (`tomada` exige el día). Reporte de pendientes por persona (`GET /compensaciones/pendientes`, con `atlas.soporte.ver`); la nota solo la ven la persona compensada y quien aprueba o gestiona el equipo.
+- **Endpoints nuevos** (12): vista previa y confirmación de la importación; listar, ver, solicitar, responder, resolver y cancelar solicitudes; listar, reportar, registrar y cambiar compensaciones.
+- **PWA**: `/soporte/importar` (vista previa con el informe por fila, personas nuevas a confirmar y nombres ambiguos a elegir), `/soporte/cambios` (solicitudes con historial y acciones, pendientes de enviar y compensaciones), «Solicitar cambio» en el turno propio del calendario y «Registrar compensación» en la hoja del turno.
 
 ## Consecuencias
 
@@ -121,4 +147,4 @@ Puro y determinista, por equipo: recorre los sábados de la ventana; uno festivo
 ## Más información
 
 - `services/api/src/Flit.Atlas.Modulos.Soporte/`, `apps/web/src/modulos/soporte/`, `docs/permisos/matriz-rol-permiso.md`.
-- Pendientes **[por verificar]**: estado de la demanda contra la Ley 2578 de 2026; concesiones de `atlas.soporte.ver_canal` a todos los externos; quién recibe `gestionar`/`aprobar` con alcance a «Operaciones»; si el máximo por sábado debe protegerse también en la base.
+- Pendientes **[por verificar]**: si una persona creada inactiva por el importador debe enlazarse a su cuenta real si vuelve a aparecer en Entra (hoy quedaría duplicada); si quien aprueba puede aprobar un cambio en el que es el reemplazo; estado de la demanda contra la Ley 2578 de 2026; concesiones de `atlas.soporte.ver_canal` a todos los externos; quién recibe `gestionar`/`aprobar` con alcance a «Operaciones»; si el máximo por sábado debe protegerse también en la base.
