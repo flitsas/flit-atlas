@@ -30,7 +30,7 @@ public sealed partial class PerfilGraph(
     {
         try
         {
-            var cabecera = await autorizacion.CreateAuthorizationHeaderForAppAsync(ScopeGraph, cancellationToken: ct);
+            var cabecera = await autorizacion.CabeceraAplicacionAsync(ScopeGraph, ct);
             http.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse(cabecera);
 
             var usuario = await http.GetFromJsonAsync<UsuarioGraph>(
