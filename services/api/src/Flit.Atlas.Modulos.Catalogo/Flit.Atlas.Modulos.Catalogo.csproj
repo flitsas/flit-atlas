@@ -19,6 +19,8 @@
   <ItemGroup>
     <!-- Semilla del catálogo (ATLAS-ADR-0028): va dentro del ensamblado para que el migrador no dependa de archivos sueltos. -->
     <EmbeddedResource Include="Semilla\aplicativos.json" LogicalName="Flit.Atlas.Modulos.Catalogo.Semilla.aplicativos.json" />
+    <!-- Lista blanca inicial de publicación desde la CI (HU 3.1, ATLAS-ADR-0035). -->
+    <EmbeddedResource Include="Semilla\fuentes-publicacion.json" LogicalName="Flit.Atlas.Modulos.Catalogo.Semilla.fuentes-publicacion.json" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Flit.Atlas.Modulos.Catalogo.Tests" />

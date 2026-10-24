@@ -38,5 +38,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0032](0032-acciones-sin-conexion-con-llave-de-idempotencia.md) | Acciones sin conexión: cola en IndexedDB del dispositivo y llave de idempotencia por acción que el servidor guarda con la acción | propuesto | §11, HU 2.9 |
 | [ATLAS-ADR-0033](0033-soporte-en-microsoft-365.md) | Soporte en Microsoft 365: calendario compartido por Graph con marca de pendiente en la transacción y trabajo con reintentos, aviso en Teams por un flujo de Workflows y feeds .ics con token guardado como hash | propuesto | §8.3, §8.9, §9, HU 2.10 |
 | [ATLAS-ADR-0034](0034-datos-sin-conexion.md) | Datos sin conexión: respuestas de la API guardadas en IndexedDB por recurso, con permiso y TTL, sin teléfonos y de una sola persona por dispositivo | propuesto | §11, §12, HU 2.12 |
+| [ATLAS-ADR-0035](0035-publicacion-de-contratos.md) | Publicación de contratos: token OIDC de GitHub Actions validado en Plataforma, lista blanca en el catálogo y versiones inmutables en el módulo de contratos | propuesto | A-08, A-09, §8.4, §9, HU 3.1, HU 3.2 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).

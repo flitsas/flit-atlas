@@ -64,7 +64,7 @@ public class ModuloCatalogoTests(Contenedores contenedores)
         await catalogo.Database.MigrateAsync(Ct);
 
         Assert.Empty(await catalogo.Database.GetPendingMigrationsAsync(Ct));
-        Assert.Equal(["__ef_migraciones_catalogo", "catalogo_aplicativo", "catalogo_semilla"], (await Tablas(bd)).Except(delNucleo).Order(StringComparer.Ordinal));
+        Assert.Equal(["__ef_migraciones_catalogo", "catalogo_aplicativo", "catalogo_fuente_publicacion", "catalogo_semilla"], (await Tablas(bd)).Except(delNucleo).Order(StringComparer.Ordinal));
     }
 
     private static Task<List<string>> Tablas(BaseDePrueba bd) =>

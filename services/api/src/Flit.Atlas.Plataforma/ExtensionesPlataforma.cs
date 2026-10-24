@@ -4,6 +4,7 @@ using Flit.Atlas.Plataforma.Mensajeria;
 using Flit.Atlas.Plataforma.Microsoft365;
 using Flit.Atlas.Plataforma.Notificaciones;
 using Flit.Atlas.Plataforma.Permisos;
+using Flit.Atlas.Plataforma.Publicacion;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -71,6 +72,10 @@ public static class ExtensionesPlataforma
         // Lecturas entre módulos (ATLAS-ADR-0031): por defecto vacías; el catálogo y el soporte registran las suyas.
         servicios.TryAddScoped<Modulos.ILectorAplicativos, Modulos.SinAplicativos>();
         servicios.TryAddScoped<Modulos.ISoporteDeTurno, Modulos.SinSoporteDeTurno>();
+        servicios.TryAddScoped<Modulos.IFuentesPublicacion, Modulos.SinFuentesPublicacion>();
+
+        // Publicación desde la CI con el token OIDC de GitHub Actions, para todas las fuentes (ATLAS-ADR-0035).
+        servicios.AgregarPublicacionCi();
 
         // Roles y permisos (HU 1.4).
         servicios.AgregarPermisos();

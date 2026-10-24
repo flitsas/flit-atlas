@@ -31,9 +31,9 @@ public static class PermisosPlataforma
 /// (ATLAS-ADR-0023). Los permisos base viven aquí para que la matriz y los roles estén completos desde F1 y la PWA filtre
 /// la navegación desde ya; cuando llega cada módulo, su manifiesto se <b>muda</b> de aquí a su proyecto con los mismos
 /// códigos (son contrato) y las mismas concesiones, más los permisos nuevos: dos manifiestos con el mismo id no pueden
-/// convivir. Ya se mudaron el catálogo (<c>PermisosCatalogo</c>, ATLAS-ADR-0028), el soporte (ATLAS-ADR-0029) y el
-/// equipo (<c>PermisosEquipo</c>, ATLAS-ADR-0031). Identidad agrega el suyo en
-/// <c>Flit.Atlas.Identidad</c>.
+/// convivir. Ya se mudaron el catálogo (<c>PermisosCatalogo</c>, ATLAS-ADR-0028), el soporte (ATLAS-ADR-0029), el
+/// equipo (<c>PermisosEquipo</c>, ATLAS-ADR-0031) y los contratos (<c>PermisosContratos</c>, ATLAS-ADR-0035).
+/// Identidad agrega el suyo en <c>Flit.Atlas.Identidad</c>.
 /// </summary>
 public static class ManifiestosNucleo
 {
@@ -61,11 +61,26 @@ public static class ManifiestosNucleo
         new("atlas.soporte.gestionar", "Configurar la rotación, generar e importar turnos.", LiderTecnico),
     ]);
 
+    /// <summary>
+    /// Lista base del §7.4 para Contratos, solo con los permisos <c>atlas.contratos.*</c>. Desde la HU 3.2 la publica el
+    /// módulo <c>Flit.Atlas.Modulos.Contratos</c> (ATLAS-ADR-0035): por eso ya no va en <see cref="Todos"/>. Los códigos
+    /// siguen siendo contrato. Los de paquetes, portal, exportaciones y sandbox no llevan el prefijo del módulo (un módulo
+    /// solo declara <c>atlas.&lt;id&gt;.*</c>) y quedan en <see cref="Portal"/> hasta F4.
+    /// </summary>
     public static ManifiestoPermisos Contratos { get; } = new("contratos", "Contratos de integración",
     [
         new("atlas.contratos.ver_internos", "Ver los contratos internos (OpenAPI, AsyncAPI y proto) y su historial.", LiderTecnico, Desarrollador, Soporte),
         new("atlas.contratos.publicar_manual", "Publicar una versión de contrato a mano, por excepción.", LiderTecnico),
         new("atlas.contratos.guias.editar", "Editar las guías de integración.", LiderTecnico, Responsable),
+    ]);
+
+    /// <summary>
+    /// Resto de la lista base de Contratos del §7.4 (antes en el mismo manifiesto «contratos»): paquetes, portal de
+    /// clientes, exportaciones y sandbox, con las mismas concesiones. Llegan en F4 con su módulo, que lo mudará como los
+    /// demás (ATLAS-ADR-0035).
+    /// </summary>
+    public static ManifiestoPermisos Portal { get; } = new("portal", "Portal, paquetes y exportaciones",
+    [
         new("atlas.paquetes.gestionar", "Armar paquetes de contratos y compartirlos con organizaciones.", LiderTecnico, Responsable),
         new("atlas.portal.ver", "Entrar al portal de clientes y ver lo compartido con la organización.", LiderTecnico, Soporte, Integrador, ClienteFuncional, AsesorComercial, Proveedor, AdminOrganizacion),
         new("atlas.exportaciones.solicitar", "Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP).", LiderTecnico, Desarrollador, Negocio, AsesorComercial),
@@ -101,9 +116,9 @@ public static class ManifiestosNucleo
     ]);
 
     /// <summary>
-    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/> ni
-    /// <see cref="SoporteSabados"/>: los registran sus módulos.
+    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/>,
+    /// <see cref="SoporteSabados"/> ni <see cref="Contratos"/>: los registran sus módulos.
     /// </summary>
     public static IReadOnlyList<ManifiestoPermisos> Todos { get; } =
-        [PermisosPlataforma.Manifiesto, Contratos, Documentacion, Diagramas, Asistente, GobiernoDeIa];
+        [PermisosPlataforma.Manifiesto, Portal, Documentacion, Diagramas, Asistente, GobiernoDeIa];
 }

@@ -53,3 +53,31 @@ internal sealed class SinSoporteDeTurno : ISoporteDeTurno
 {
     public Task<SoporteDelDia?> DelDiaAsync(DateOnly fecha, CancellationToken ct = default) => Task.FromResult<SoporteDelDia?>(null);
 }
+
+/// <summary>
+/// Una fila de la lista blanca de publicación desde la CI (<c>catalogo_fuente_publicacion</c>, ATLAS-ADR-0035): qué repo,
+/// desde qué ramas y con qué workflow puede publicar qué tipos de fuente de un aplicativo.
+/// </summary>
+/// <param name="Repositorio"><c>dueño/nombre</c> en minúsculas.</param>
+/// <param name="Ramas">Ramas exactas o con <c>*</c> (<c>release</c>, <c>hotfix/*</c>).</param>
+/// <param name="Workflow">Ruta del workflow que llama (<c>.github/workflows/ci.yml</c>); <c>null</c> = cualquiera del repo.</param>
+/// <param name="Tipos"><c>openapi</c>, <c>asyncapi</c>, <c>proto</c>, <c>likec4</c> o <c>docs</c>.</param>
+public sealed record FuentePublicacionLeida(
+    Guid Id, Guid AplicativoId, string AplicativoSlug, string Repositorio, IReadOnlyList<string> Ramas, string? Workflow, IReadOnlyList<string> Tipos);
+
+/// <summary>
+/// La lista blanca de publicación para los módulos que reciben fuentes desde la CI (contratos, documentación,
+/// arquitectura); la implementa el catálogo, dueño de los aplicativos (ATLAS-ADR-0035).
+/// </summary>
+public interface IFuentesPublicacion
+{
+    /// <summary>Las fuentes de un repo (<c>dueño/nombre</c>, sin distinguir mayúsculas).</summary>
+    Task<IReadOnlyList<FuentePublicacionLeida>> DelRepositorioAsync(string repositorio, CancellationToken ct = default);
+}
+
+/// <summary>Sin módulo de catálogo no hay lista blanca: nadie publica.</summary>
+internal sealed class SinFuentesPublicacion : IFuentesPublicacion
+{
+    public Task<IReadOnlyList<FuentePublicacionLeida>> DelRepositorioAsync(string repositorio, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<FuentePublicacionLeida>>([]);
+}

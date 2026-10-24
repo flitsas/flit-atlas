@@ -34,7 +34,8 @@ public static class PermisosCatalogo
 
 /// <summary>
 /// Catálogo de aplicativos (HU 2.1, prompt maestro §8.1, ATLAS-ADR-0028): jerarquía producto → módulo → servicio, CRUD con
-/// permisos, la ficha que enlazan los demás módulos y la semilla con el inventario de FLIT. Viene <b>encendido</b>
+/// permisos, la ficha que enlazan los demás módulos, la semilla con el inventario de FLIT y la lista blanca de publicación
+/// desde la CI (HU 3.1, ATLAS-ADR-0035). Viene <b>encendido</b>
 /// (bandera <c>modulo.catalogo</c>): es la base común de los demás módulos.
 /// </summary>
 public sealed partial class ModuloCatalogo : IModuloAtlas
@@ -62,9 +63,15 @@ public sealed partial class ModuloCatalogo : IModuloAtlas
         servicios.AgregarProveedorBusqueda<BusquedaCatalogo>();
         // Lectura para los demás módulos (responsables, ATLAS-ADR-0031).
         servicios.AddScoped<ILectorAplicativos, LectorAplicativos>();
+        // Lista blanca de publicación desde la CI para contratos, documentación y arquitectura (ATLAS-ADR-0035).
+        servicios.AddScoped<IFuentesPublicacion, LectorFuentesPublicacion>();
     }
 
-    public void MapearEndpoints(RouteGroupBuilder grupo) => EndpointsCatalogo.Mapear(grupo);
+    public void MapearEndpoints(RouteGroupBuilder grupo)
+    {
+        EndpointsCatalogo.Mapear(grupo);
+        EndpointsFuentesPublicacion.Mapear(grupo);
+    }
 
     /// <summary>
     /// La semilla del inventario (<c>Semilla/aplicativos.json</c>). La corre el migrador después de las migraciones; es
@@ -77,8 +84,14 @@ public sealed partial class ModuloCatalogo : IModuloAtlas
         var resultado = await SemillaCatalogo.AplicarAsync(contexto, SemillaCatalogo.Cargar(), ct).ConfigureAwait(false);
         var log = servicios.GetService<ILoggerFactory>()?.CreateLogger<ModuloCatalogo>() ?? NullLogger<ModuloCatalogo>.Instance;
         Sembrado(log, resultado.Creados, resultado.YaAplicados, resultado.Existentes, resultado.SinPadre);
+        // La lista blanca inicial va después: sus aplicativos los crea la semilla de arriba (HU 3.1).
+        var fuentes = await SemillaFuentes.AplicarAsync(contexto, SemillaFuentes.Cargar(), ct).ConfigureAwait(false);
+        FuentesSembradas(log, fuentes.Creadas, fuentes.YaAplicadas, fuentes.SinAplicativo);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Catálogo: semilla aplicada; {Creados} aplicativos creados, {YaAplicados} ya aplicados, {Existentes} ya existían, {SinPadre} sin su padre")]
     private static partial void Sembrado(ILogger log, int creados, int yaAplicados, int existentes, int sinPadre);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Catálogo: lista blanca inicial aplicada; {Creadas} fuentes creadas, {YaAplicadas} ya aplicadas, {SinAplicativo} sin su aplicativo")]
+    private static partial void FuentesSembradas(ILogger log, int creadas, int yaAplicadas, int sinAplicativo);
 }
