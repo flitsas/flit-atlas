@@ -171,11 +171,11 @@ Migración `Microsoft365` del módulo: `soporte_evento_calendario`, `soporte_avi
 - Código: `services/api/src/Flit.Atlas.Plataforma/Microsoft365/`, `services/api/src/Flit.Atlas.Identidad/Entra/AccesoGraphEntra.cs`, `services/api/src/Flit.Atlas.Modulos.Soporte/Dominio/Microsoft365/`, `services/api/src/Flit.Atlas.Modulos.Soporte/Endpoints/EndpointsM365.cs`, `apps/web/src/modulos/soporte/paginas/Microsoft365.tsx`. Configuración: `services/api/README.md` y `deploy/README.md`.
 - Pruebas: `M365Tests` (módulo: marca en la transacción, crear, actualizar, mover y cancelar sin duplicar, reintentos con `FakeTimeProvider`, turnos pasados y personas sin buzón, cola de Teams, RFC 5545), `NotificadorTeamsTests` (tarjeta, canales y errores) y `SoporteM365Tests` (API con Graph y Workflows simulados: el CA de menos de un minuto con y sin la señal, apagado limpio y feeds).
 - Fuentes:
-  - Microsoft 365 Developer Blog, «Retirement of Office 365 connectors within Microsoft Teams» (actualizado en 2026): https://devblogs.microsoft.com/microsoft365dev/retirement-of-office-365-connectors-within-microsoft-teams/
-  - Centro de mensajes MC1181996, «Migration update for Office 365 connectors retirement in Teams – webhook URL support»: https://mc.merill.net/message/MC1181996
-  - Microsoft Graph, «Send chatMessage in a channel» (permisos de aplicación solo para migración): https://learn.microsoft.com/graph/api/channel-post-messages
-  - Microsoft Graph, «Create event» (`transactionId`) y «event: cancel»: https://learn.microsoft.com/graph/api/user-post-events y https://learn.microsoft.com/graph/api/event-cancel
-  - Exchange Online, «Role Based Access Control for Applications in Exchange Online»: https://learn.microsoft.com/exchange/permissions-exo/application-rbac
-  - RFC 5545 (iCalendar): https://www.rfc-editor.org/rfc/rfc5545
+  - Microsoft 365 Developer Blog, «Retirement of Office 365 connectors within Microsoft Teams» (actualizado en 2026): <https://devblogs.microsoft.com/microsoft365dev/retirement-of-office-365-connectors-within-microsoft-teams/>
+  - Centro de mensajes MC1181996, «Migration update for Office 365 connectors retirement in Teams – webhook URL support»: <https://mc.merill.net/message/MC1181996>
+  - Microsoft Graph, «Send chatMessage in a channel» (permisos de aplicación solo para migración): <https://learn.microsoft.com/graph/api/channel-post-messages>
+  - Microsoft Graph, «Create event» (`transactionId`) y «event: cancel»: <https://learn.microsoft.com/graph/api/user-post-events> y <https://learn.microsoft.com/graph/api/event-cancel>
+  - Exchange Online, «Role Based Access Control for Applications in Exchange Online»: <https://learn.microsoft.com/exchange/permissions-exo/application-rbac>
+  - RFC 5545 (iCalendar): <https://www.rfc-editor.org/rfc/rfc5545>
 - Pendientes **[por verificar]**: la cuenta dueña del flujo de Workflows (de servicio o del equipo) y si el canal es privado; si el equipo debe ver el calendario compartido completo; si los avisos de Teams deben esperar a una hora del día; redacción de la ruta del feed en las trazas; si cancelar un turno ya pasado debe cancelar también su evento (hoy queda como historia).
 - Relacionados: ATLAS-ADR-0018, ATLAS-ADR-0026, ATLAS-ADR-0029, ATLAS-ADR-0030, ATLAS-ADR-0032.
