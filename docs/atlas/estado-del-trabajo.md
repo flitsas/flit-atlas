@@ -1,6 +1,6 @@
 # Estado del trabajo · Flit Atlas
 
-> **Corte:** 24/10/2026, noche (actualizado al cierre) (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
+> **Corte:** 26/10/2026, tarde (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
 > Se actualiza al cerrar cada jornada. El prompt maestro (`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`) sigue
 > siendo la fuente que prevalece; aquí solo va **dónde quedamos** y **qué sigue**.
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | F0–F2 | Integradas en `develop` y desplegadas en QA | — |
 | F3 · Contratos internos y legado ICT | Integrada en `develop` (PR #29) y en `staging` (PR #30, 24/10). El CD desplegó en QA (gitops `07e5eb1`, «atlas-qa: despliegue cf56f28») | Tag `v1` del workflow reutilizable sobre `b957751` |
-| **F4 · Portal, exportes y pdn** | **Código completo hasta la ola 3 + correcciones de seguridad.** Falta la ola 4 (despliegue) | Rama `f4/portal-integracion`, **PR #31 en borrador** hacia `develop` (punta `9fbafee`) |
+| **F4 · Portal, exportes y pdn** | **Código completo hasta la ola 3 + correcciones de seguridad.** Falta la ola 4 (despliegue) | Rama `f4/portal-integracion`, **PR #31** hacia `develop`: CI en verde el 26/10 sobre `83e1dbe`; después entró `501a6f6` (ADR 0051 y service worker). Sigue en borrador: marcarlo listo lo hace el líder |
 
 ### Lo que ya trae la rama `f4/portal-integracion`
 
@@ -41,11 +41,13 @@ el contenedor con Pango y `ATLAS_DOCS_EXIGIR_PDF=1`). El CI del PR #31 sobre `9f
    Trae atlas-docs (`replicas: 0` hasta sellar), MinIO propio `atlas-s3` (`replicas: 0`), NetworkPolicy, RabbitMQ con
    permisos mínimos por servicio, roles de base (`docs/host-177/atlas-qa-roles-base.md`), scripts
    `gen-atlas-qa-{migrador,rabbitmq,s3}.sh`, sitio nginx del S3 público y el runbook en `docs/atlas/`.
-   - **Decisión del líder pendiente:** QA no tenía S3 para Atlas. ¿MinIO propio en atlas-qa (lo que trae el PR), RustFS o
-     reutilizar el MinIO de filemanager-qa?
-   - **Marcadores `REEMPLAZAR`:** host público del S3 (`Plataforma__Almacenamiento__EndpointPublico`, `ATLAS_S3_PUBLICO`,
-     sitio nginx) y ClusterIP fija de `atlas-s3` (inmutable: decidir antes de integrar).
-   - Dudas a verificar: que `ghcr-pull` baje la imagen espejo de MinIO y que traiga `mc`/`sh`; el JWKS por HTTP interno
+   - **S3 decidido (26/10, ATLAS-ADR-0051):** el de FLIT 2 de cada ambiente. QA = MinIO de `filemanager-qa`, bucket
+     `atlas-qa`, usuarios `atlas-qa-api`/`atlas-qa-docs`; descargas por `https://qa.atlas.flitsas.com/atlas-qa/…` (nginx
+     del host hacia `10.43.51.9:9000` conservando el Host). Ya no hay `REEMPLAZAR`. gitops `45d127f` quitó el MinIO propio.
+     El service worker deja pasar `/atlas-<ambiente>/` (`501a6f6`).
+   - pdn (Contabo) por verificar antes de la HU 4.11: las llaves de Contabo son de toda la cuenta (alcanzarían los adjuntos
+     de FLIT 2), ciclo de vida, región para SigV4 y cómo reenviar `/atlas-pdn-eu2/` en la 169.
+   - Dudas a verificar: que el MinIO de `filemanager-qa` traiga `mc` (el script se detiene si no); el JWKS por HTTP interno
      (OpenIddict exige HTTPS; solo afecta `POST /exportes`, la vía normal es la cola); medir memoria de atlas-docs.
    - **No volver a correr** `servicio-con-esquema-propio.sql` para atlas: deshace la separación de roles.
 
@@ -53,10 +55,9 @@ el contenedor con Pango y `ATLAS_DOCS_EXIGIR_PDF=1`). El CI del PR #31 sobre `9f
 
 1. CI del PR #31 en verde → marcarlo **listo** → el líder lo integra en `develop`.
 2. **DBA:** pasos 1 a 5 de `docs/host-177/atlas-qa-roles-base.md` (incluye permisos puente para la versión actual y `pg_hba`).
-3. Crear la carpeta del S3 en la 177 (`/opt/atlas-qa/s3`), el host público del S3 (DNS, certificado, sitio nginx) y la
-   ClusterIP fija; reemplazar los `REEMPLAZAR`.
-4. **Sellar** con los tres scripts, agregar los archivos a `resources` y poner `replicas: 1` en atlas-docs y atlas-s3, en
-   el mismo PR #76.
+3. nginx del host: copiar `docs/host-177/atlas-qa.nginx.conf` (trae `location /atlas-qa/`), `nginx -t` y recargar.
+4. **Sellar** con los tres scripts (`gen-atlas-qa-s3.sh` además crea bucket, política y usuarios en el MinIO de
+   `filemanager-qa`), agregar los archivos a `resources` y poner `replicas: 1` en atlas-docs, en el mismo PR #76.
 5. Integrar el **PR #76** (reinicia RabbitMQ y atlas-api con la versión actual).
 6. Abrir e integrar el PR `develop → staging` de la F4: el CD fija los cuatro digests y el migrador concede permisos.
    **Si la F4 llega a staging antes del paso 2, atlas-api queda no lista y QA se queda sin API.**
