@@ -1,6 +1,6 @@
 # Estado del trabajo · Flit Atlas
 
-> **Corte:** 26/10/2026, tarde (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
+> **Corte:** 26/10/2026, noche (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
 > Se actualiza al cerrar cada jornada. El prompt maestro (`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`) sigue
 > siendo la fuente que prevalece; aquí solo va **dónde quedamos** y **qué sigue**.
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | F0–F2 | Integradas en `develop` y desplegadas en QA | — |
 | F3 · Contratos internos y legado ICT | Integrada en `develop` (PR #29) y en `staging` (PR #30, 24/10). El CD desplegó en QA (gitops `07e5eb1`, «atlas-qa: despliegue cf56f28») | Tag `v1` del workflow reutilizable sobre `b957751` |
-| **F4 · Portal, exportes y pdn** | **Código completo hasta la ola 3 + correcciones de seguridad.** Falta la ola 4 (despliegue) | Rama `f4/portal-integracion`, **PR #31** hacia `develop`: CI en verde el 26/10 sobre `83e1dbe`; después entró `501a6f6` (ADR 0051 y service worker). Sigue en borrador: marcarlo listo lo hace el líder |
+| **F4 · Portal, exportes y pdn** | **Código completo hasta la ola 3 + correcciones de seguridad.** Falta la ola 4 (despliegue) | **PR #31 integrado en `develop`** el 26/10 (`f635cce`, cabeza `c8c64ee`). Aún no va a `staging`: ver sección 3 |
 
 ### Lo que ya trae la rama `f4/portal-integracion`
 
@@ -25,10 +25,13 @@
 | 4.8 / 4.9 | Avisos de deprecación (bandeja, push, correo) y favoritos sin conexión | 0046, 0034 |
 | 4.10 | CSP estricta, cabeceras, límites de tasa por organización, prueba de carga k6, runbook (`deploy/runbook-atlas.md`), revisión de seguridad y pentest de identidad (`docs/seguridad/revision-f4.md`) | 0048 |
 | Seguridad | Correcciones de identidad (F4-SEC-01 a 08, 13 y bajos) y de datos (F4-SEC-09 a 12 y bajos) | 0049, 0050 (**aceptados por el líder el 24/10**) |
+| F4-SEC-02 (26/10) | Un fallo rezagado ya no suma con la cuenta bloqueada (contraseña y segundo factor): evitaba un segundo bloqueo que duplicaba la duración. Queda como `inicio_rechazado` | 0049 |
 
 Última verificación local: `dotnet test Flit.Atlas.slnx` **788 de 789** (la omitida es la prueba de carga, que corre solo con
 `ATLAS_CARGA_K6`). Web: Vitest 218/218 en serie, bundle inicial ~176,5 KB gzip. atlas-docs: pytest en verde (el PDF corre en
-el contenedor con Pango y `ATLAS_DOCS_EXIGIR_PDF=1`). El CI del PR #31 sobre `9fbafee` estaba corriendo al cierre: revisarlo.
+el contenedor con Pango y `ATLAS_DOCS_EXIGIR_PDF=1`). El CI del PR #31 sobre `056d541` falló en una prueba de 798
+(`Pentest_veinte_contrasenas_erradas_concurrentes_bloquean_la_cuenta`, carrera real de F4-SEC-02, intermitente); se corrigió
+en `c8c64ee` y el PR se integró. Revisar el CI de `develop` sobre `f635cce`.
 
 ## 2. Ola 4: lo que ya quedó listo
 
@@ -53,7 +56,7 @@ el contenedor con Pango y `ATLAS_DOCS_EXIGIR_PDF=1`). El CI del PR #31 sobre `9f
 
 ## 3. Orden para llevar la F4 a QA (detalle en el README de `services/atlas-qa` del PR #76)
 
-1. CI del PR #31 en verde → marcarlo **listo** → el líder lo integra en `develop`.
+1. ~~PR #31 integrado en `develop`~~ (26/10, `f635cce`).
 2. **DBA:** pasos 1 a 5 de `docs/host-177/atlas-qa-roles-base.md` (incluye permisos puente para la versión actual y `pg_hba`).
 3. nginx del host: copiar `docs/host-177/atlas-qa.nginx.conf` (trae `location /atlas-qa/`), `nginx -t` y recargar.
 4. **Sellar** con los tres scripts (`gen-atlas-qa-s3.sh` además crea bucket, política y usuarios en el MinIO de
@@ -107,8 +110,8 @@ nginx del host reemplace `X-Forwarded-For` en vez de encadenarlo.
 ## 7. Cómo retomar
 
 1. Leer el prompt maestro y este archivo.
-2. `git fetch && git checkout f4/portal-integracion && git pull`.
-3. `gh pr view 31` y `gh pr checks 31`; `gh pr list -R flitsas/flit-gitops --author @me`.
+2. `git fetch && git checkout develop && git pull` (la rama `f4/portal-integracion` ya está integrada).
+3. `gh run list --branch develop --limit 3`; `gh pr list -R flitsas/flit-gitops --author @me`.
 4. `gh pr view 76 -R flitsas/flit-gitops` y `gh pr view 698 -R flitsas/flit` (sección 2).
 5. Seguir la sección 3.
 
