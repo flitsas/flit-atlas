@@ -22,7 +22,8 @@ public enum ResultadoVerificacion
 /// reinician al terminar el ingreso (<see cref="IngresoCompletadoAsync"/>), así que repetir la contraseña no da intentos
 /// nuevos para adivinar el TOTP (F4-SEC-01).</item>
 /// <item>Cada fallo suma con un <c>UPDATE … SET n = n + 1 RETURNING n</c> atómico: los fallos concurrentes no se pierden
-/// (F4-SEC-02). Las escrituras sobre <c>identidad_usuario</c> cambian el sello de concurrencia, así que un
+/// (F4-SEC-02), y no suma con la cuenta ya bloqueada, para que los fallos rezagados no la bloqueen dos veces. Las
+/// escrituras sobre <c>identidad_usuario</c> cambian el sello de concurrencia, así que un
 /// <c>UpdateAsync</c> de Identity con la fila vieja falla en lugar de pisar el bloqueo.</item>
 /// <item>Una cuenta sin contraseña (solo passkey) no suma fallos de contraseña: nadie la bloquea escribiendo su correo
 /// (F4-SEC-03). Sin contraseña que comparar, o con la cuenta bloqueada, se calcula el hash ficticio: el tiempo no dice nada
@@ -170,18 +171,34 @@ public sealed class VerificadorContrasena(
     private async Task<ResultadoVerificacion> FalloAsync(
         UsuarioAtlas usuario, Contador contador, string metodo, string tipoFallo, string? motivo, CancellationToken ct)
     {
-        var intentos = contador == Contador.Contrasena
-            ? (await contexto.Database.SqlQuery<int>($"""
+        // No suma si la cuenta ya quedó bloqueada: un fallo concurrente que pasó la revisión de BloqueadaAsync antes del
+        // bloqueo contaría desde el contador ya en cero y podría bloquearla otra vez, duplicando la duración (F4-SEC-02).
+        var ahora = reloj.GetUtcNow();
+        var sumados = contador == Contador.Contrasena
+            ? await contexto.Database.SqlQuery<int>($"""
                 UPDATE atlas.identidad_usuario
                 SET access_failed_count = access_failed_count + 1, concurrency_stamp = gen_random_uuid()::text
-                WHERE id = {usuario.Id}
+                WHERE id = {usuario.Id} AND (lockout_end IS NULL OR lockout_end <= {ahora})
                 RETURNING access_failed_count AS "Value"
-                """).ToListAsync(ct)).Single()
-            : (await contexto.Database.SqlQuery<int>($"""
-                INSERT INTO atlas.identidad_segundo_factor (usuario_id, fallos) VALUES ({usuario.Id}, 1)
+                """).ToListAsync(ct)
+            : await contexto.Database.SqlQuery<int>($"""
+                INSERT INTO atlas.identidad_segundo_factor (usuario_id, fallos)
+                SELECT {usuario.Id}, 1
+                WHERE NOT EXISTS (SELECT 1 FROM atlas.identidad_usuario u WHERE u.id = {usuario.Id} AND u.lockout_end > {ahora})
                 ON CONFLICT (usuario_id) DO UPDATE SET fallos = identidad_segundo_factor.fallos + 1
+                WHERE NOT EXISTS (SELECT 1 FROM atlas.identidad_usuario u WHERE u.id = {usuario.Id} AND u.lockout_end > {ahora})
                 RETURNING fallos AS "Value"
-                """).ToListAsync(ct)).Single();
+                """).ToListAsync(ct);
+        if (sumados.Count == 0)
+        {
+            await registro.RegistrarAsync(TiposEventoSeguridad.InicioRechazado, Datos(usuario) with
+            {
+                Detalle = new { metodo, motivo = "cuenta_bloqueada" },
+            }, ct);
+            await RecargarAsync(usuario, ct);
+            return ResultadoVerificacion.Bloqueada;
+        }
+        var intentos = sumados.Single();
         await registro.RegistrarAsync(tipoFallo, Datos(usuario) with
         {
             Detalle = motivo is null ? new { metodo, intentos } : (object)new { metodo, intentos, motivo },
@@ -199,7 +216,6 @@ public sealed class VerificadorContrasena(
             return ResultadoVerificacion.Bloqueada;
         }
 
-        var ahora = reloj.GetUtcNow();
         var desde = ahora - TimeSpan.FromHours(24);
         var previos = await contexto.EventosSeguridad.CountAsync(
             e => e.UsuarioId == usuario.Id && e.Tipo == TiposEventoSeguridad.CuentaBloqueada && e.OcurridoEn > desde, ct);
