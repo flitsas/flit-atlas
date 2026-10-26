@@ -29,7 +29,21 @@ public sealed partial class BuzonDePrueba : IEnviadorCorreo
         return Task.CompletedTask;
     }
 
-    public IReadOnlyList<MensajeCorreo> Para(string correo) => [.. _mensajes.Where(m => m.Para == correo)];
+    /// <summary>
+    /// Correos de la identidad que aún están en la cola en memoria (ATLAS-ADR-0049: la recuperación y los avisos salen fuera
+    /// de la petición). <see cref="Para"/> espera a que se vacíe, así las pruebas leen el buzón justo después de la petición.
+    /// </summary>
+    public Func<int>? Pendientes { get; set; }
+
+    public IReadOnlyList<MensajeCorreo> Para(string correo)
+    {
+        var limite = DateTime.UtcNow.AddSeconds(15);
+        while (Pendientes?.Invoke() > 0 && DateTime.UtcNow < limite)
+        {
+            Thread.Sleep(10);
+        }
+        return [.. _mensajes.Where(m => m.Para == correo)];
+    }
 
     /// <summary>El fragmento del último enlace (<c>/invitacion#…</c> o <c>/recuperar#…</c>) enviado a <paramref name="correo"/>.</summary>
     public string UltimoEnlace(string correo, string ruta)

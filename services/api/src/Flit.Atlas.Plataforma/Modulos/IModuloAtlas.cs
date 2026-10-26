@@ -88,6 +88,16 @@ public interface IModuloAtlas
     /// permiso con <c>RequierePermiso</c>.
     /// </summary>
     void MapearEndpoints(RouteGroupBuilder grupo);
+
+    /// <summary>
+    /// Sus endpoints del portal de clientes (plan 00 §8.5, ATLAS-ADR-0043), en un grupo que el host monta en
+    /// <c>/api/v1/portal</c> con la etiqueta «Portal de clientes», sesión obligatoria y la bandera del módulo. Son los que
+    /// usan las personas externas: cada uno declara su permiso y tiene su prueba de aislamiento entre organizaciones
+    /// (<c>AislamientoPortalTests</c> falla si falta). Por defecto, ninguno.
+    /// </summary>
+    void MapearEndpointsPortal(RouteGroupBuilder portal)
+    {
+    }
 }
 
 /// <summary>Scope de OpenIddict que declara un módulo; el dueño es el módulo que lo declara.</summary>

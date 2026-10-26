@@ -13,6 +13,9 @@ const IngresoExterno = lazy(() => import('../externos/IngresoExterno'));
 
 const MENSAJES_ERROR: Record<string, string> = {
   cuenta_no_permitida: 'Esa cuenta no puede entrar a Atlas. Usa tu cuenta de FLIT.',
+  cuenta_por_vincular:
+    'Tu cuenta de Microsoft aún no está vinculada a tu perfil de Atlas. Pide a un administrador de Atlas que la vincule.',
+  reautenticacion_fallida: 'No pudimos confirmar que volviste a ingresar. Intenta de nuevo.',
   inicio_fallido: 'No se pudo completar el inicio de sesión. Intenta de nuevo.',
 };
 

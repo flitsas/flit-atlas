@@ -29,12 +29,13 @@ Hosts mezclados y URL vacías del Excel: **resuelto**. core-ict recibe todo por 
 | [Obligatoriedad distinta entre el Excel y el contrato](#obligatoriedad-distinta-entre-el-excel-y-el-contrato) | 5 |
 | [Ejemplo y tabla de campos no coinciden](#ejemplo-y-tabla-de-campos-no-coinciden) | 4 |
 | [Ejemplos reparados o ajustados al esquema](#ejemplos-reparados-o-ajustados-al-esquema) | 12 |
-| [Seguridad declarada distinta](#seguridad-declarada-distinta) | 1 |
+| [Seguridad declarada distinta](#seguridad-declarada-distinta) | 3 |
 | [Tablas de referencia con datos dudosos u omitidas](#tablas-de-referencia-con-datos-dudosos-u-omitidas) | 6 |
 | [Códigos de respuesta](#códigos-de-respuesta) | 6 |
 | [Campos que exige el contrato y el Excel no documenta](#campos-que-exige-el-contrato-y-el-excel-no-documenta) | 1 |
 | [Metadatos del contrato y del Excel](#metadatos-del-contrato-y-del-excel) | 10 |
-| **Total** | **91** |
+| [Textos del contrato reescritos en lenguaje funcional](#textos-del-contrato-reescritos-en-lenguaje-funcional) | 5 |
+| **Total** | **98** |
 
 ## Pendientes para el líder técnico
 
@@ -192,15 +193,17 @@ Hosts mezclados y URL vacías del Excel: **resuelto**. core-ict recibe todo por 
 | Hoja | Detalle |
 |---|---|
 | 4 - WebHookTransaction | core-ict no envía cabecera `Authorization` en la notificación (el Excel dice `Bearer`); el gestor no puede autenticar a FLIT por token. Confirmar si se agrega una firma o un token |
+| — | [por verificar] `ictClientToken`: cumplimiento de RFC8725 en el emisor del JWT |
+| — | [por verificar] `platformJwt`: cumplimiento de RFC8725 en el emisor del JWT |
 
 ## Tablas de referencia con datos dudosos u omitidas
 
 | Hoja | Detalle |
 |---|---|
 | 2 - Transacction | «Tabla Tipo Operacion Garantia»: la fila 1 trae en el ID un valor que no es número (un enlace interno); se toma 1 por la secuencia de la tabla. Confirmar |
-| 3 - Attachments | «Tabla guia documentos adjuntos»: el valor 14 no tiene nombre en el Excel (se deja como «por confirmar») |
-| 3 - Attachments | «Tabla guia documentos adjuntos»: el valor 15 no tiene nombre en el Excel (se deja como «por confirmar») |
-| 3 - Attachments | «Tabla guia documentos adjuntos»: el valor 16 no tiene nombre en el Excel (se deja como «por confirmar») |
+| 3 - Attachments | «Tabla guia documentos adjuntos»: el valor 14 no tiene nombre en el Excel (se deja como «Sin nombre definido»; confirmar) |
+| 3 - Attachments | «Tabla guia documentos adjuntos»: el valor 15 no tiene nombre en el Excel (se deja como «Sin nombre definido»; confirmar) |
+| 3 - Attachments | «Tabla guia documentos adjuntos»: el valor 16 no tiene nombre en el Excel (se deja como «Sin nombre definido»; confirmar) |
 | 3 - Attachments | «Tabla para guardar los ids de los archivos adjuntos» (I27) no pasa al spec: diseño interno de persistencia; no es parte del contrato |
 | 6 - SearchPlate | «Tabla Tipo Documento» (I6) queda fuera: la hoja no tiene equivalente en core-ict |
 
@@ -235,6 +238,16 @@ Hosts mezclados y URL vacías del Excel: **resuelto**. core-ict recibe todo por 
 | — | los parámetros compartidos del contrato (`ManagerIdTransaction`) se copian en cada operación para que el Excel describa cada uso |
 | — | el contrato no declara `operationId`; se generan desde el método y la ruta: `POST /api/v1/auth/login` → `postAuthLogin`, `POST /api/v1/external-transaction/register` → `postExternalTransactionRegister`, `GET /api/v1/status-process/byId/{id}` → `getStatusProcessById`, `GET /api/v1/ict/status/{id}` → `getIctStatusById`, `POST /api/v1/ict/reprocess/{id}` → `postIctReprocessById`, `PATCH /api/v1/pretramites/{id}` → `patchPretramitesById`, `GET /api/v1/ict/logs` → `getIctLogs`, `GET /api/v1/ict/alerts` → `getIctAlerts`, `POST /api/v1/transact-attachments/upload` → `postTransactAttachmentsUpload`, `GET /api/v1/secretaries` → `getSecretaries`, `PUT /api/v1/external-transaction/pauseDraftProcess/{id}` → `putExternalTransactionPauseDraftProcessById`, `PUT /api/v1/external-transaction/abortProcess/{id}` → `putExternalTransactionAbortProcessById` |
 | — | 1 esquemas del contrato quedaron sin uso tras el enriquecimiento y se quitaron: `RegisterBatchRequest` |
+
+## Textos del contrato reescritos en lenguaje funcional
+
+| Hoja | Detalle |
+|---|---|
+| — | `/paths/~1api~1v1~1external-transaction~1register/post/description`: nombra el pipeline interno y el transporte entre servicios (gRPC); el original queda en `x-flit-descripcion-contrato` |
+| — | `/paths/~1api~1v1~1ict~1status~1{id}/get/description`: nombra una pieza de la arquitectura interna («Plano C»); el original queda en `x-flit-descripcion-contrato` |
+| — | `/paths/~1api~1v1~1ict~1reprocess~1{id}/post/description`: describe la cola interna de validación («reencola el pipeline», «flags»); el original queda en `x-flit-descripcion-contrato` |
+| — | `/paths/~1api~1v1~1pretramites~1{id}/patch/description`: nombra un número de bug y la cola interna de validación; el original queda en `x-flit-descripcion-contrato` |
+| — | `info.description` del contrato nombra el servicio, la feature y el Gateway; se reemplaza por una descripción funcional y el original queda en `info.x-flit-fuente.descripcion_contrato` |
 
 ## Campos del Excel fuera del spec
 

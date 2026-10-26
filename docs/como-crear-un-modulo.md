@@ -123,8 +123,11 @@ El host ya montó tu grupo en `/api/v1/<x>` con la etiqueta del módulo, sesión
 - `.WithName("VerboSustantivo")` (el `operationId`, único y en español), `.WithSummary(...)` y `.WithDescription(...)`.
 - Resultados tipados (`Results<Ok<T>, NotFound>`, `Created<T>`, `ValidationProblem`) para que el contrato traiga todas las respuestas; `[Description]`, `[MinLength]` y `[MaxLength]` en los records.
 - La organización y la persona salen de la sesión (`EndpointsPlataforma.ClaimOrganizacion` y `ClaimPersona`), nunca del cuerpo.
+- Una acción sensible (§6.3: compartir, cambiar roles, exportar) lleva `.RequiereReautenticacion()` (`Flit.Atlas.Plataforma.Permisos`): sin un ingreso de menos de 10 minutos, 401 `reautenticacion_requerida`.
 
 Mira `EndpointsHola.cs`.
+
+**Portal de clientes** (opcional, ATLAS-ADR-0043): si el módulo muestra algo a las personas externas, implementa `MapearEndpointsPortal(RouteGroupBuilder portal)`; el host lo monta en `/api/v1/portal` con sesión, la etiqueta «Portal de clientes» y tu bandera. Cada endpoint del portal debe tener su caso en `AislamientoPortalTests.Casos` (lo propio, lo ajeno de otra organización, lo que queda fuera del alcance y tras revocar o vencer): si no, la suite falla.
 
 ### 1.6 Regístralo en el host
 

@@ -6,6 +6,7 @@ using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Permisos;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -91,6 +92,33 @@ public class MatrizPermisosTests(EntornoApi entorno)
         Assert.Equal([organizacion], externo.Organizaciones);
         Assert.Equal(AlcanceDatos.Ninguno, externoSinOrganizacion);
         Assert.True(empleado.Total);
-        Assert.True(sinSesion.Total);
+        // ATLAS-ADR-0050 (F4-SEC-10): sin sesión no se ve nada; el sistema se pide explícitamente.
+        Assert.Equal(AlcanceDatos.Ninguno, sinSesion);
+    }
+
+    [Fact]
+    public void Sin_sesion_el_alcance_del_sistema_solo_lo_dan_el_endpoint_que_lo_pide_y_la_falta_de_peticion()
+    {
+        static HttpContext Peticion(ClaimsPrincipal usuario, bool pideSistema)
+        {
+            var http = new DefaultHttpContext { User = usuario };
+            var metadata = pideSistema ? new EndpointMetadataCollection(AlcanceDelSistemaSinSesion.Instancia) : EndpointMetadataCollection.Empty;
+            http.SetEndpoint(new Endpoint(_ => Task.CompletedTask, metadata, "prueba"));
+            return http;
+        }
+        var organizacion = Guid.NewGuid();
+        var externo = Principal((ClaimsAtlas.TipoPrincipal, ClaimsAtlas.TipoExterno), (ClaimsAtlas.OrganizacionId, organizacion.ToString()),
+            (ClaimsAtlas.PersonaId, Guid.NewGuid().ToString()));
+        // Autenticado pero sin persona de Atlas (un principal a medio ingreso): cuenta como sin sesión.
+        var aMedias = Principal((ClaimsAtlas.TipoPrincipal, ClaimsAtlas.TipoExterno), (ClaimsAtlas.OrganizacionId, organizacion.ToString()));
+        var anonimo = new ClaimsPrincipal(new ClaimsIdentity());
+
+        Assert.Equal(AlcanceDatos.Sistema, AlcanceDatosDeSesion.De((HttpContext?)null));
+        Assert.Equal(AlcanceDatos.Ninguno, AlcanceDatosDeSesion.De(Peticion(anonimo, pideSistema: false)));
+        Assert.Equal(AlcanceDatos.Sistema, AlcanceDatosDeSesion.De(Peticion(anonimo, pideSistema: true)));
+        Assert.Equal([organizacion], AlcanceDatosDeSesion.De(Peticion(externo, pideSistema: true)).Organizaciones);
+        Assert.False(AlcanceDatosDeSesion.De(Peticion(externo, pideSistema: true)).Total);
+        Assert.Equal(AlcanceDatos.Sistema, AlcanceDatosDeSesion.De(Peticion(aMedias, pideSistema: true)));
+        Assert.Equal([organizacion], AlcanceDatosDeSesion.De(Peticion(aMedias, pideSistema: false)).Organizaciones);
     }
 }

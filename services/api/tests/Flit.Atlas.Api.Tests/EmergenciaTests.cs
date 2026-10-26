@@ -116,6 +116,31 @@ public partial class EmergenciaTests(EntornoApi entorno)
         return (await respuesta.Content.ReadFromJsonAsync<EndpointsIdentidad.Yo>(Ct))!;
     }
 
+    /// <summary>
+    /// F4-SEC-21 (ATLAS-ADR-0049): el comando quitaba todos los proveedores de log y identidad.emergencia.cuenta_creada y
+    /// .enlace_emitido no llegaban a Loki. Ahora queda solo el de OpenTelemetry (OTLP al colector), y solo para las
+    /// advertencias de RegistroSeguridad (los eventos de alta severidad, con tipo e id): nada a la consola.
+    /// </summary>
+    [Fact]
+    public void Los_logs_del_comando_solo_llevan_los_eventos_de_alta_severidad_a_OpenTelemetry()
+    {
+        var servicios = new ServiceCollection();
+        servicios.AddLogging(l =>
+        {
+            l.AddConsole();
+            ComandoEmergencia.ConfigurarLogs(l);
+        });
+        using var proveedor = servicios.BuildServiceProvider();
+
+        var proveedores = proveedor.GetServices<ILoggerProvider>().Select(p => p.GetType().Name).ToList();
+        Assert.Equal(["OpenTelemetryLoggerProvider"], proveedores);
+        var fabrica = proveedor.GetRequiredService<ILoggerFactory>();
+        Assert.True(fabrica.CreateLogger<RegistroSeguridad>().IsEnabled(LogLevel.Warning));
+        Assert.False(fabrica.CreateLogger<RegistroSeguridad>().IsEnabled(LogLevel.Information));
+        Assert.False(fabrica.CreateLogger("Microsoft.EntityFrameworkCore.Database.Command").IsEnabled(LogLevel.Warning));
+        Assert.False(fabrica.CreateLogger<CuentaEmergencia>().IsEnabled(LogLevel.Critical));
+    }
+
     [Fact]
     public async Task El_comando_crea_la_cuenta_y_con_el_enlace_se_activa_con_contrasena_y_TOTP_y_entra_como_superadmin()
     {

@@ -31,6 +31,12 @@ public static class TiposEventoSeguridad
     public const string ReautenticacionRequerida = "reautenticacion_requerida";
     public const string LimiteTasa = "limite_tasa";
 
+    /// <summary>
+    /// Una cuenta de Entra con un <c>oid</c> nuevo traía el correo de una persona existente: no se enlazó ni heredó sus roles
+    /// (F4-SEC-07, ATLAS-ADR-0049). También lo registra la sincronización cuando no enlaza por correo a una persona con roles.
+    /// </summary>
+    public const string VinculoPorCorreoRechazado = "vinculo_por_correo_rechazado";
+
     // Invitaciones y cuentas externas (HU 1.5, ATLAS-ADR-0025).
     public const string InvitacionCreada = "invitacion_creada";
     public const string InvitacionReenviada = "invitacion_reenviada";

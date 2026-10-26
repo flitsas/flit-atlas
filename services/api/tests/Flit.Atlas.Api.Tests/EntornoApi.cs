@@ -6,6 +6,7 @@ using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Autorizacion;
 using Flit.Atlas.Identidad.Datos;
+using Flit.Atlas.Identidad.Externos;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
@@ -43,11 +44,32 @@ public sealed class EntornoApi : IAsyncLifetime
 
     private int _bases;
 
+    /// <summary>
+    /// Rol con que corre atlas-api en las pruebas (ATLAS-ADR-0050): el de la aplicación, sin superusuario, sin BYPASSRLS y
+    /// sin ser dueño de las tablas, para que RLS aplique como en dev, qa y pdn. El superusuario del contenedor hace de
+    /// migrador (dueño) y de administrador de las pruebas.
+    /// </summary>
+    public const string RolAplicacion = RolesBaseDeDatos.RolAplicacionPorDefecto;
+
+    // Clave de un solo uso para el contenedor efímero, generada en cada corrida.
+    private readonly string _claveAplicacion = Guid.NewGuid().ToString("N");
+
     public async ValueTask InitializeAsync()
     {
         await Task.WhenAll(Postgres.StartAsync(), Redis.StartAsync());
+        await using (var conexion = new NpgsqlConnection(Postgres.GetConnectionString()))
+        {
+            await conexion.OpenAsync();
+            await using var comando = new NpgsqlCommand(
+                $"CREATE ROLE {RolAplicacion} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '{_claveAplicacion}'", conexion);
+            await comando.ExecuteNonQueryAsync();
+        }
         await MigrarAsync(Postgres.GetConnectionString());
     }
+
+    /// <summary>La misma base con el rol de la aplicación: la cadena que usa atlas-api.</summary>
+    public string ComoAplicacion(string? cadena = null) =>
+        new NpgsqlConnectionStringBuilder(cadena ?? Postgres.GetConnectionString()) { Username = RolAplicacion, Password = _claveAplicacion }.ConnectionString;
 
     /// <summary>Base nueva y migrada, para las pruebas que necesitan partir de cero (p. ej. el primer ingreso).</summary>
     public async Task<string> BaseNuevaAsync()
@@ -84,6 +106,8 @@ public sealed class EntornoApi : IAsyncLifetime
         await ExtensionesModulos.RegistrarBanderasAsync(plataforma, ModulosAtlas.Registrados, TimeProvider.System);
         await SembradorPermisos.SembrarAsync(plataforma, CatalogoPermisos.Crear(ModulosAtlas.Manifiestos));
         await ExtensionesModulos.SembrarModulosAsync(servicios, ModulosAtlas.Registrados);
+        // Y lo último que hace el migrador: los permisos del rol de la aplicación (ATLAS-ADR-0050).
+        await RolesBaseDeDatos.ConcederAsync(plataforma, RolAplicacion);
     }
 
     public async ValueTask DisposeAsync()
@@ -111,6 +135,12 @@ public sealed class EntornoApi : IAsyncLifetime
             // HU 2.11: sin la corrida diaria de recordatorios (la base es compartida y mandaría correos y avisos a otras
             // pruebas); las pruebas la piden con «Enviar ahora» o llaman al servicio.
             b.UseSetting("Soporte:Recordatorios:Habilitados", "false");
+            // HU 4.5: sin abrir las colas que atlas-api consume (no hay broker); las pruebas de exportaciones lo encienden.
+            b.UseSetting("Plataforma:Mensajeria:Consumo:Habilitado", "false");
+            // HU 4.8: lo mismo con los avisos de deprecación; las pruebas corren AvisosDeprecacion por versión.
+            b.UseSetting("Contratos:AvisosDeprecacion:Habilitados", "false");
+            // F4-SEC-13: qa y pdn no arrancan sin redes confiables; aquí, el proxy de loopback que simula IpDeLoopback.
+            b.UseSetting("Atlas:Proxy:RedesConfiables", "127.0.0.1/32,::1/128");
             foreach (var (clave, valor) in configuracion ?? new Dictionary<string, string>())
             {
                 b.UseSetting(clave, valor);
@@ -119,7 +149,7 @@ public sealed class EntornoApi : IAsyncLifetime
             {
                 s.SinRegistroDeEventosDeWindows();
                 // Los correos (invitaciones, recuperación) quedan en un buzón en memoria que las pruebas leen.
-                s.AddSingleton<BuzonDePrueba>();
+                s.AddSingleton(sp => new BuzonDePrueba { Pendientes = () => sp.GetRequiredService<ColaCorreosIdentidad>().Pendientes });
                 s.Replace(ServiceDescriptor.Singleton<IEnviadorCorreo>(sp => sp.GetRequiredService<BuzonDePrueba>()));
                 // TestServer no trae IP remota: se simula un proxy de loopback para que X-Forwarded-For valga.
                 s.AddSingleton<IStartupFilter, IpDeLoopback>();
@@ -130,10 +160,14 @@ public sealed class EntornoApi : IAsyncLifetime
                 }
                 servicios?.Invoke(s);
             });
-            b.UseSetting("ConnectionStrings:atlas", baseDeDatos ?? Postgres.GetConnectionString());
+            b.UseSetting("ConnectionStrings:atlas", ComoAplicacion(baseDeDatos));
             b.UseSetting("ConnectionStrings:redis", Redis.GetConnectionString());
-            // No se usa en estas pruebas: la outbox solo abre la conexión cuando hay eventos por publicar.
-            b.UseSetting("ConnectionStrings:rabbitmq", "amqp://x:x@127.0.0.1:1");
+            // No se usa en estas pruebas (salvo las que traen su broker): la outbox solo abre la conexión cuando hay eventos
+            // por publicar.
+            if (configuracion?.ContainsKey("ConnectionStrings:rabbitmq") != true)
+            {
+                b.UseSetting("ConnectionStrings:rabbitmq", "amqp://x:x@127.0.0.1:1");
+            }
             b.UseSetting("Atlas:Ambiente", ambiente);
             b.UseSetting(ExtensionesIdentidad.ClaveSimulado, simulado ? "true" : "false");
         });
@@ -230,6 +264,8 @@ public sealed class EntornoApi : IAsyncLifetime
                     await siguiente(http);
                     return;
                 }
+                // Como el ingreso de verdad: antes de la sesión, alcance del sistema pedido explícitamente (ATLAS-ADR-0050).
+                using var sistema = AlcanceDelSistema.Abrir();
                 var pedido = await http.Request.ReadFromJsonAsync<PedidoIngresoPrueba>();
                 var usuarios = http.RequestServices.GetRequiredService<UserManager<UsuarioAtlas>>();
                 var usuario = (await usuarios.FindByIdAsync(pedido!.UsuarioId.ToString()))!;

@@ -17,6 +17,12 @@ import { cn, Insignia, Tarjeta } from '../ui/Tarjeta';
  */
 export default function Inicio() {
   const { yo, navegacion } = useSesion();
+  // Un acceso por módulo, a su primera entrada visible para la persona (con su permiso y su audiencia): un externo que
+  // ve el portal de contratos no recibe el acceso a la lista interna de contratos.
+  const accesos = navegacion.modulos.flatMap((modulo) => {
+    const entrada = navegacion.lateral.find((n) => n.modulo?.id === modulo.id);
+    return entrada ? [{ modulo, entrada }] : [];
+  });
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -26,7 +32,9 @@ export default function Inicio() {
           Hola, {primerNombre(yo.nombre)}
         </h1>
         <p className="mt-2 max-w-2xl text-white/85">
-          El conocimiento de FLIT en un solo lugar: aplicativos, responsables, soporte, contratos y documentación.
+          {yo.tipoPrincipal === 'externo'
+            ? 'Lo que FLIT comparte con tu organización: contratos de integración, guías y avisos de cambios.'
+            : 'El conocimiento de FLIT en un solo lugar: aplicativos, responsables, soporte, contratos y documentación.'}
         </p>
         <ul aria-label="Tus roles" className="mt-4 flex flex-wrap gap-2">
           {(yo.roles.length > 0 ? yo.roles.map(nombreRol) : ['Sin roles todavía']).map((rol) => (
@@ -37,22 +45,22 @@ export default function Inicio() {
         </ul>
       </section>
 
-      {navegacion.modulos.length > 0 && (
+      {accesos.length > 0 && (
         <section aria-labelledby="accesos">
           <h2 id="accesos" className="mb-3 text-base font-semibold">
             Accesos rápidos
           </h2>
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {navegacion.modulos.map((modulo) => (
+            {accesos.map(({ modulo, entrada }) => (
               <li key={modulo.id}>
                 <Link
-                  to={modulo.rutas[0]?.path ?? '/'}
+                  to={entrada.ruta}
                   className="flex h-full min-h-28 flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-tarjeta transition-colors hover:border-atlas-tinta"
                 >
                   <span className="grid size-10 place-items-center rounded-xl bg-degradado-flit text-[#0b1220]">
                     <Icono nombre={modulo.icono} className="size-5" />
                   </span>
-                  <span className="text-sm leading-tight font-semibold">{modulo.navegacion[0]?.etiqueta ?? modulo.nombre}</span>
+                  <span className="text-sm leading-tight font-semibold">{entrada.etiqueta}</span>
                   {modulo.estado === 'proximamente' && <span className="mt-auto text-xs text-atlas-texto-suave">Próximamente</span>}
                 </Link>
               </li>

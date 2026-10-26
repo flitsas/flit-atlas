@@ -21,7 +21,7 @@ namespace Flit.Atlas.Api.Tests;
 /// no sirve; una cuenta externa sin MFA no entra; todo queda en la auditoría; el administrador de la organización A no
 /// ve ni invita en B.
 /// </summary>
-public class CuentasExternasTests(EntornoApi entorno)
+public partial class CuentasExternasTests(EntornoApi entorno)
 {
     /// <summary>Contraseña de prueba: larga, propia y no filtrada (la revisión de HIBP está apagada en las pruebas).</summary>
     private const string Contrasena = "Rio Magdalena al amanecer 2026";
@@ -571,6 +571,49 @@ public class CuentasExternasTests(EntornoApi entorno)
                 .ExecuteUpdateAsync(s => s.SetProperty(o => o.AdminOrganizacionHabilitado, false), Ct);
         }
         Assert.Equal(HttpStatusCode.Forbidden, (await navegador.GetAsync("/api/v1/plataforma/invitaciones")).StatusCode);
+    }
+
+    /// <summary>
+    /// F4-SEC-14 (ATLAS-ADR-0049): un administrador de organización no deshace con «renovar» una suspensión hecha por FLIT
+    /// (sí la suya), y crear, suspender, renovar y revocar invitaciones piden reautenticación.
+    /// </summary>
+    [Fact]
+    public async Task Un_admin_de_organizacion_no_reactiva_lo_que_suspendio_FLIT_y_las_invitaciones_piden_reautenticacion()
+    {
+        var reloj = new RelojDePrueba();
+        await using var api = entorno.Api(reloj: reloj);
+        using var adminAtlas = await AdministradorAsync(api);
+        var vence = DateTimeOffset.UtcNow.AddDays(20);
+        var adminA = await entorno.ExternoAsync(api, RolesAtlas.AdminOrganizacion, vence);
+        using var navegador = Publico(api);
+        Assert.Equal(HttpStatusCode.NoContent, (await navegador.EntrarComoAsync(adminA.UsuarioId)).StatusCode);
+        var id = (await InvitarAsync(navegador, adminA.OrganizacionId, CorreoNuevo(), vence: vence.AddDays(-1))).Invitacion.Id;
+        var renovacion = new { accesoVenceEn = vence.AddDays(-2) };
+
+        Assert.Equal(HttpStatusCode.OK, (await adminAtlas.EnviarAsync(HttpMethod.Post, $"/api/v1/plataforma/invitaciones/{id}/suspender")).StatusCode);
+        var renovar = await navegador.EnviarAsync(HttpMethod.Post, $"/api/v1/plataforma/invitaciones/{id}/renovar", JsonContent.Create(renovacion));
+        Assert.Equal(HttpStatusCode.Forbidden, renovar.StatusCode);
+        Assert.Contains("suspension_de_flit", await renovar.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+        // FLIT sí la reactiva; lo que suspende el propio administrador, él también.
+        Assert.Equal(HttpStatusCode.OK, (await adminAtlas.EnviarAsync(HttpMethod.Post, $"/api/v1/plataforma/invitaciones/{id}/renovar", JsonContent.Create(renovacion))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await navegador.EnviarAsync(HttpMethod.Post, $"/api/v1/plataforma/invitaciones/{id}/suspender")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await navegador.EnviarAsync(HttpMethod.Post, $"/api/v1/plataforma/invitaciones/{id}/renovar", JsonContent.Create(renovacion))).StatusCode);
+
+        // Con el ingreso de hace más de 10 minutos, las cuatro acciones piden reautenticación (también a FLIT).
+        reloj.Adelantar(TimeSpan.FromMinutes(11));
+        foreach (var (actor, metodo, ruta, cuerpo) in new (Navegador, string, string, object?)[]
+        {
+            (navegador, "crear", "/api/v1/plataforma/invitaciones",
+                new { correo = CorreoNuevo(), organizacionId = adminA.OrganizacionId, rol = RolesAtlas.Integrador, accesoVenceEn = vence.AddDays(-1) }),
+            (navegador, "suspender", $"/api/v1/plataforma/invitaciones/{id}/suspender", null),
+            (navegador, "renovar", $"/api/v1/plataforma/invitaciones/{id}/renovar", renovacion),
+            (adminAtlas, "revocar", $"/api/v1/plataforma/invitaciones/{id}/revocar", null),
+        })
+        {
+            var respuesta = await actor.EnviarAsync(HttpMethod.Post, ruta, cuerpo is null ? null : JsonContent.Create(cuerpo));
+            Assert.True(respuesta.StatusCode == HttpStatusCode.Unauthorized, metodo);
+            Assert.Contains(Reautenticacion.Codigo, await respuesta.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+        }
     }
 
     [Fact]

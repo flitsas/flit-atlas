@@ -16,10 +16,10 @@ public static class PlantillaCorreo
 
     /// <param name="titulo">Encabezado del correo.</param>
     /// <param name="parrafos">Párrafos antes del botón.</param>
-    /// <param name="boton">Texto del botón.</param>
-    /// <param name="enlace">URL del botón (https del ambiente).</param>
+    /// <param name="boton">Texto del botón; <c>null</c> para un aviso sin botón ni enlace (avisos de seguridad).</param>
+    /// <param name="enlace">URL del botón (https del ambiente); <c>null</c> sin botón.</param>
     /// <param name="notas">Párrafos pequeños después del botón (vencimiento, «si no fuiste tú»…).</param>
-    public static (string Html, string Texto) Armar(string titulo, IReadOnlyList<string> parrafos, string boton, string enlace, IReadOnlyList<string> notas)
+    public static (string Html, string Texto) Armar(string titulo, IReadOnlyList<string> parrafos, string? boton, string? enlace, IReadOnlyList<string> notas)
     {
         ArgumentNullException.ThrowIfNull(parrafos);
         ArgumentNullException.ThrowIfNull(notas);
@@ -36,12 +36,15 @@ public static class PlantillaCorreo
         {
             html.Append("<p style=\"margin:0 0 14px;font-size:15px;line-height:1.55\">").Append(H(parrafo)).Append("</p>");
         }
-        html.Append("<p style=\"margin:24px 0\"><a href=\"").Append(H(enlace)).Append("\" style=\"display:inline-block;background:").Append(Accion)
-            .Append(";color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:14px 22px;border-radius:12px\">")
-            .Append(H(boton)).Append("</a></p>")
-            .Append("<p style=\"margin:0 0 14px;font-size:13px;line-height:1.5;color:").Append(TextoSuave)
-            .Append("\">Si el botón no funciona, copia este enlace en tu navegador:<br><span style=\"word-break:break-all\">")
-            .Append(H(enlace)).Append("</span></p>");
+        if (boton is not null && enlace is not null)
+        {
+            html.Append("<p style=\"margin:24px 0\"><a href=\"").Append(H(enlace)).Append("\" style=\"display:inline-block;background:").Append(Accion)
+                .Append(";color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:14px 22px;border-radius:12px\">")
+                .Append(H(boton)).Append("</a></p>")
+                .Append("<p style=\"margin:0 0 14px;font-size:13px;line-height:1.5;color:").Append(TextoSuave)
+                .Append("\">Si el botón no funciona, copia este enlace en tu navegador:<br><span style=\"word-break:break-all\">")
+                .Append(H(enlace)).Append("</span></p>");
+        }
         foreach (var nota in notas.Where(n => !string.IsNullOrWhiteSpace(n)))
         {
             html.Append("<p style=\"margin:0 0 10px;font-size:13px;line-height:1.5;color:").Append(TextoSuave).Append("\">").Append(H(nota)).Append("</p>");
@@ -56,7 +59,10 @@ public static class PlantillaCorreo
         {
             texto.Append(parrafo).Append("\n\n");
         }
-        texto.Append(boton).Append(": ").Append(enlace).Append("\n\n");
+        if (boton is not null && enlace is not null)
+        {
+            texto.Append(boton).Append(": ").Append(enlace).Append("\n\n");
+        }
         foreach (var nota in notas.Where(n => !string.IsNullOrWhiteSpace(n)))
         {
             texto.Append(nota).Append('\n');

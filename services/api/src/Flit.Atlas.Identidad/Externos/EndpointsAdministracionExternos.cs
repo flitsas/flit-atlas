@@ -137,12 +137,14 @@ public static class EndpointsAdministracionExternos
                     : Results.Created($"/api/v1/plataforma/invitaciones/{resultado.Valor!.Invitacion.Id}", resultado.Valor);
             })
             .RequierePermiso(PermisosPlataforma.InvitacionesGestionar)
+            .RequiereReautenticacion()
             .WithName("CrearInvitacion")
             .WithSummary("Invitar a una persona externa")
             .WithDescription(
                 "Crea la invitación (organización, rol externo, alcance, vencimiento y permisos extra) y envía el correo con un enlace " +
                 "de un solo uso que vence en 72 h (en la base solo queda su hash). Un proveedor exige vencimiento y alcance. Requiere " +
-                "atlas.invitaciones.gestionar; un administrador de organización, solo en la suya y dentro de su alcance (403 si no).")
+                "atlas.invitaciones.gestionar y reautenticación; un administrador de organización, solo en la suya y dentro de su " +
+                "alcance (403 si no).")
             .Produces<InvitacionEnviada>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .Produces<ErrorExternos>(StatusCodes.Status409Conflict);
@@ -160,9 +162,10 @@ public static class EndpointsAdministracionExternos
         invitaciones.MapPost("/{id:guid}/suspender", async ([Description("Id del recurso.")] Guid id, ClaimsPrincipal usuario, ServicioInvitaciones servicio, CancellationToken ct) =>
                 Respuesta(await servicio.SuspenderAsync(id, ActorInvitaciones.De(usuario), ct)))
             .RequierePermiso(PermisosPlataforma.InvitacionesGestionar)
+            .RequiereReautenticacion()
             .WithName("SuspenderInvitacion")
             .WithSummary("Suspender una invitación")
-            .WithDescription("Pendiente: el enlace deja de servir. Aceptada: la persona queda suspendida y sus sesiones se cierran. Se deshace renovándola. Requiere atlas.invitaciones.gestionar.")
+            .WithDescription("Pendiente: el enlace deja de servir. Aceptada: la persona queda suspendida y sus sesiones se cierran. Se deshace renovándola. Requiere atlas.invitaciones.gestionar y reautenticación.")
             .Produces<InvitacionVista>()
             .Produces<ErrorExternos>(StatusCodes.Status404NotFound)
             .Produces<ErrorExternos>(StatusCodes.Status409Conflict);
@@ -170,11 +173,13 @@ public static class EndpointsAdministracionExternos
         invitaciones.MapPost("/{id:guid}/renovar", async ([Description("Id del recurso.")] Guid id, [Description("Vencimiento nuevo del acceso.")] SolicitudRenovacion solicitud, ClaimsPrincipal usuario, ServicioInvitaciones servicio, HttpContext http, CancellationToken ct) =>
                 Respuesta(await servicio.RenovarAsync(id, solicitud, ActorInvitaciones.De(usuario), http, ct)))
             .RequierePermiso(PermisosPlataforma.InvitacionesGestionar)
+            .RequiereReautenticacion()
             .WithName("RenovarInvitacion")
             .WithSummary("Renovar una invitación")
             .WithDescription(
                 "Vencimiento nuevo del acceso. Si ya se aceptó, extiende sus asignaciones y reactiva a la persona; si no, vuelve a " +
-                "pendiente con un enlace nuevo. Requiere atlas.invitaciones.gestionar.")
+                "pendiente con un enlace nuevo. Un administrador de organización no reactiva lo que suspendió FLIT (403). Requiere " +
+                "atlas.invitaciones.gestionar y reautenticación.")
             .Produces<InvitacionEnviada>()
             .ProducesValidationProblem()
             .Produces<ErrorExternos>(StatusCodes.Status404NotFound)
@@ -183,9 +188,10 @@ public static class EndpointsAdministracionExternos
         invitaciones.MapPost("/{id:guid}/revocar", async ([Description("Id del recurso.")] Guid id, ClaimsPrincipal usuario, ServicioInvitaciones servicio, CancellationToken ct) =>
                 Respuesta(await servicio.RevocarAsync(id, ActorInvitaciones.De(usuario), ct)))
             .RequierePermiso(PermisosPlataforma.InvitacionesGestionar)
+            .RequiereReautenticacion()
             .WithName("RevocarInvitacion")
             .WithSummary("Revocar una invitación")
-            .WithDescription("Definitivo: el enlace deja de servir y, si se había aceptado, se retiran sus roles y se cierran sus sesiones. Requiere atlas.invitaciones.gestionar.")
+            .WithDescription("Definitivo: el enlace deja de servir y, si se había aceptado, se retiran sus roles y se cierran sus sesiones. Requiere atlas.invitaciones.gestionar y reautenticación.")
             .Produces<InvitacionVista>()
             .Produces<ErrorExternos>(StatusCodes.Status404NotFound);
     }

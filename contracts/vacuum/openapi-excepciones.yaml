@@ -6,3 +6,11 @@
 # 256 bits, se guarda como hash, se revoca y se regenera desde Atlas, y el feed no trae datos de contacto.
 owasp-no-credentials-in-url:
   - "$.paths['/api/v1/soporte/ics/{token}.ics'].get.parameters[0].name"
+
+# ATLAS-ADR-0048 (HU 4.10): los informes de violaciones de la CSP los manda el navegador (report-uri y report-to) sin
+# cookie de sesión ni la cabecera antifalsificación, y desde el visor con Origin: null. El endpoint solo escribe en el log
+# lo técnico y sin datos personales, con tope de cuerpo, de informes por petición y límites de tasa por IP y en total.
+owasp-protection-global-unsafe:
+  - "$.paths['/api/v1/plataforma/csp-reportes'].post"
+owasp-protection-global-unsafe-strict:
+  - "$.paths['/api/v1/plataforma/csp-reportes'].post"

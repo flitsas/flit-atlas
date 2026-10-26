@@ -18,6 +18,8 @@ if (!Dependencias.AmbientesValidos.Contains(ambiente))
         $"Atlas__Ambiente inválido: «{ambiente}». Valores permitidos: {string.Join(", ", Dependencias.AmbientesValidos)}.");
 }
 var cadenaAtlas = builder.Configuration.GetConnectionString(Dependencias.BaseDeDatos)!;
+// Sin los proxies confiables, en qa y pdn los límites por IP serían uno solo para todos (F4-SEC-13): no arranca.
+Dependencias.ExigirRedesConfiables(builder.Configuration, ambiente);
 
 builder.AddServiceDefaults();
 builder.Services.AgregarPlataforma(cadenaAtlas);
@@ -48,11 +50,12 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 
 // Comando de la cuenta de administrador de emergencia (ATLAS-ADR-0027): `dotnet Flit.Atlas.Api.dll emergencia activar`
 // dentro del contenedor. Usa la misma configuración y servicios, pero no levanta el servidor ni los trabajos en segundo
-// plano. Sin proveedores de log: lo único que sale es lo que el comando escribe (el enlace va solo a su stdout).
+// plano. En la consola solo sale lo que el comando escribe (el enlace va solo a su stdout); al log (OpenTelemetry, de ahí a
+// Loki) solo van los eventos de alta severidad identidad.emergencia.* (tipo e id, F4-SEC-21, ATLAS-ADR-0049).
 var comandoEmergencia = ComandoEmergencia.EsComando(args);
 if (comandoEmergencia)
 {
-    builder.Logging.ClearProviders();
+    ComandoEmergencia.ConfigurarLogs(builder.Logging);
 }
 
 var app = builder.Build();
@@ -60,10 +63,15 @@ var app = builder.Build();
 if (comandoEmergencia)
 {
     Environment.ExitCode = await ComandoEmergencia.EjecutarAsync(app.Services, args, Console.Out, Console.Error);
+    // Al liberar el host se vacía el exportador de OpenTelemetry: los eventos salen antes de que termine el proceso.
+    await app.DisposeAsync();
     return;
 }
 
 app.UseForwardedHeaders();
+// Cabeceras de seguridad de cada respuesta (HU 4.10, ATLAS-ADR-0048): CSP, nosniff, Referrer-Policy, Permissions-Policy,
+// COOP, CORP y, fuera de local, HSTS.
+app.UseCabecerasSeguridad(ambiente);
 
 app.MapEndpointsDeSalud();
 app.UseAntifalsificacionApi();
