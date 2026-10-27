@@ -61,6 +61,9 @@ en `c8c64ee` y el PR se integró. Revisar el CI de `develop` sobre `f635cce`.
      `staging` no arrancaron por facturación de la organización en GitHub (pago fallido o límite de gasto). Cuando un admin lo
      resuelva: confirmar el paso 2 (DBA) y relanzar `gh run rerun 40486905544` (cd) y `40486905524` (ci). Hasta entonces QA
      sigue con la versión anterior y atlas-docs en `ImagePullBackOff` (esperado).
+   - 27/10, después: facturación arreglada, CD relanzado y **F4 corriendo en QA** (Argo Synced/Healthy, 5 pods 1/1,
+     `/health/ready` Healthy). Cierre (paso 7) hecho: gitops #78 (`ef1ab00`, migrador solo con su cadena) y HSTS quitada
+     del nginx del host (llega una sola vez, la de atlas-web). Falta el paso 8: una exportación de punta a punta.
 2. **DBA:** pasos 1 a 5 de `docs/host-177/atlas-qa-roles-base.md` (incluye permisos puente para la versión actual y `pg_hba`).
 3. nginx del host: copiar `docs/host-177/atlas-qa.nginx.conf` (trae `location /atlas-qa/`), `nginx -t` y recargar.
 4. **Sellar** con los tres scripts (`gen-atlas-qa-s3.sh` además crea bucket, política y usuarios en el MinIO de
