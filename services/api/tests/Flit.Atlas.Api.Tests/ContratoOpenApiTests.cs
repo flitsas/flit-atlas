@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
 using Flit.Atlas.Identidad;
 using Flit.Atlas.Identidad.Tokens;
 using Microsoft.AspNetCore.Hosting;
@@ -91,6 +92,26 @@ public class ContratoOpenApiTests
         Assert.Contains("name: __Host-atlas", yaml, StringComparison.Ordinal);
         Assert.Contains("name: X-Atlas-Csrf", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("localhost", yaml, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// OpenAPI trata como la misma ruta dos plantillas que solo difieren en el nombre del parámetro (<c>/x/{slug}</c> y
+    /// <c>/x/{id}</c>), y la publicación en Atlas rechaza el spec con 422 (<c>path signature MUST be unique</c>). Las
+    /// operaciones de una misma ruta deben usar el mismo nombre (<c>[FromRoute(Name = …)]</c>).
+    /// </summary>
+    [Fact]
+    public async Task Ninguna_ruta_repite_su_firma_con_otro_nombre_de_parametro()
+    {
+        var yaml = await GenerarAsync();
+
+        var repetidas = Regex.Matches(yaml, @"^  '?(/[^'\n]*?)'?:\s*$", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value)
+            .GroupBy(ruta => Regex.Replace(ruta, @"\{[^}]+\}", "{}"), StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => string.Join(" y ", g))
+            .ToList();
+
+        Assert.True(repetidas.Count == 0, $"Rutas con la misma firma: {string.Join("; ", repetidas)}.");
     }
 
     [Theory]

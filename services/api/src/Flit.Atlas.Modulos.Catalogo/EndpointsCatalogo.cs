@@ -119,7 +119,9 @@ internal static class EndpointsCatalogo
             .WithSummary("Catálogo de aplicativos")
             .WithDescription($"Productos, módulos y servicios que cumplen el filtro, ordenados por grupo y por su ruta en la jerarquía (máximo {LimiteListado}). Cada filtro admite varios valores. Requiere atlas.catalogo.ver.");
 
-        aplicativos.MapGet("/{slug}", ObtenerAsync)
+        // Las tres operaciones de un aplicativo comparten el nombre del parámetro: en OpenAPI, /{slug} y /{id} son la misma
+        // ruta y el validador de Atlas rechaza el spec («path signature MUST be unique»). La URL no cambia.
+        aplicativos.MapGet("/{aplicativo}", ObtenerAsync)
             .RequierePermiso(PermisosCatalogo.Ver)
             .WithName("ObtenerFichaAplicativo")
             .WithSummary("Ficha de un aplicativo")
@@ -132,14 +134,14 @@ internal static class EndpointsCatalogo
             .Produces<ErrorCatalogo>(StatusCodes.Status403Forbidden)
             .WithDescription("Producto, módulo o servicio nuevo. Queda en la auditoría. Requiere atlas.catalogo.gestionar (para un hijo, sobre el padre o un ancestro; para un producto, global).");
 
-        aplicativos.MapPut("/{id:guid}", ActualizarAsync)
+        aplicativos.MapPut("/{aplicativo:guid}", ActualizarAsync)
             .RequierePermiso(PermisosCatalogo.Editar)
             .WithName("ActualizarAplicativo")
             .WithSummary("Editar un aplicativo")
             .Produces<ErrorCatalogo>(StatusCodes.Status403Forbidden)
             .WithDescription("Reemplaza sus datos. Cambiar slug, tipo, padre o grupo exige además atlas.catalogo.gestionar; el grupo de un producto se propaga a sus descendientes. Queda en la auditoría. Requiere atlas.catalogo.editar sobre el aplicativo o un ancestro.");
 
-        aplicativos.MapDelete("/{id:guid}", EliminarAsync)
+        aplicativos.MapDelete("/{aplicativo:guid}", EliminarAsync)
             .RequierePermiso(PermisosCatalogo.Gestionar)
             .WithName("EliminarAplicativo")
             .WithSummary("Eliminar un aplicativo sin hijos")
@@ -187,7 +189,7 @@ internal static class EndpointsCatalogo
     }
 
     private static async Task<Results<Ok<FichaAplicativo>, NotFound>> ObtenerAsync(
-        [Description("Slug del aplicativo.")] string slug,
+        [FromRoute(Name = "aplicativo"), Description("Slug del aplicativo.")] string slug,
         ClaimsPrincipal usuario, CatalogoDbContext contexto, IPermisosDeSesion permisosDeSesion, CancellationToken ct)
     {
         var aplicativo = await contexto.Aplicativos.AsNoTracking().FirstOrDefaultAsync(a => a.Slug == slug, ct);
@@ -250,7 +252,7 @@ internal static class EndpointsCatalogo
     }
 
     private static async Task<Results<Ok<FichaAplicativo>, ValidationProblem, NotFound, JsonHttpResult<ErrorCatalogo>, Conflict<ErrorCatalogo>>> ActualizarAsync(
-        [Description("Id del aplicativo.")] Guid id,
+        [FromRoute(Name = "aplicativo"), Description("Id del aplicativo.")] Guid id,
         [Description("Todos los datos del aplicativo, con los cambios.")] SolicitudAplicativo solicitud,
         HttpContext http, CatalogoDbContext contexto, PlataformaDbContext plataforma, IPermisosDeSesion permisosDeSesion,
         TimeProvider reloj, CancellationToken ct)
@@ -334,7 +336,7 @@ internal static class EndpointsCatalogo
     }
 
     private static async Task<Results<NoContent, NotFound, JsonHttpResult<ErrorCatalogo>, Conflict<ErrorCatalogo>>> EliminarAsync(
-        [Description("Id del aplicativo.")] Guid id,
+        [FromRoute(Name = "aplicativo"), Description("Id del aplicativo.")] Guid id,
         HttpContext http, CatalogoDbContext contexto, PlataformaDbContext plataforma, IPermisosDeSesion permisosDeSesion,
         TimeProvider reloj, CancellationToken ct)
     {

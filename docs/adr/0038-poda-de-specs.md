@@ -23,7 +23,7 @@ Hechos verificados el 24/10/2026:
 - Los specs se guardan tal como llegan (`contratos_version.contenido`, ATLAS-ADR-0035) y el índice `contratos_operacion` lo arma `AnalizadorSpec`: `GET /ruta`, `POST webhook:nombre`, `publish canal` / `subscribe canal` (AsyncAPI 2), `send canal` / `receive canal` (AsyncAPI 3) y, si una clave se repite, `clave (operationId)` o `clave #n`.
 - Specs que hay que soportar: `atlas.v1.yaml` (OpenAPI 3.1.1, 470 KB, generado por el código), `core-ict.enriquecido.v1.yaml` (3.1.0, con `x-public`, `x-internal`, `x-flit-obligatoriedad` y `x-enum-descriptions`, ATLAS-ADR-0037), `external-api.v1.json` (3.0.3, JSON, `security` global) y `core-api.v1.yaml` (3.0.3, 871 KB) de FLIT 2, `atlas-events.v1.yaml` (AsyncAPI 3.0) y los AsyncAPI 2.6 de FLIT 2, varios con `$ref` a `./comun/sobre.v1.yaml` (otro archivo).
 - `Microsoft.OpenApi` 2.12.2 ya está en el repo (lo usa `AnalizadorSpec`) y lee 3.0 y 3.1. Para AsyncAPI no hay una librería madura y libre en .NET (ATLAS-ADR-0035).
-- `atlas.v1.yaml` no pasa hoy la validación de `Microsoft.OpenApi` (dos rutas con la misma firma, `/api/v1/catalogo/aplicativos/{id}` y `{codigo}`): la poda no lo arregla ni lo empeora.
+- `atlas.v1.yaml` no pasaba la validación de `Microsoft.OpenApi` (dos rutas con la misma firma, `/api/v1/catalogo/aplicativos/{id}` y `{slug}`), y Atlas lo rechazó con 422 la primera vez que se publicó en QA (27/10). Corregido: las tres operaciones usan `{aplicativo}` (la URL no cambia) y `ContratoOpenApiTests` falla si dos rutas repiten firma.
 
 ## Factores de decisión
 
