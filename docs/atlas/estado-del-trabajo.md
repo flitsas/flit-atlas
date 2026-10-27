@@ -57,6 +57,10 @@ en `c8c64ee` y el PR se integró. Revisar el CI de `develop` sobre `f635cce`.
 ## 3. Orden para llevar la F4 a QA (detalle en el README de `services/atlas-qa` del PR #76)
 
 1. ~~PR #31 integrado en `develop`~~ (26/10, `f635cce`).
+   - 27/10: PR #76 de gitops integrado (00:26 UTC) y PR #32 `develop → staging` integrado (10:14 UTC), pero el CI y el CD de
+     `staging` no arrancaron por facturación de la organización en GitHub (pago fallido o límite de gasto). Cuando un admin lo
+     resuelva: confirmar el paso 2 (DBA) y relanzar `gh run rerun 40486905544` (cd) y `40486905524` (ci). Hasta entonces QA
+     sigue con la versión anterior y atlas-docs en `ImagePullBackOff` (esperado).
 2. **DBA:** pasos 1 a 5 de `docs/host-177/atlas-qa-roles-base.md` (incluye permisos puente para la versión actual y `pg_hba`).
 3. nginx del host: copiar `docs/host-177/atlas-qa.nginx.conf` (trae `location /atlas-qa/`), `nginx -t` y recargar.
 4. **Sellar** con los tres scripts (`gen-atlas-qa-s3.sh` además crea bucket, política y usuarios en el MinIO de
