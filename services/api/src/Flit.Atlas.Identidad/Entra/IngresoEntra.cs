@@ -23,7 +23,9 @@ internal static class IngresoEntra
     {
         if (ctx.Properties.Items.ContainsKey(ClaveReautenticar))
         {
+            // max_age=0 obliga a Entra a mandar auth_time (OIDC Core §3.1.2.1), que el aprovisionador exige reciente.
             ctx.ProtocolMessage.Prompt = "login";
+            ctx.ProtocolMessage.MaxAge = "0";
         }
         return Task.CompletedTask;
     }
@@ -47,7 +49,8 @@ internal static class IngresoEntra
         var amr = principal.FindAll("amr").Concat(principal.FindAll("http://schemas.microsoft.com/claims/authnmethodsreferences"))
             .Select(c => c.Value).ToList();
 
-        // auth_time es un claim opcional del registro de la app en Entra; si no viene, cuenta el momento del ingreso.
+        // auth_time llega cuando se pide max_age (reautenticación) o como claim opcional del registro de la app en Entra; en
+        // un ingreso normal, si no viene, cuenta el momento del ingreso. En una reautenticación es obligatorio (F4-SEC-18).
         DateTimeOffset? autenticadoEn = long.TryParse(principal.FindFirstValue("auth_time"), NumberStyles.Integer,
             CultureInfo.InvariantCulture, out var authTime) ? DateTimeOffset.FromUnixTimeSeconds(authTime) : null;
         var reautenticacion = ctx.Properties?.Items.ContainsKey(ClaveReautenticar) == true;
@@ -62,12 +65,23 @@ internal static class IngresoEntra
             ctx.Principal = await servicios.GetRequiredService<AprovisionadorEmpleados>()
                 .AprovisionarAsync(cuenta, ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is IngresoNoPermitidoException or CorreoEnUsoException)
+        catch (Exception ex) when (ex is IngresoNoPermitidoException or CorreoEnUsoException or CuentaPorVincularException)
         {
-            await AuditarRechazoAsync(servicios, ex is IngresoNoPermitidoException noPermitido ? noPermitido.Motivo : "correo_en_uso", ct)
-                .ConfigureAwait(false);
+            var motivo = ex switch
+            {
+                IngresoNoPermitidoException noPermitido => noPermitido.Motivo,
+                CuentaPorVincularException => "cuenta_por_vincular",
+                _ => "correo_en_uso",
+            };
+            await AuditarRechazoAsync(servicios, motivo, ct).ConfigureAwait(false);
             ctx.HandleResponse();
-            ctx.Response.Redirect("/?error=cuenta_no_permitida");
+            // La PWA muestra un mensaje distinto para cada uno (apps/web, Ingreso.tsx).
+            ctx.Response.Redirect(motivo switch
+            {
+                "cuenta_por_vincular" => "/?error=cuenta_por_vincular",
+                IngresoNoPermitidoException.ReautenticacionNoVerificada => "/?error=reautenticacion_fallida",
+                _ => "/?error=cuenta_no_permitida",
+            });
             return;
         }
 

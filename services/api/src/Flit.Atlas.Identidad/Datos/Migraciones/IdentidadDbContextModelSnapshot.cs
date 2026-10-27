@@ -117,6 +117,26 @@ namespace Flit.Atlas.Identidad.Datos.Migraciones
                     b.ToTable("identidad_rol_identity", "atlas");
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Identidad.Datos.SegundoFactorUsuario", b =>
+                {
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.Property<int>("Fallos")
+                        .HasColumnType("integer")
+                        .HasColumnName("fallos");
+
+                    b.Property<long?>("UltimoPasoTotp")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ultimo_paso_totp");
+
+                    b.HasKey("UsuarioId")
+                        .HasName("pk_identidad_segundo_factor");
+
+                    b.ToTable("identidad_segundo_factor", "atlas");
+                });
+
             modelBuilder.Entity("Flit.Atlas.Identidad.Datos.Sesion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -696,6 +716,16 @@ namespace Flit.Atlas.Identidad.Datos.Migraciones
                         .HasDatabaseName("ix_identidad_oidc_token_application_id_status_subject_type");
 
                     b.ToTable("identidad_oidc_token", "atlas");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Identidad.Datos.SegundoFactorUsuario", b =>
+                {
+                    b.HasOne("Flit.Atlas.Identidad.Datos.UsuarioAtlas", null)
+                        .WithOne()
+                        .HasForeignKey("Flit.Atlas.Identidad.Datos.SegundoFactorUsuario", "UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_identidad_segundo_factor_identidad_usuario_usuario_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Identidad.Datos.Sesion", b =>

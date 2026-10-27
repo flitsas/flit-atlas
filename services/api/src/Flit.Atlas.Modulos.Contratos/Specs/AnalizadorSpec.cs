@@ -24,6 +24,12 @@ public sealed record SpecAnalizado(
     IReadOnlyList<string> Errores, IReadOnlyList<string> Advertencias)
 {
     public bool Valido => Errores.Count == 0;
+
+    /// <summary>
+    /// <c>info.x-flit-visibilidad</c> (<c>compartible</c> o <c>interna</c>) en OpenAPI y AsyncAPI, la misma marca con la
+    /// que la CI elige las reglas de vacuum de lo compartible (ATLAS-ADR-0035); vacío si no la declara o no se reconoce.
+    /// </summary>
+    public VisibilidadContrato? VisibilidadDeclarada { get; init; }
 }
 
 /// <summary>
@@ -57,6 +63,16 @@ public static partial class AnalizadorSpec
             _ => Proto(contenido),
         };
     }
+
+    /// <summary>Extensión de <c>info</c> con la visibilidad del contrato (ATLAS-ADR-0035 y ATLAS-ADR-0041).</summary>
+    public const string ExtensionVisibilidad = "x-flit-visibilidad";
+
+    private static VisibilidadContrato? Visibilidad(string? texto) => texto?.Trim() switch
+    {
+        "compartible" => VisibilidadContrato.Compartible,
+        "interna" => VisibilidadContrato.Interna,
+        _ => null,
+    };
 
     private static FormatoSpec FormatoDe(string contenido) => contenido.AsSpan().TrimStart().StartsWith("{") ? FormatoSpec.Json : FormatoSpec.Yaml;
 
@@ -124,8 +140,12 @@ public static partial class AnalizadorSpec
                 operaciones.Add(OperacionHttp($"{metodo.Method.ToUpperInvariant()} webhook:{nombre}", "webhook", metodo.Method.ToUpperInvariant(), nombre, operacion));
             }
         }
+        var declarada = documento.Info?.Extensions?.TryGetValue(ExtensionVisibilidad, out var marca) == true
+            && marca is JsonNodeExtension { Node: JsonValue valorMarca } && valorMarca.TryGetValue<string>(out var textoMarca)
+            ? Visibilidad(textoMarca)
+            : null;
         return new(formato, Corto(documento.Info?.Title, ContratosDbContext.LargoNombre), Corto(documento.Info?.Description, ContratosDbContext.LargoDescripcion),
-            documento.Info?.Version, Unicas(operaciones), Recortar(errores), Recortar(advertencias));
+            documento.Info?.Version, Unicas(operaciones), Recortar(errores), Recortar(advertencias)) { VisibilidadDeclarada = declarada };
     }
 
     private static OperacionIndexada OperacionHttp(string clave, string clase, string metodo, string ruta, OpenApiOperation operacion)
@@ -192,7 +212,7 @@ public static partial class AnalizadorSpec
             ? AsyncApi2(documento, errores)
             : AsyncApi3(documento, errores);
         return new(formato, Corto(titulo, ContratosDbContext.LargoNombre), Corto(Texto(info?["description"]), ContratosDbContext.LargoDescripcion),
-            versionInfo, Unicas(operaciones), Recortar(errores), Recortar(advertencias));
+            versionInfo, Unicas(operaciones), Recortar(errores), Recortar(advertencias)) { VisibilidadDeclarada = Visibilidad(Texto(info?[ExtensionVisibilidad])) };
     }
 
     private static JsonNode? Yaml(string contenido)
@@ -422,28 +442,45 @@ public static partial class AnalizadorSpec
     /// <summary>Claves únicas y que caben en la columna: una repetida (dos operaciones send al mismo canal) lleva su id.</summary>
     private static List<OperacionIndexada> Unicas(List<OperacionIndexada> operaciones)
     {
-        var vistas = new HashSet<string>(StringComparer.Ordinal);
-        var resultado = new List<OperacionIndexada>(operaciones.Count);
-        foreach (var o in operaciones)
+        var claves = ClavesUnicas(operaciones.Select(o => (o.Clave, o.OperationId)));
+        return [.. operaciones.Select((o, i) => o with
         {
-            var clave = Limitar(o.Clave);
+            Clave = claves[i],
+            Ruta = o.Ruta is { Length: > ContratosDbContext.LargoRuta } r ? r[..ContratosDbContext.LargoRuta] : o.Ruta,
+        })];
+    }
+
+    /// <summary>
+    /// La clave de <c>contratos_operacion</c> de cada operación, en el orden del spec: la clave base recortada a la columna
+    /// y, si se repite, <see cref="ClaveConId"/> o <c>clave #n</c>. La poda (ATLAS-ADR-0038) usa la misma regla.
+    /// </summary>
+    /// <param name="operaciones">Clave base (<c>GET /ruta</c>, <c>send canal</c>) y <c>operationId</c> ya recortado con <see cref="Corto"/>.</param>
+    internal static List<string> ClavesUnicas(IEnumerable<(string Clave, string? OperationId)> operaciones)
+    {
+        var vistas = new HashSet<string>(StringComparer.Ordinal);
+        var resultado = new List<string>();
+        foreach (var (claveBase, operationId) in operaciones)
+        {
+            var clave = Limitar(claveBase);
             if (!vistas.Add(clave))
             {
-                var alterna = Limitar($"{o.Clave} ({o.OperationId})");
+                var alterna = ClaveConId(claveBase, operationId);
                 for (var n = 2; !vistas.Add(alterna); n++)
                 {
-                    alterna = Limitar(string.Create(CultureInfo.InvariantCulture, $"{o.Clave} #{n}"));
+                    alterna = Limitar(string.Create(CultureInfo.InvariantCulture, $"{claveBase} #{n}"));
                 }
                 clave = alterna;
             }
-            resultado.Add(o with
-            {
-                Clave = clave,
-                Ruta = o.Ruta is { Length: > ContratosDbContext.LargoRuta } r ? r[..ContratosDbContext.LargoRuta] : o.Ruta,
-            });
+            resultado.Add(clave);
         }
         return resultado;
     }
+
+    /// <summary>La clave de una operación repetida: <c>send canal (operationId)</c>.</summary>
+    internal static string ClaveConId(string claveBase, string? operationId) => Limitar($"{claveBase} ({operationId})");
+
+    /// <summary><c>operationId</c> (o resumen) como lo guarda el índice: sin espacios a los lados y recortado.</summary>
+    internal static string? Recortado(string? texto) => Corto(texto, ContratosDbContext.LargoResumen);
 
     private static string Limitar(string texto) => texto.Length <= ContratosDbContext.LargoClave ? texto : texto[..ContratosDbContext.LargoClave];
 

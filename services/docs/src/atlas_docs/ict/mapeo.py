@@ -261,6 +261,13 @@ ESQUEMAS_COMUNES: dict[str, dict] = {
 # Esquema del webhook según `WebhookNotificationJob.TryDeliverAsync`: campos v2 y los de compatibilidad v1.
 WEBHOOK_ESTADO_TRAMITE: dict = {
     "fuente": "Flit.Ict.Infrastructure/Jobs/WebhookNotificationJob.cs (TryDeliverAsync)",
+    # Textos de cara al cliente: la fuente va en `x-flit-origen` y en el informe, no en la descripción.
+    "summary": "Notificación de cambio de estado que FLIT envía al gestor",
+    "description": (
+        "FLIT hace `POST` a la URL que el gestor registró en `url_web_hook` cuando cambia el estado del pre-trámite o "
+        "del trámite. El cuerpo trae los campos v2 (`ictEstado`, `procedureInstanceId`) y los de compatibilidad v1."
+    ),
+    "respuesta": "El gestor recibió la notificación: FLIT solo revisa que el código HTTP sea 2xx.",
     "esquema": {
         "type": "object",
         "required": ["managerIdTransaction", "ictEstado", "transactionFlit", "status"],
@@ -277,7 +284,7 @@ WEBHOOK_ESTADO_TRAMITE: dict = {
                     "con_novedades",
                     "anulado",
                 ],
-                "description": "Estado del pre-trámite en el vocabulario v2 de core-ict.",
+                "description": "Estado del pre-trámite en el vocabulario v2.",
             },
             "procedureInstanceId": {"type": ["string", "null"]},
             "transactionType": {"type": "integer"},
@@ -345,12 +352,79 @@ CORRECCIONES: list[tuple[str, object, str]] = [
     ),
 ]
 
-# Campos del Excel que core-ict acepta pero no usa.
-CAMPOS_IGNORADOS: dict[tuple[str, str], str] = {
+# Campos del Excel que core-ict acepta pero no usa: (texto para el cliente, motivo verificado para el informe).
+CAMPOS_IGNORADOS: dict[tuple[str, str], tuple[str, str]] = {
     ("Transacction", "company_manager_id"): (
+        "la compañía gestora se toma del token y el valor que se envíe se ignora",
         "core-ict deriva la compañía del token y no lee `company_manager_id` (`RegisterRowInput` no lo declara); se "
-        "documenta como obsoleto"
+        "documenta como obsoleto",
     ),
+}
+
+# --- Lenguaje funcional en lo que lee el cliente (F4-SEC-09) -------------------------------------------------------
+# El spec se comparte podado y la poda no reescribe textos (ATLAS-ADR-0038): las descripciones salen de aquí sin
+# piezas internas (`lenguaje.py`). La procedencia queda en `info.x-flit-fuente`, en `x-flit-*-contrato` junto al
+# texto reescrito y en el informe.
+
+DESCRIPCION_INFO = (
+    "API de Integración con Terceros (ICT) de FLIT. El gestor se autentica con su propio token ICT (independiente "
+    "del inicio de sesión de la plataforma FLIT), registra trámites en lote, consulta su estado y los reprocesa "
+    "cuando tienen novedades, adjunta los documentos del trámite, consulta las secretarías de tránsito, pausa, "
+    "reanuda o anula trámites en borrador y recibe en su webhook los cambios de estado.\n\n"
+    "Una sola URL base por ambiente: todas las operaciones usan el mismo host (ver `servers`)."
+)
+
+# Textos del contrato de `flit` que nombran piezas internas o detalles de implementación: puntero JSON (contrato ya
+# convertido a 3.1) → (texto funcional, motivo). El original queda en `x-flit-descripcion-contrato` o
+# `x-flit-resumen-contrato` del mismo objeto (la poda las quita) y el cambio se lista en el informe.
+TEXTOS_FUNCIONALES: dict[str, tuple[str, str]] = {
+    "/paths/~1api~1v1~1external-transaction~1register/post/description": (
+        "Ingresa un lote de trámites (respuesta con la forma v1). Valida el límite del lote (422 si se excede, sin "
+        "guardar ninguna fila), que el NIT de cada fila coincida con el del token y que no haya filas duplicadas en "
+        "el lote. El registro no crea el trámite de inmediato: FLIT valida cada fila y, si pasa, crea el trámite en "
+        "borrador; el avance se consulta con el estado del pre-trámite o llega al webhook.",
+        "nombra el pipeline interno y el transporte entre servicios (gRPC)",
+    ),
+    "/paths/~1api~1v1~1ict~1status~1{id}/get/description": (
+        "Devuelve el estado del pre-trámite en el vocabulario v2 (sin códigos numéricos) y, si ya se creó el "
+        "trámite, también el estado v2 del trámite.",
+        "nombra una pieza de la arquitectura interna («Plano C»)",
+    ),
+    "/paths/~1api~1v1~1ict~1reprocess~1{id}/post/description": (
+        "Vuelve a validar un pre-trámite en estado `con_novedades` (reinicia sus validaciones). También responde en "
+        "la ruta de compatibilidad v1 `POST /api/v1/transactions/reprocess/{id}`.",
+        "describe la cola interna de validación («reencola el pipeline», «flags»)",
+    ),
+    "/paths/~1api~1v1~1pretramites~1{id}/patch/description": (
+        "Edición parcial con concurrencia optimista (`rowVersion`). Si cambian campos que afectan la validación, el "
+        "pre-trámite se valida de nuevo. Una vez creado el trámite en borrador responde 409 `already_materialized`, "
+        "salvo cuando el cuerpo trae solo `sellingPrice`: entonces el precio se aplica al borrador mientras siga en "
+        "borrador, sin repetir las validaciones (409 `not_draft` si ya avanzó, 400 `invalid_selling_price` si el "
+        "precio no es mayor que cero con hasta 2 decimales y 16 dígitos enteros, 409 `core_api_not_found` si FLIT no "
+        "encuentra el trámite, 503 `core_api_unavailable` si FLIT no responde y 502 `core_api_error` ante cualquier "
+        "otro error, sin propagar su código interno).",
+        "nombra un número de bug y la cola interna de validación",
+    ),
+}
+
+# Descripción de cada esquema que el contrato deja sin ella (antes: «Esquema `X` de core-ict»).
+DESCRIPCIONES_ESQUEMAS: dict[str, str] = {
+    "IctLoginRequest": "Credenciales del cliente de integración para obtener el token ICT.",
+    "IctLoginResponse": "Token ICT emitido y su vigencia en segundos.",
+    "RegisterBatchResponse": "Resultado del registro del lote: total de filas y el resultado de cada una.",
+    "StatusProcessV1Response": "Estado del trámite en la forma v1: validación e histórico de estados.",
+    "IctStatusV2Response": "Estado del pre-trámite en el vocabulario v2 y, si aplica, el del trámite.",
+    "PreTramitePatchRequest": "Campos del pre-trámite que se editan, con la versión de fila para la concurrencia.",
+    "IctAlertMetrics": "Métricas de alerta de la integración (uso interno de FLIT).",
+    "RespuestaCicloVidaV1": "Resultado de pausar, reanudar o anular un trámite (forma v1).",
+    "SolicitudCargaAdjunto": "Documento adjunto del trámite y sus datos (`multipart/form-data`).",
+    "RespuestaCargaAdjunto": "Resultado de la carga del documento adjunto.",
+    "ListadoSecretarias": "Secretarías de tránsito activas con su código y su nombre.",
+    "SolicitudPausaTramite": "Pausa o reanudación de un trámite en borrador, con una observación opcional.",
+    "SolicitudAnulacionTramite": "Anulación de un trámite, con una observación opcional.",
+    "SolicitudRegistroTramite": "Fila del lote de registro: un trámite con sus datos y los de sus participantes.",
+    "NotificacionEstadoTramite": "Cuerpo de la notificación de cambio de estado que FLIT envía al webhook del gestor.",
+    "RespuestaNotificacion": "Respuesta del gestor a la notificación; FLIT solo revisa el código HTTP.",
 }
 
 # Tablas de referencia del Excel → componente reutilizable. «valor» es la columna que viaja en la API.

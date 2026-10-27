@@ -30,7 +30,7 @@ namespace Flit.Atlas.Api.Tests;
 /// conformidad básica propia: descubrimiento, JWKS, código con PKCE, firma del id_token, audiencias y revocación.
 /// Usan una base propia: la sincronización de clientes borra los que no están en su configuración.
 /// </summary>
-public class TokensTests(EntornoApi entorno)
+public partial class TokensTests(EntornoApi entorno)
 {
     private const string Cli = "atlas-cli";
     private const string Servicio = "svc-prueba";
@@ -281,6 +281,37 @@ public class TokensTests(EntornoApi entorno)
         using var respuesta = await ConBearerAsync(http, "/api/v1/identidad/token/yo", cuerpo.GetProperty("access_token").GetString()!);
 
         Assert.Equal(HttpStatusCode.Unauthorized, respuesta.StatusCode);
+    }
+
+    [Fact]
+    public async Task El_token_de_un_servicio_interno_va_firmado_sin_cifrar_y_se_valida_con_el_JWKS()
+    {
+        // ATLAS-ADR-0044: atlas-docs (o atlas-render) valida el token con el JWKS público, sin la llave de cifrado; los de
+        // atlas-api siguen cifrados.
+        await using var api = await ApiAsync();
+        using var http = Cliente(api);
+        var (_, servicio) = await CredencialesDeServicioAsync(http, ServicioOtraAudiencia, ScopesAtlas.Publicar);
+        var (_, propio) = await CredencialesDeServicioAsync(http, Servicio, ScopesAtlas.Publicar);
+        var jws = servicio.GetProperty("access_token").GetString()!;
+
+        Assert.Equal(3, jws.Split('.').Length);
+        Assert.Equal(5, propio.GetProperty("access_token").GetString()!.Split('.').Length);
+        var jwks = new JsonWebKeySet(await http.GetStringAsync(new Uri(ServidorTokens.RutaJwks, UriKind.Relative), Ct));
+        var resultado = await new JsonWebTokenHandler().ValidateTokenAsync(jws, new TokenValidationParameters
+        {
+            ValidAudience = "atlas-render",
+            ValidIssuer = "https://localhost/",
+            IssuerSigningKeys = jwks.GetSigningKeys(),
+        });
+        Assert.True(resultado.IsValid, resultado.Exception?.Message);
+        Assert.Contains(ScopesAtlas.Publicar, resultado.Claims["scope"].ToString(), StringComparison.Ordinal);
+        var otraAudiencia = await new JsonWebTokenHandler().ValidateTokenAsync(jws, new TokenValidationParameters
+        {
+            ValidAudience = "atlas-docs",
+            ValidIssuer = "https://localhost/",
+            IssuerSigningKeys = jwks.GetSigningKeys(),
+        });
+        Assert.False(otraAudiencia.IsValid);
     }
 
     [Fact]
@@ -550,6 +581,43 @@ public class TokensTests(EntornoApi entorno)
         var (treintaYUno, error) = await RefrescarAsync(http, refresh);
 
         Assert.Equal(HttpStatusCode.BadRequest, treintaYUno);
+        Assert.Equal("invalid_grant", error.GetProperty("error").GetString());
+        Assert.Contains("concesion_vencida", error.GetProperty("error_description").GetString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// F4-SEC-19 (ATLAS-ADR-0049): un externo no estira su acceso con los refresh de atlas-cli más allá del tope absoluto de
+    /// su sesión (24 h); un empleado conserva los 30 días de la concesión.
+    /// </summary>
+    [Fact]
+    public async Task El_refresh_de_un_externo_no_pasa_del_tope_absoluto_de_su_sesion()
+    {
+        var reloj = new RelojDePrueba();
+        await using var api = await ApiAsync(reloj: reloj);
+        var ip = IpNueva();
+        var externo = await entorno.ExternoAsync(api, Flit.Atlas.Plataforma.Permisos.RolesAtlas.Integrador, DateTimeOffset.UtcNow.AddDays(60), await BaseAsync());
+        using var navegador = Navegador.De(api);
+        navegador.Ip = ip;
+        Assert.Equal(HttpStatusCode.NoContent, (await navegador.EntrarComoAsync(externo.UsuarioId)).StatusCode);
+        var pkce = Pkce.Nuevo();
+        var autorizacion = await navegador.GetAsync(UrlAutorizar(pkce));
+        Assert.True(autorizacion.StatusCode == HttpStatusCode.Redirect, await autorizacion.Content.ReadAsStringAsync(Ct));
+        var parametros = ParametrosDe(autorizacion.Headers.Location!);
+        using var http = Cliente(api, ip);
+        var (estado, tokens) = await TokenAsync(http,
+            ("grant_type", "authorization_code"), ("client_id", Cli), ("code", parametros["code"]),
+            ("redirect_uri", RedirectCli), ("code_verifier", pkce.Verificador));
+        Assert.True(estado == HttpStatusCode.OK, tokens.ToString());
+
+        // A las 23 h el refresh todavía rota.
+        reloj.Adelantar(TimeSpan.FromHours(23));
+        var (a23, rotado) = await RefrescarAsync(http, tokens.GetProperty("refresh_token").GetString()!);
+        Assert.True(a23 == HttpStatusCode.OK, rotado.ToString());
+        // A las 25 h, aunque ese refresh dure 7 días, la concesión del externo ya venció.
+        reloj.Adelantar(TimeSpan.FromHours(2));
+        var (a25, error) = await RefrescarAsync(http, rotado.GetProperty("refresh_token").GetString()!);
+
+        Assert.Equal(HttpStatusCode.BadRequest, a25);
         Assert.Equal("invalid_grant", error.GetProperty("error").GetString());
         Assert.Contains("concesion_vencida", error.GetProperty("error_description").GetString(), StringComparison.Ordinal);
     }

@@ -39,6 +39,14 @@ var correo = builder.AddContainer("correo", "axllent/mailpit", "v1.31.4")
     .WithHttpHealthCheck("/livez", endpointName: "http");
 var smtp = correo.GetEndpoint("smtp");
 
+// Sandbox nivel 1 (HU 4.7, ATLAS-ADR-0045): Microcks (Apache-2.0, CNCF) en su imagen «uber» nativa, 1.15.0 del 05/08/2026,
+// fijada por digest. Guarda en memoria y no pide autenticación; atlas-api vuelve a importar lo que pierda al reiniciarse.
+// Solo lo llama atlas-api (el proxy con la llave del sandbox): no se publica un puerto fijo.
+var microcks = builder.AddContainer("microcks", "quay.io/microcks/microcks-uber", "1.15.0-native")
+    .WithImageSHA256("b36c02f9e52bd6dfad939bbbd75dfd3f27c3196a046caa34fabd82e76924f670")
+    .WithHttpEndpoint(targetPort: 8080, name: "http")
+    .WithHttpHealthCheck("/api/health", endpointName: "http");
+
 // --- Servicios de Atlas ---
 
 // CommunityToolkit marca AddGolangApp como obsoleto a favor de Aspire.Hosting.Go, que aún no está publicado
@@ -69,8 +77,12 @@ var docs = builder.AddUvicornApp("docs", "../../services/docs", "atlas_docs.main
     .WithEnvironment("ATLAS_DOCS_S3_BUCKET", "atlas")
     // Solo en local: en dev/qa/pdn el bucket lo crea infraestructura (F0.4, ítems 4.1 y 4.2).
     .WithEnvironment("ATLAS_DOCS_S3_CREAR_BUCKET", "true")
+    // HU 4.5 (ATLAS-ADR-0042): atlas-docs consume atlas.contratos.exportacion_solicitada (cola atlas.docs.exportaciones) y
+    // publica los resultados en flit.atlas.docs. POST /exportes queda cerrado en local (sin JWKS, ATLAS-ADR-0044).
+    .WithEnvironment("ATLAS_DOCS_RABBITMQ_URL", rabbitmq.Resource.ConnectionStringExpression)
     .WithHttpHealthCheck("/health/ready")
-    .WaitFor(s3);
+    .WaitFor(s3)
+    .WaitFor(rabbitmq);
 
 // Aplica las migraciones y termina; atlas-api arranca solo si terminó bien.
 var migrador = builder.AddProject<Projects.Flit_Atlas_Migrador>("migrador")
@@ -94,6 +106,19 @@ var api = builder.AddProject<Projects.Flit_Atlas_Api>("api")
     .WithEnvironment("Identidad__LimiteTasa__ExternosPorIp", "120")
     .WithEnvironment("Identidad__LimiteTasa__IngresoPorIp", "120")
     .WithEnvironment("Identidad__LimiteTasa__PorIp", "1000")
+    // HU 4.5: el mismo S3 local para la entrada de las exportaciones y las URL firmadas de descarga (el navegador llega al
+    // mismo localhost). En qa y pdn, EndpointPublico es el host del S3 que alcanza el navegador.
+    .WithEnvironment("Plataforma__Almacenamiento__Endpoint", s3.GetEndpoint("http"))
+    .WithEnvironment("Plataforma__Almacenamiento__Usuario", s3Usuario)
+    .WithEnvironment("Plataforma__Almacenamiento__Clave", s3Clave)
+    .WithEnvironment("Plataforma__Almacenamiento__Bucket", "atlas")
+    .WithEnvironment("Plataforma__Almacenamiento__CrearBucket", "true")
+    .WaitFor(s3)
+    // El sandbox: Microcks por la red de Aspire y la URL que ve el cliente, la de la PWA (Vite reenvía /api a atlas-api).
+    .WithEnvironment("Contratos__Sandbox__UrlMicrocks", microcks.GetEndpoint("http"))
+    .WithEnvironment("Contratos__Sandbox__UrlPublica", "https://localhost:4032")
+    .WithEnvironment("Contratos__Sandbox__Intervalo", "00:01:00")
+    .WaitFor(microcks)
     .WaitFor(correo)
     .WithReference(atlasDb).WaitFor(atlasDb)
     .WithReference(redis).WaitFor(redis)

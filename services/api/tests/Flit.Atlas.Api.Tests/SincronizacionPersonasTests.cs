@@ -175,6 +175,60 @@ public class SincronizacionPersonasTests(EntornoApi entorno)
         Assert.Equal((0, 0, 0, 5), (segunda!.Creadas, segunda.Actualizadas, segunda.Deshabilitadas, segunda.SinCambios));
     }
 
+    /// <summary>
+    /// F4-SEC-08 (ATLAS-ADR-0049): la corrida diaria recalcula los roles que vienen de grupos de Entra con
+    /// <c>transitiveMemberOf</c> y, si cambian, invalida las sesiones (sello de seguridad); quien sigue igual no pierde la
+    /// sesión. F4-SEC-07: una persona sin oid con roles no se enlaza por correo; queda el evento.
+    /// </summary>
+    [Fact]
+    public async Task Recalcula_los_roles_de_los_grupos_de_Entra_cierra_las_sesiones_si_cambian_y_no_enlaza_por_correo_a_quien_tiene_roles()
+    {
+        var cadena = await entorno.BaseNuevaAsync();
+        var graph = new GraphSimulado();
+        await using var api = Api(cadena, graph, new() { [$"{OpcionesSincronizacionPersonas.Seccion}:Origen"] = "Tenant" });
+        var grupoAdmin = await entorno.GrupoConRolAsync(RolesAtlas.Superadmin, cadena);
+        var grupoDev = await entorno.GrupoConRolAsync(RolesAtlas.Desarrollador, cadena);
+        var ana = graph.Agregar("Ana Grupos", "ana.grupos@ejemplo.com");
+        ana.Grupos = [grupoAdmin];
+        var beto = graph.Agregar("Beto Grupos", "beto.grupos@ejemplo.com");
+        beto.Grupos = [grupoAdmin];
+        var (anaId, anaUsuario) = await EmpleadoAsync(api, cadena, ana.Nombre, ana.Correo!, ana.Id, rol: RolesAtlas.Superadmin, origen: OrigenAsignacion.GrupoEntra);
+        var (betoId, betoUsuario) = await EmpleadoAsync(api, cadena, beto.Nombre, beto.Correo!, beto.Id, rol: RolesAtlas.Superadmin, origen: OrigenAsignacion.GrupoEntra);
+        // Carla existía sin oid y con un rol asignado a mano; en Entra aparece otra cuenta con su correo.
+        var carla = graph.Agregar("Carla Grupos", "carla.grupos@ejemplo.com");
+        var (carlaId, _) = await EmpleadoAsync(api, cadena, "Carla Grupos", carla.Correo!, null, rol: RolesAtlas.Desarrollador);
+        using var sesionAna = await EntrarAsync(api, anaUsuario);
+        using var sesionBeto = await EntrarAsync(api, betoUsuario);
+
+        // Ana salió del grupo de administradores y entró al de desarrolladores, sin volver a entrar a Atlas.
+        ana.Grupos = [grupoDev];
+        var estado = await SincronizarAsync(api);
+
+        Assert.Equal("exitosa", estado!.Resultado);
+        Assert.Contains(graph.Peticiones, p => p.Contains($"/users/{ana.Id}/transitiveMemberOf/", StringComparison.Ordinal));
+        await using (var plataforma = entorno.Plataforma(cadena))
+        {
+            var rolesAna = await plataforma.AsignacionesRol.Where(a => a.PersonaId == anaId)
+                .Join(plataforma.Roles, a => a.RolId, r => r.Id, (a, r) => new { r.Codigo, a.Origen }).ToListAsync(Ct);
+            var unico = Assert.Single(rolesAna);
+            Assert.Equal((RolesAtlas.Desarrollador, OrigenAsignacion.GrupoEntra), (unico.Codigo, unico.Origen));
+            Assert.Equal(1, await plataforma.AsignacionesRol.CountAsync(a => a.PersonaId == betoId, Ct));
+            // Carla no quedó enlazada a la cuenta nueva ni nadie heredó su rol.
+            Assert.Null((await plataforma.Personas.AsNoTracking().SingleAsync(p => p.Id == carlaId, Ct)).EntraOid);
+            Assert.False(await plataforma.Personas.AnyAsync(p => p.EntraOid == carla.Id, Ct));
+        }
+        // La sesión de Ana se cortó (pierde atlas.superadmin ya); la de Beto sigue.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await sesionAna.GetAsync("/api/v1/plataforma/yo")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await sesionBeto.GetAsync("/api/v1/plataforma/yo")).StatusCode);
+        Assert.True(await Auditoria.RegistradoAsync(entorno, TiposEventoSeguridad.SesionesInvalidadas, anaId.ToString(), cadena));
+        Assert.True(await Auditoria.RegistradoAsync(entorno, TiposEventoSeguridad.VinculoPorCorreoRechazado, carlaId.ToString(), cadena));
+
+        // Sin cambios en Entra, la siguiente corrida no toca roles ni sesiones.
+        using var sesionAnaNueva = await EntrarAsync(api, anaUsuario);
+        await SincronizarAsync(api);
+        Assert.Equal(HttpStatusCode.OK, (await sesionAnaNueva.GetAsync("/api/v1/plataforma/yo")).StatusCode);
+    }
+
     [Fact]
     public async Task Al_rehabilitarse_en_Entra_la_persona_vuelve_a_activa_pero_una_inactiva_por_otro_motivo_o_suspendida_no()
     {

@@ -3,11 +3,9 @@ info:
   title: FLIT Core ICT API
   version: 1.1.0
   description: |-
-    Contrato público de la Integración con Terceros (services/core-ict, Feature #10888). Un cliente gestor se autentica con su PROPIO token ICT (independiente del login de plataforma), registra trámites en lote, consulta su estado y los reprocesa. El submódulo de observabilidad (logs/alertas) usa el JWT de plataforma. Todas las rutas pasan por el Gateway YARP.
+    API de Integración con Terceros (ICT) de FLIT. El gestor se autentica con su propio token ICT (independiente del inicio de sesión de la plataforma FLIT), registra trámites en lote, consulta su estado y los reprocesa cuando tienen novedades, adjunta los documentos del trámite, consulta las secretarías de tránsito, pausa, reanuda o anula trámites en borrador y recibe en su webhook los cambios de estado.
 
-    Enriquecido con el Excel de contratos ICT (8 hojas: «1 - Auth», «2 - Transacction», «3 - Attachments», «4 - WebHookTransaction», «5 - StatusTransaction», «9 - Secretaries», «10 - PauseDraftProcess», «11 - AbortProcess»). Una sola URL base por ambiente: todo entra por el host público de core-ict.
-
-    Archivo generado con `python -m atlas_docs.ict` (ATLAS-ADR-0037) desde `contracts/openapi/core-ict.v1.yaml` del repo `flit`; no se edita a mano. Las operaciones con `x-public` son las que se pueden compartir con clientes; las `x-internal` las quita la poda de Atlas.
+    Una sola URL base por ambiente: todas las operaciones usan el mismo host (ver `servers`).
   contact:
     name: FLIT S.A.S.
   x-flit-visibilidad: compartible
@@ -26,6 +24,12 @@ info:
     - 9 - Secretaries
     - 10 - PauseDraftProcess
     - 11 - AbortProcess
+    descripcion_contrato: 'Contrato público de la Integración con Terceros (services/core-ict, Feature #10888). Un cliente
+      gestor se autentica con su PROPIO token ICT (independiente del login de plataforma), registra trámites en lote, consulta
+      su estado y los reprocesa. El submódulo de observabilidad (logs/alertas) usa el JWT de plataforma. Todas las rutas pasan
+      por el Gateway YARP.'
+    generador: python -m atlas_docs.ict (ATLAS-ADR-0037); no se edita a mano
+    visibilidad: las operaciones con `x-public` se comparten con clientes; las `x-internal` las quita la poda de Atlas
   x-flit-changelog:
   - version: 1.5.0
     fecha: '2025-05-16'
@@ -75,18 +79,18 @@ info:
 servers:
 - url: https://{host}
   description: QA (pruebas de integración). La consola «probar ahora» de Atlas solo apunta aquí o al sandbox. URL base única
-    de core-ict (todas las operaciones).
+    de la API (todas las operaciones).
   variables:
     host:
       default: ict.qa.flitsas.com
-      description: Host público de core-ict en qa.
+      description: Host público de la API ICT en qa.
   x-flit-ambiente: qa
 - url: https://{host}
-  description: Producción. URL base única de core-ict (todas las operaciones).
+  description: Producción. URL base única de la API (todas las operaciones).
   variables:
     host:
       default: ict.flitsas.com
-      description: Host público de core-ict en pdn.
+      description: Host público de la API ICT en pdn.
   x-flit-ambiente: pdn
 tags:
 - name: ICT · Auth
@@ -129,7 +133,7 @@ paths:
             example:
               username: usuario@ejemplo.com
               password: $CLAVE
-        description: Cuerpo de la petición según la hoja «1 - Auth» del Excel.
+        description: Cuerpo de la petición.
       responses:
         '200':
           description: Token emitido.
@@ -157,7 +161,7 @@ paths:
       description: |-
         Servicio para creacion y actualizacion de datos de tramites.
 
-        Ingresa un lote de trámites (respuesta con la forma v1). Valida el límite de lote (422 si se excede, sin persistir nada), el NIT del token contra cada fila y los duplicados intra-lote. NO crea nada en trámites todavía: el pipeline valida y, al pasar, materializa el borrador por gRPC.
+        Ingresa un lote de trámites (respuesta con la forma v1). Valida el límite del lote (422 si se excede, sin guardar ninguna fila), que el NIT de cada fila coincida con el del token y que no haya filas duplicadas en el lote. El registro no crea el trámite de inmediato: FLIT valida cada fila y, si pasa, crea el trámite en borrador; el avance se consulta con el estado del pre-trámite o llega al webhook.
       tags:
       - ICT · Ingesta
       security:
@@ -489,7 +493,7 @@ paths:
                 description: Azul AguaMarina
               - transactionType: 17
                 description: Estacas
-        description: Cuerpo de la petición según la hoja «2 - Transacction» del Excel.
+        description: Cuerpo de la petición.
       responses:
         '200':
           description: Lote procesado (cada fila con su resultado).
@@ -519,6 +523,9 @@ paths:
           description: Error interno del servidor. El servidor encontró una condición inesperada que le impidió cumplir con
             la solicitud. Es un error genérico que indica que algo salió mal en el servidor, pero el servidor no puede ser
             más específico sobre el problema
+      x-flit-descripcion-contrato: 'Ingresa un lote de trámites (respuesta con la forma v1). Valida el límite de lote (422
+        si se excede, sin persistir nada), el NIT del token contra cada fila y los duplicados intra-lote. NO crea nada en
+        trámites todavía: el pipeline valida y, al pasar, materializa el borrador por gRPC.'
       x-flit-hoja-excel: 2 - Transacction
       x-public: true
   /api/v1/status-process/byId/{id}:
@@ -592,8 +599,8 @@ paths:
     get:
       operationId: getIctStatusById
       summary: Estado del pre-trámite (v2-native)
-      description: Proyecta el estado interno al vocabulario v2 (sin códigos numéricos) y, si el pre-trámite ya se materializó,
-        adjunta el estado v2 del trámite (Plano C).
+      description: Devuelve el estado del pre-trámite en el vocabulario v2 (sin códigos numéricos) y, si ya se creó el trámite,
+        también el estado v2 del trámite.
       tags:
       - ICT · Estado
       security:
@@ -637,13 +644,15 @@ paths:
           description: Error interno del servidor. El servidor encontró una condición inesperada que le impidió cumplir con
             la solicitud. Es un error genérico que indica que algo salió mal en el servidor, pero el servidor no puede ser
             más específico sobre el problema
+      x-flit-descripcion-contrato: Proyecta el estado interno al vocabulario v2 (sin códigos numéricos) y, si el pre-trámite
+        ya se materializó, adjunta el estado v2 del trámite (Plano C).
       x-public: true
   /api/v1/ict/reprocess/{id}:
     post:
       operationId: postIctReprocessById
       summary: Reprocesar un pre-trámite con novedades
-      description: 'Reencola el pipeline para un pre-trámite en estado con_novedades (resetea los flags de validación). Alias
-        v1-compat: POST /api/v1/transactions/reprocess/{id}.'
+      description: Vuelve a validar un pre-trámite en estado `con_novedades` (reinicia sus validaciones). También responde
+        en la ruta de compatibilidad v1 `POST /api/v1/transactions/reprocess/{id}`.
       tags:
       - ICT · Estado
       security:
@@ -692,17 +701,19 @@ paths:
           description: Error interno del servidor. El servidor encontró una condición inesperada que le impidió cumplir con
             la solicitud. Es un error genérico que indica que algo salió mal en el servidor, pero el servidor no puede ser
             más específico sobre el problema
+      x-flit-descripcion-contrato: 'Reencola el pipeline para un pre-trámite en estado con_novedades (resetea los flags de
+        validación). Alias v1-compat: POST /api/v1/transactions/reprocess/{id}.'
       x-public: true
   /api/v1/pretramites/{id}:
     patch:
       operationId: patchPretramitesById
       summary: Editar un pre-trámite antes de materializar
-      description: 'Edición parcial con concurrencia optimista (rowVersion). Si cambian campos que afectan la validación,
-        se resetean los flags y se re-encola el pipeline. Una vez materializado (borrador creado) responde 409 already_materialized,
-        salvo cuando el body trae SOLO sellingPrice (Bug #13304): entonces se aplica en el borrador de FLIT mientras siga
-        en borrador, sin resetear validaciones (409 not_draft si ya avanzó, 400 invalid_selling_price si el precio no es mayor
-        que cero con hasta 2 decimales y 16 dígitos enteros, 409 core_api_not_found si FLIT no encuentra el trámite, 503 core_api_unavailable
-        si FLIT no responde, 502 core_api_error ante cualquier otro error de FLIT, cuyo código interno no se propaga).'
+      description: 'Edición parcial con concurrencia optimista (`rowVersion`). Si cambian campos que afectan la validación,
+        el pre-trámite se valida de nuevo. Una vez creado el trámite en borrador responde 409 `already_materialized`, salvo
+        cuando el cuerpo trae solo `sellingPrice`: entonces el precio se aplica al borrador mientras siga en borrador, sin
+        repetir las validaciones (409 `not_draft` si ya avanzó, 400 `invalid_selling_price` si el precio no es mayor que cero
+        con hasta 2 decimales y 16 dígitos enteros, 409 `core_api_not_found` si FLIT no encuentra el trámite, 503 `core_api_unavailable`
+        si FLIT no responde y 502 `core_api_error` ante cualquier otro error, sin propagar su código interno).'
       tags:
       - ICT · Pre-trámites
       security:
@@ -756,6 +767,13 @@ paths:
           description: Error interno del servidor. El servidor encontró una condición inesperada que le impidió cumplir con
             la solicitud. Es un error genérico que indica que algo salió mal en el servidor, pero el servidor no puede ser
             más específico sobre el problema
+      x-flit-descripcion-contrato: 'Edición parcial con concurrencia optimista (rowVersion). Si cambian campos que afectan
+        la validación, se resetean los flags y se re-encola el pipeline. Una vez materializado (borrador creado) responde
+        409 already_materialized, salvo cuando el body trae SOLO sellingPrice (Bug #13304): entonces se aplica en el borrador
+        de FLIT mientras siga en borrador, sin resetear validaciones (409 not_draft si ya avanzó, 400 invalid_selling_price
+        si el precio no es mayor que cero con hasta 2 decimales y 16 dígitos enteros, 409 core_api_not_found si FLIT no encuentra
+        el trámite, 503 core_api_unavailable si FLIT no responde, 502 core_api_error ante cualquier otro error de FLIT, cuyo
+        código interno no se propaga).'
       x-public: true
   /api/v1/ict/logs:
     get:
@@ -878,7 +896,7 @@ paths:
               idAttachment: 2
               closed: false
               file: documento.pdf
-        description: Cuerpo de la petición según la hoja «3 - Attachments» del Excel.
+        description: Cuerpo de la petición.
       responses:
         '201':
           description: Documento registrado.
@@ -888,17 +906,17 @@ paths:
                 $ref: '#/components/schemas/RespuestaCargaAdjunto'
               examples:
                 excel-1:
-                  summary: Ejemplo 1 del Excel (saneado)
+                  summary: Ejemplo 1
                   value:
                     Status: 1
                     Message: Registered Successfully
                 excel-2:
-                  summary: Ejemplo 2 del Excel (saneado)
+                  summary: Ejemplo 2
                   value:
                     Status: 2
                     Message: 'Trámite no permite adjuntar mas archivos(está cerrado) '
                 excel-3:
-                  summary: Ejemplo 3 del Excel (saneado)
+                  summary: Ejemplo 3
                   value:
                     Status: 2
                     Message: Requested entity with id 13 not found Requested entity with id 13 not found
@@ -1017,7 +1035,7 @@ paths:
             example:
               pauseProcess: true
               observation: En espera de liquidación
-        description: Cuerpo de la petición según la hoja «10 - PauseDraftProcess» del Excel.
+        description: Cuerpo de la petición.
       responses:
         '200':
           description: Trámite pausado o reanudado.
@@ -1103,7 +1121,7 @@ paths:
               $ref: '#/components/schemas/SolicitudAnulacionTramite'
             example:
               observation: Se creará otro trámite en su lugar
-        description: Cuerpo de la petición según la hoja «11 - AbortProcess» del Excel.
+        description: Cuerpo de la petición.
       responses:
         '200':
           description: Trámite anulado.
@@ -1176,11 +1194,9 @@ webhooks:
   estadoTramite:
     post:
       operationId: notificarEstadoTramite
-      summary: Notificación «WebHookTransaction» que FLIT envía al gestor
-      description: 'core-ict hace `POST` a la URL que el gestor registró en `url_web_hook` cuando cambia el estado del pre-trámite
-        o del trámite. El cuerpo trae los campos v2 (`ictEstado`, `procedureInstanceId`) y los de compatibilidad v1. Fuentes:
-        `Flit.Ict.Infrastructure/Jobs/WebhookNotificationJob.cs (TryDeliverAsync)` de core-ict y la hoja «4 - WebHookTransaction»
-        del Excel.'
+      summary: Notificación de cambio de estado que FLIT envía al gestor
+      description: FLIT hace `POST` a la URL que el gestor registró en `url_web_hook` cuando cambia el estado del pre-trámite
+        o del trámite. El cuerpo trae los campos v2 (`ictEstado`, `procedureInstanceId`) y los de compatibilidad v1.
       tags:
       - Webhooks
       security: []
@@ -1198,10 +1214,10 @@ webhooks:
               statusMessage: Errores en el proceso de validación
               statusObservation: El documento del comprador está vacío
               ictEstado: recibido
-        description: Cuerpo de la petición según la hoja «4 - WebHookTransaction» del Excel.
+        description: Cuerpo de la petición.
       responses:
         '200':
-          description: El gestor recibió la notificación (core-ict solo mira que el código sea 2xx).
+          description: 'El gestor recibió la notificación: FLIT solo revisa que el código HTTP sea 2xx.'
           content:
             application/json:
               schema:
@@ -1220,14 +1236,14 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: 'Token propio del cliente de integración (aud=flit-ict, scope ict.transactions.write). Lo entrega `POST
-        /api/v1/auth/login` y viaja en la cabecera `Authorization: Bearer $TOKEN`. [por verificar] cumplimiento de RFC8725
-        en el emisor.'
+        /api/v1/auth/login` y viaja en la cabecera `Authorization: Bearer $TOKEN`. Formato JWT; buenas prácticas de referencia:
+        RFC8725.'
     platformJwt:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT de plataforma FLIT (para el submódulo de observabilidad). [por verificar] cumplimiento de RFC8725 en
-        el emisor.
+      description: 'JWT de plataforma FLIT (para el submódulo de observabilidad). Formato JWT; buenas prácticas de referencia:
+        RFC8725.'
   schemas:
     IctLoginRequest:
       type: object
@@ -1250,7 +1266,7 @@ components:
           description: Aceptado y descartado (compat v1); el tenant se deriva del cliente.
           examples:
           - texto
-      description: Esquema `IctLoginRequest` de core-ict.
+      description: Credenciales del cliente de integración para obtener el token ICT.
       examples:
       - username: usuario@ejemplo.com
         password: $CLAVE
@@ -1270,7 +1286,7 @@ components:
           type: boolean
           examples:
           - true
-      description: Esquema `IctLoginResponse` de core-ict.
+      description: Token ICT emitido y su vigencia en segundos.
       examples:
       - token: $TOKEN
     RegisterBatchResponse:
@@ -1327,7 +1343,7 @@ components:
               Status: 2
               Message: Error registering information, Buyer/DocumentNumber field exceeds length
               TransactionFlit: texto
-      description: Esquema `RegisterBatchResponse` de core-ict.
+      description: 'Resultado del registro del lote: total de filas y el resultado de cada una.'
       examples:
       - TotalRows: 2
         TotalRowsProcessed: 1
@@ -1453,7 +1469,7 @@ components:
               userNameRegistered: Nombre Demo
               dateRegistered: '2024-03-12T20:45:43.170Z'
               companyRegistered: Organismo Demo
-      description: Esquema `StatusProcessV1Response` de core-ict.
+      description: 'Estado del trámite en la forma v1: validación e histórico de estados.'
       examples:
       - statusValidation: 1
         messageValidation: ' '
@@ -1510,7 +1526,7 @@ components:
           type: string
           examples:
           - texto
-      description: Esquema `IctStatusV2Response` de core-ict.
+      description: Estado del pre-trámite en el vocabulario v2 y, si aplica, el del trámite.
       examples:
       - managerIdTransaction: texto
         ictEstado: recibido
@@ -1542,7 +1558,7 @@ components:
           type: boolean
           examples:
           - true
-      description: Esquema `PreTramitePatchRequest` de core-ict.
+      description: Campos del pre-trámite que se editan, con la versión de fila para la concurrencia.
       examples:
       - rowVersion: 1
         sellingDate: texto
@@ -1568,7 +1584,7 @@ components:
           type: integer
           examples:
           - 1
-      description: Esquema `IctAlertMetrics` de core-ict.
+      description: Métricas de alerta de la integración (uso interno de FLIT).
       examples:
       - stuckInValidation: 1
         noveltyRatePct: 1
@@ -1592,7 +1608,7 @@ components:
           type: 'null'
           examples:
           - null
-      description: Esquema `RespuestaCicloVidaV1` de core-ict.
+      description: Resultado de pausar, reanudar o anular un trámite (forma v1).
       examples:
       - success: true
         message: texto
@@ -1629,7 +1645,7 @@ components:
           description: archivo pdf para el upload
           examples:
           - documento.pdf
-      description: Esquema `SolicitudCargaAdjunto` de core-ict.
+      description: Documento adjunto del trámite y sus datos (`multipart/form-data`).
       examples:
       - transactionFlit: '35'
         filename: pruebaImpuestos12.pdf
@@ -1653,7 +1669,7 @@ components:
           description: Mensaje asociado a la respuesta del estado del registro
           examples:
           - Registered Successfully
-      description: Esquema `RespuestaCargaAdjunto` de core-ict.
+      description: Resultado de la carga del documento adjunto.
       examples:
       - Status: 1
         Message: Registered Successfully
@@ -1688,7 +1704,7 @@ components:
               Name: Nombre Demo
             - Code: '5001000'
               Name: Nombre Demo
-      description: Esquema `ListadoSecretarias` de core-ict.
+      description: Secretarías de tránsito activas con su código y su nombre.
       examples:
       - data:
         - Code: '5631000'
@@ -1712,7 +1728,7 @@ components:
           description: Mensaje que se mostrará cuando el trámite esté pausado(Se puede enviar vacio)
           examples:
           - En espera de liquidación
-      description: Esquema `SolicitudPausaTramite` de core-ict.
+      description: Pausa o reanudación de un trámite en borrador, con una observación opcional.
       examples:
       - pauseProcess: true
         observation: En espera de liquidación
@@ -1726,12 +1742,12 @@ components:
           description: Mensaje que se mostrará como nota de razón de la anulación
           examples:
           - Se creará otro trámite en su lugar
-      description: Esquema `SolicitudAnulacionTramite` de core-ict.
+      description: Anulación de un trámite, con una observación opcional.
       examples:
       - observation: Se creará otro trámite en su lugar
     TipoDocumento:
       type: string
-      description: Valores de la «Tabla Tipo Documento» del Excel de contratos ICT (hoja «2 - Transacction»).
+      description: Valores de la «Tabla Tipo Documento».
       enum:
       - NIT
       - CC
@@ -1781,7 +1797,7 @@ components:
       - NIT
     TipoOperacion:
       type: integer
-      description: Valores de la «Tabla Tipo Operacion» del Excel de contratos ICT (hoja «2 - Transacction»).
+      description: Valores de la «Tabla Tipo Operacion».
       enum:
       - 1
       - 2
@@ -1807,7 +1823,7 @@ components:
       - 1
     TipoTransformacion:
       type: integer
-      description: Valores de la «Tabla Tipo Transformacion» del Excel de contratos ICT (hoja «2 - Transacction»).
+      description: Valores de la «Tabla Tipo Transformacion».
       enum:
       - 5
       - 9
@@ -1837,7 +1853,7 @@ components:
       - 5
     TipoTramite:
       type: integer
-      description: Valores de la «Tabla Tipo Tramite» del Excel de contratos ICT (hoja «2 - Transacction»).
+      description: Valores de la «Tabla Tipo Tramite».
       enum:
       - 1
       - 2
@@ -1932,7 +1948,7 @@ components:
       - 1
     TipoOperacionGarantia:
       type: integer
-      description: Valores de la «Tabla Tipo Operacion Garantia» del Excel de contratos ICT (hoja «2 - Transacction»).
+      description: Valores de la «Tabla Tipo Operacion Garantia».
       enum:
       - 1
       - 2
@@ -1958,7 +1974,7 @@ components:
       - 1
     TipoBlindaje:
       type: integer
-      description: Valores de la «Tabla Tipo de Blindaje» del Excel de contratos ICT (hoja «2 - Transacction»).
+      description: Valores de la «Tabla Tipo de Blindaje».
       enum:
       - 1
       - 2
@@ -1988,7 +2004,7 @@ components:
       - 1
     TipoCombustible:
       type: integer
-      description: Valores de la «Tabla nuevo tipo de combustible» del Excel de contratos ICT (hoja «2 - Transacction»).
+      description: Valores de la «Tabla nuevo tipo de combustible».
       enum:
       - 1
       - 2
@@ -2050,7 +2066,7 @@ components:
       - 1
     DocumentoAdjunto:
       type: integer
-      description: Valores de la «Tabla guia documentos adjuntos» del Excel de contratos ICT (hoja «3 - Attachments»).
+      description: Valores de la «Tabla guia documentos adjuntos».
       enum:
       - 1
       - 2
@@ -2082,9 +2098,9 @@ components:
       - Poder Comprador - Apoderado
       - Poder Vendedor - Apoderado
       - Blindaje
-      - Sin nombre en el Excel (por confirmar)
-      - Sin nombre en el Excel (por confirmar)
-      - Sin nombre en el Excel (por confirmar)
+      - Sin nombre definido
+      - Sin nombre definido
+      - Sin nombre definido
       x-flit-tabla:
         hoja: 3 - Attachments
         titulo: Tabla guia documentos adjuntos
@@ -2257,21 +2273,21 @@ components:
           traspaso_unilateral: no_aplica
           otro_tramite: obligatorio
         - valor: 14
-          nombre: Sin nombre en el Excel (por confirmar)
+          nombre: Sin nombre definido
           matricula_inicial: no_aplica
           matricula_leasing: no_aplica
           traspaso_bilateral: no_aplica
           traspaso_unilateral: no_aplica
           otro_tramite: no_aplica
         - valor: 15
-          nombre: Sin nombre en el Excel (por confirmar)
+          nombre: Sin nombre definido
           matricula_inicial: no_aplica
           matricula_leasing: no_aplica
           traspaso_bilateral: no_aplica
           traspaso_unilateral: no_aplica
           otro_tramite: no_aplica
         - valor: 16
-          nombre: Sin nombre en el Excel (por confirmar)
+          nombre: Sin nombre definido
           matricula_inicial: no_aplica
           matricula_leasing: no_aplica
           traspaso_bilateral: no_aplica
@@ -2284,8 +2300,8 @@ components:
       properties:
         company_manager_id:
           type: number
-          description: 'Id interno de la compañia gestora (FLIT ENTREGA). Obsoleto en core-ict: core-ict deriva la compañía
-            del token y no lee `company_manager_id` (`RegisterRowInput` no lo declara); se documenta como obsoleto.'
+          description: 'Id interno de la compañia gestora (FLIT ENTREGA). Obsoleto: la compañía gestora se toma del token
+            y el valor que se envíe se ignora.'
           deprecated: true
           examples:
           - 1
@@ -3615,7 +3631,7 @@ components:
           traspaso_unilateral: opcional
           matricula_inicial: opcional
           matricula_leasing: opcional
-      description: Esquema `SolicitudRegistroTramite` de core-ict.
+      description: 'Fila del lote de registro: un trámite con sus datos y los de sus participantes.'
       examples:
       - company_manager_id: 1
         company_manager_document: texto
@@ -4219,8 +4235,8 @@ components:
         new_vehicle_fuel_type: 1
         url_web_hook: texto
     TramiteOtro:
-      description: 'Registro de otros trámites (blindaje, cambios, duplicados, prendas…): el Excel no define obligatoriedad
-        propia para ellos.'
+      description: 'Registro de otros trámites (blindaje, cambios, duplicados, prendas…): no tienen obligatoriedad propia;
+        aplican los campos obligatorios comunes.'
       allOf:
       - $ref: '#/components/schemas/SolicitudRegistroTramite'
       - type: object
@@ -4368,7 +4384,7 @@ components:
           - borrador_creado
           - con_novedades
           - anulado
-          description: Estado del pre-trámite en el vocabulario v2 de core-ict.
+          description: Estado del pre-trámite en el vocabulario v2.
           examples:
           - recibido
         procedureInstanceId:
@@ -4422,7 +4438,7 @@ components:
           type: string
           examples:
           - texto
-      description: Esquema `NotificacionEstadoTramite` de core-ict.
+      description: Cuerpo de la notificación de cambio de estado que FLIT envía al webhook del gestor.
       examples:
       - transactionFlit: '1290'
         managerIdTransaction: GESTOR-0001
@@ -4445,13 +4461,13 @@ components:
           description: Mensaje asociado a la respuesta del estado del registro
           examples:
           - Registered Successfully
-      description: Esquema `RespuestaNotificacion` de core-ict.
+      description: Respuesta del gestor a la notificación; FLIT solo revisa el código HTTP.
       examples:
       - Status: 1
         Message: Registered Successfully
     ErrorIct:
       type: object
-      description: 'Error de core-ict: un código corto (p. ej. `invalid_credentials`, `not_found`).'
+      description: 'Error de la API: un código corto (p. ej. `invalid_credentials`, `not_found`).'
       properties:
         error:
           type: string

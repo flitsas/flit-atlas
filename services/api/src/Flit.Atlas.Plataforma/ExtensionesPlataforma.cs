@@ -1,3 +1,4 @@
+using Flit.Atlas.Plataforma.Almacenamiento;
 using Flit.Atlas.Plataforma.Correo;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Mensajeria;
@@ -27,6 +28,9 @@ public static class ExtensionesPlataforma
         ArgumentException.ThrowIfNullOrWhiteSpace(cadenaConexion);
 
         servicios.AddDbContext<PlataformaDbContext>(o => PlataformaDbContext.Configurar(o, cadenaConexion));
+        // Fuera de local, con un rol de base con privilegios atlas-api no queda lista (ATLAS-ADR-0050).
+        servicios.AddSingleton<ChequeoRolBaseDeDatos>();
+        servicios.AddHealthChecks().AddCheck<ChequeoRolBaseDeDatos>(ChequeoRolBaseDeDatos.Nombre);
 
         var opciones = new OpcionesMensajeria();
         configurar?.Invoke(opciones);
@@ -34,6 +38,10 @@ public static class ExtensionesPlataforma
         servicios.TryAddSingleton(TimeProvider.System);
         servicios.TryAddSingleton<ICanalEventos, CanalRabbitMq>();
         servicios.AddHostedService<PublicadorOutbox>();
+        // Colas que atlas-api consume de los otros servicios de Atlas (p. ej. los resultados de atlas-docs, HU 4.5).
+        servicios.AgregarConsumo();
+        // Objetos privados en S3 (exportaciones, HU 4.5, ATLAS-ADR-0042).
+        servicios.AgregarAlmacenamiento();
 
         // Centro de notificaciones y Web Push (HU 1.6).
         servicios.TryAddSingleton(sp => LlavesVapid.Resolver(
@@ -74,6 +82,10 @@ public static class ExtensionesPlataforma
         servicios.TryAddScoped<Modulos.ILectorAplicativos, Modulos.SinAplicativos>();
         servicios.TryAddScoped<Modulos.ISoporteDeTurno, Modulos.SinSoporteDeTurno>();
         servicios.TryAddScoped<Modulos.IFuentesPublicacion, Modulos.SinFuentesPublicacion>();
+        // Responsables de un aplicativo (avisos de deprecación, ATLAS-ADR-0046): los registra el módulo de equipo.
+        servicios.TryAddScoped<Modulos.ILectorResponsables, Modulos.SinResponsables>();
+        // Documentación funcional del portal de clientes (ATLAS-ADR-0043): la registra el módulo de documentación (F5).
+        servicios.TryAddScoped<Modulos.IDocumentacionDelPortal, Modulos.SinDocumentacionDelPortal>();
 
         // Publicación desde la CI con el token OIDC de GitHub Actions, para todas las fuentes (ATLAS-ADR-0035).
         servicios.AgregarPublicacionCi();

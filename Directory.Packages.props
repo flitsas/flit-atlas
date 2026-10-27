@@ -26,6 +26,9 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
+    <!-- Almacenamiento S3 de las exportaciones (HU 4.5, ATLAS-ADR-0042): subir la entrada, firmar la URL de descarga de
+         15 minutos y borrar lo vencido. Apache-2.0. 4.0.104.2 del 08/10/2026; las 4.0.104.3 a .6 no tienen 2 semanas. -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.2" />
   </ItemGroup>
   <ItemGroup Label="Identidad">
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.13" />

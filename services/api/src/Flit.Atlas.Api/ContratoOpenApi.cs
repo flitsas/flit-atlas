@@ -51,6 +51,7 @@ internal static class ContratoOpenApi
         ("Organizaciones", "FLIT, clientes y proveedores: crear, editar, suspender y eliminar, y habilitar el administrador de la organización (HU 1.5, ATLAS-ADR-0025)."),
         ("Invitaciones", "Invitaciones de externos con rol, alcance, vencimiento y permisos extra: crear, reenviar, suspender, renovar y revocar (HU 1.5, ATLAS-ADR-0025)."),
         ("Directorio", "Directorio interno de empleados sincronizado a diario con Microsoft Graph: nombre, cargo, área, foto y estado; el teléfono solo con atlas.equipo.ver_contacto (ATLAS-ADR-0030)."),
+        (ExtensionesModulos.EtiquetaPortal, "Lo que FLIT comparte con la organización de la persona: su consolidado (aplicativos, paquetes y avisos de deprecación), el detalle de cada paquete, el spec podado por contrato, las guías y los cambios, y la búsqueda dentro de lo compartido. Siempre filtrado por la organización de la sesión, el alcance de la persona y la vigencia de la compartición; cada vista queda en la auditoría (ATLAS-ADR-0043)."),
         ("Permisos","Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023)."),
     ];
 
@@ -103,6 +104,7 @@ internal static class ContratoOpenApi
                 .Select(t => new OpenApiTag { Name = t.Item1, Description = t.Item2 }));
 
         documento.Components ??= new OpenApiComponents();
+        documento.Components.Responses = Respuestas429();
         documento.Components.SecuritySchemes = new Dictionary<string, IOpenApiSecurityScheme>
         {
             [EsquemaSesion] = new OpenApiSecurityScheme
@@ -203,6 +205,9 @@ internal static class ContratoOpenApi
         var requiereSesion = scope is null && !ci && metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any();
         var metodo = contexto.Description.HttpMethod ?? HttpMethods.Get;
         var cambiaEstado = !(HttpMethods.IsGet(metodo) || HttpMethods.IsHead(metodo) || HttpMethods.IsOptions(metodo));
+        var ruta = "/" + (contexto.Description.RelativePath ?? string.Empty).TrimStart('/');
+        // Los informes de la CSP los manda el navegador sin la cabecera antifalsificación (ATLAS-ADR-0048).
+        var sinCsrf = string.Equals(ruta, EndpointsReportesCsp.Ruta, StringComparison.OrdinalIgnoreCase);
 
         var requisito = new OpenApiSecurityRequirement();
         if (requiereSesion)
@@ -217,7 +222,7 @@ internal static class ContratoOpenApi
         {
             requisito[new OpenApiSecuritySchemeReference(EsquemaGitHubActions, contexto.Document)] = [];
         }
-        if (cambiaEstado && scope is null && !ci)
+        if (cambiaEstado && scope is null && !ci && !sinCsrf)
         {
             requisito[new OpenApiSecuritySchemeReference(EsquemaCsrf, contexto.Document)] = [];
         }
@@ -305,39 +310,61 @@ internal static class ContratoOpenApi
                 operacion.Responses.TryAdd("404", new OpenApiResponse { Description = char.ToUpperInvariant(apagado[0]) + apagado[1..] + "." });
             }
         }
-        if (metadata.OfType<MetadatoLimiteTasa>().Any())
+        var identidad = metadata.OfType<MetadatoLimiteTasa>().Any();
+        if (identidad || ruta.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
         {
-            // Límite de tasa de las rutas de identidad (ATLAS-ADR-0022).
-            operacion.Responses.TryAdd("429", new OpenApiResponse
-            {
-                Description = $"Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «{LimitacionTasa.Codigo}»).",
-                Headers = new Dictionary<string, IOpenApiHeader>
-                {
-                    ["Retry-After"] = new OpenApiHeader
-                    {
-                        Description = "Segundos que hay que esperar antes de reintentar.",
-                        Schema = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32", Minimum = "1" },
-                    },
-                },
-                Content = new Dictionary<string, OpenApiMediaType>
-                {
-                    ["application/problem+json"] = new OpenApiMediaType
-                    {
-                        Schema = new OpenApiSchema
-                        {
-                            Type = JsonSchemaType.Object,
-                            Description = "Problem Details (RFC 9457) con el código que interpreta la PWA.",
-                            Properties = new Dictionary<string, IOpenApiSchema>
-                            {
-                                ["status"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
-                                ["title"] = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = 200 },
-                                ["codigo"] = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = 50 },
-                                ["reintentarEnSegundos"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
-                            },
-                        },
-                    },
-                },
-            });
+            // Límites de tasa: los de identidad (ATLAS-ADR-0022) y los del resto de la API (ATLAS-ADR-0048); las
+            // exportaciones suman el tope de las que están en curso. Una respuesta reutilizable por caso.
+            var respuesta = identidad ? Respuesta429Identidad
+                : metadata.OfType<MetadatoSolicitudExportacion>().Any() ? Respuesta429Exportacion
+                : Respuesta429;
+            operacion.Responses.TryAdd("429", new OpenApiResponseReference(respuesta, contexto.Document));
         }
     }
+
+    private const string Respuesta429 = "DemasiadasPeticiones";
+    private const string Respuesta429Identidad = "DemasiadasPeticionesIdentidad";
+    private const string Respuesta429Exportacion = "DemasiadasExportaciones";
+
+    /// <summary>Las respuestas 429 reutilizables (<c>components.responses</c>) que referencia cada operación.</summary>
+    private static Dictionary<string, IOpenApiResponse> Respuestas429() => new(StringComparer.Ordinal)
+    {
+        [Respuesta429] = RespuestaLimite(
+            $"Demasiadas peticiones de esta persona, de su organización o, sin sesión, de esta IP (problem+json con codigo «{LimitacionTasa.Codigo}»)."),
+        [Respuesta429Identidad] = RespuestaLimite(
+            $"Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «{LimitacionTasa.Codigo}»)."),
+        [Respuesta429Exportacion] = RespuestaLimite(
+            $"Demasiadas solicitudes de esta persona o de su organización (codigo «{LimitacionTasa.Codigo}»), o ya tienen el máximo de exportaciones en curso (codigo «exportaciones_en_curso»)."),
+    };
+
+    private static OpenApiResponse RespuestaLimite(string descripcion) => new()
+    {
+        Description = descripcion,
+        Headers = new Dictionary<string, IOpenApiHeader>
+        {
+            ["Retry-After"] = new OpenApiHeader
+            {
+                Description = "Segundos que hay que esperar antes de reintentar.",
+                Schema = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32", Minimum = "1" },
+            },
+        },
+        Content = new Dictionary<string, OpenApiMediaType>
+        {
+            ["application/problem+json"] = new OpenApiMediaType
+            {
+                Schema = new OpenApiSchema
+                {
+                    Type = JsonSchemaType.Object,
+                    Description = "Problem Details (RFC 9457) con el código que interpreta la PWA.",
+                    Properties = new Dictionary<string, IOpenApiSchema>
+                    {
+                        ["status"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+                        ["title"] = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = 200 },
+                        ["codigo"] = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = 50 },
+                        ["reintentarEnSegundos"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+                    },
+                },
+            },
+        },
+    };
 }

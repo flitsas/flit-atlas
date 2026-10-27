@@ -2,6 +2,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 
+import { Link } from 'react-router';
+
+import { useSesionOpcional } from '../../../app/sesion';
+import { formatearFecha } from '../../../app/ui/formato';
 import { Hoja } from '../../../app/ui/Hoja';
 import { Boton, Insignia } from '../../../app/ui/Tarjeta';
 import {
@@ -10,6 +14,7 @@ import {
   crearOrganizacion,
   eliminarOrganizacion,
   listarOrganizaciones,
+  listarPaquetesCompartidos,
   type Organizacion,
   type SolicitudOrganizacion,
 } from '../api';
@@ -18,9 +23,13 @@ import { type Aviso, avisoDeError, claseCampo, Confirmar, MostrarAviso } from '.
 const CLAVE = ['administracion', 'organizaciones'] as const;
 const TIPOS: Record<Organizacion['tipo'], string> = { interna: 'Interna (FLIT)', cliente: 'Cliente', proveedor: 'Proveedor' };
 
-/** Organizaciones: FLIT (interna), clientes y proveedores (HU 1.5). Lista en tarjetas; formularios en hojas inferiores. */
+/**
+ * Organizaciones: FLIT (interna), clientes y proveedores (HU 1.5). Lista en tarjetas; formularios en hojas inferiores. Con
+ * `atlas.contratos.ver_internos`, cada cliente o proveedor muestra los paquetes compartidos con él (HU 4.3).
+ */
 export default function Organizaciones() {
   const cliente = useQueryClient();
+  const verPaquetes = useSesionOpcional()?.yo.permisos?.includes('atlas.contratos.ver_internos') ?? false;
   const lista = useQuery({ queryKey: CLAVE, queryFn: listarOrganizaciones });
   const [editando, setEditando] = useState<Organizacion | 'nueva' | null>(null);
   const [eliminando, setEliminando] = useState<Organizacion | null>(null);
@@ -71,6 +80,7 @@ export default function Organizaciones() {
               <p className="text-sm text-atlas-texto-suave">
                 {o.personas} {o.personas === 1 ? 'persona' : 'personas'} · {o.invitacionesPendientes} {o.invitacionesPendientes === 1 ? 'invitación pendiente' : 'invitaciones pendientes'}
               </p>
+              {verPaquetes && o.tipo !== 'interna' && <PaquetesCompartidos organizacion={o} />}
               <div className="flex flex-wrap gap-2">
                 <Boton variante="secundario" onClick={() => setEditando(o)} aria-label={`Editar ${o.nombre}`}>
                   <Pencil className="size-4" aria-hidden="true" />
@@ -193,5 +203,42 @@ function Campos({ existente, alGuardar }: { existente: Organizacion | null; alGu
         Guardar
       </Boton>
     </form>
+  );
+}
+
+const ESTADOS_COMPARTICION = { vigente: 'Vigente', programada: 'Programada', vencida: 'Vencida', revocada: 'Revocada' } as const;
+
+/** Los paquetes compartidos con la organización; se piden al abrir la sección. */
+function PaquetesCompartidos({ organizacion }: { organizacion: Organizacion }) {
+  const [abierta, setAbierta] = useState(false);
+  const paquetes = useQuery({
+    queryKey: ['administracion', 'organizaciones', organizacion.id, 'paquetes'],
+    queryFn: () => listarPaquetesCompartidos(organizacion.id),
+    enabled: abierta,
+  });
+  return (
+    <details className="min-w-0" onToggle={(e) => setAbierta((e.target as HTMLDetailsElement).open)}>
+      <summary className="flex min-h-toque cursor-pointer items-center text-sm font-medium">Paquetes compartidos</summary>
+      {abierta && paquetes.isPending && <p role="status" className="text-sm">Cargando…</p>}
+      {paquetes.isError && <p role="alert" className="text-sm">No se pudieron cargar los paquetes.</p>}
+      {paquetes.data?.length === 0 && <p className="text-sm text-atlas-texto-suave">No se le ha compartido ningún paquete.</p>}
+      {paquetes.data && paquetes.data.length > 0 && (
+        <ul aria-label={`Paquetes compartidos con ${organizacion.nombre}`} className="flex flex-col gap-1">
+          {paquetes.data.map((p) => (
+            <li key={p.id} className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+              <Link to={`/contratos/paquetes/${p.paqueteId}`} className="inline-flex min-h-toque items-center font-medium break-words text-atlas-tinta hover:underline">
+                {p.paqueteNombre}
+              </Link>
+              <Insignia tono={p.estado === 'vigente' ? 'exito' : 'neutral'}>{ESTADOS_COMPARTICION[p.estado]}</Insignia>
+              <span className="text-xs text-atlas-texto-suave">
+                {p.revisionQueVe ? `Revisión ${p.revisionQueVe}` : ''}
+                {p.vigenteHasta ? ` · hasta el ${formatearFecha(new Date(p.vigenteHasta))}` : ''}
+                {` · exportar ${p.puedeExportar ? 'sí' : 'no'} · sandbox ${p.puedeSandbox ? 'sí' : 'no'}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }

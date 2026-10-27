@@ -69,6 +69,8 @@ public class NotificacionesTests(EntornoApi entorno)
     {
         Assert.Equal(ClaimsAtlas.PersonaId, EndpointsPlataforma.ClaimPersona);
         Assert.Equal(ClaimsAtlas.OrganizacionId, EndpointsPlataforma.ClaimOrganizacion);
+        Assert.Equal(ClaimsAtlas.TipoPrincipal, EndpointsPlataforma.ClaimTipoPrincipal);
+        Assert.Equal(ClaimsAtlas.TipoExterno, EndpointsPlataforma.TipoExterno);
     }
 
     [Theory]

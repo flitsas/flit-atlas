@@ -43,7 +43,10 @@ public sealed class OpcionesCorreo
 
     public OpcionesSmtp Smtp { get; set; } = new();
 
-    /// <summary>Tiempo máximo de un envío; el correo sale dentro de la petición (el enlace no puede ir a una cola).</summary>
+    /// <summary>
+    /// Tiempo máximo de un envío. Las invitaciones salen dentro de la petición; la recuperación pedida por la persona y los
+    /// avisos de seguridad, de una cola en memoria (ATLAS-ADR-0049): el enlace nunca se persiste en una cola durable.
+    /// </summary>
     public TimeSpan Tiempo { get; set; } = TimeSpan.FromSeconds(15);
 }
 

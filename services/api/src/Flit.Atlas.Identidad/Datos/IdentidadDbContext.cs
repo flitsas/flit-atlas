@@ -13,9 +13,15 @@ namespace Flit.Atlas.Identidad.Datos;
 /// seguridad y las de OpenIddict (<c>identidad_oidc_*</c>, HU 1.3c). Historial propio <c>__ef_migraciones_identidad</c>
 /// (ATLAS-ADR-0016).
 /// </summary>
-public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opciones)
-    : IdentityDbContext<UsuarioAtlas, RolIdentity, Guid>(opciones)
+public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opciones, IAlcanceDatos? alcance = null)
+    : IdentityDbContext<UsuarioAtlas, RolIdentity, Guid>(opciones), IContextoConAlcance
 {
+    /// <summary>
+    /// Sus tablas no tienen RLS, pero comparte la conexión con el de la plataforma en <c>TransaccionCompartida</c>: si es
+    /// este el que la vuelve a abrir, fija las mismas variables (ATLAS-ADR-0050).
+    /// </summary>
+    public AlcanceDatos Alcance => AlcanceDelSistema.Activo ? AlcanceDatos.Sistema : alcance?.Actual ?? AlcanceDatos.Sistema;
+
     public const string Prefijo = "identidad_";
     public const string TablaHistorial = "__ef_migraciones_identidad";
 
@@ -24,6 +30,10 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
     public DbSet<EventoSeguridad> EventosSeguridad => Set<EventoSeguridad>();
 
     public const string TablaEventoSeguridad = Prefijo + "evento_seguridad";
+
+    public DbSet<SegundoFactorUsuario> SegundosFactores => Set<SegundoFactorUsuario>();
+
+    public const string TablaSegundoFactor = Prefijo + "segundo_factor";
 
     /// <summary>Intentos fallidos seguidos que bloquean una cuenta local (CA de la HU 1.3b).</summary>
     public const int IntentosAntesDelBloqueo = 10;
@@ -60,7 +70,8 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
         ArgumentNullException.ThrowIfNull(opciones);
         opciones
             .UseNpgsql(cadenaConexion, n => n.MigrationsHistoryTable(TablaHistorial, ContextoAtlas.Esquema))
-            .UseSnakeCaseNamingConvention();
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(InterceptorAlcanceDatos.Instancia);
     }
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -106,6 +117,13 @@ public sealed class IdentidadDbContext(DbContextOptions<IdentidadDbContext> opci
         builder.Entity<OpenIddictEntityFrameworkCoreAuthorization<Guid>>().ToTable(Prefijo + "oidc_autorizacion");
         builder.Entity<OpenIddictEntityFrameworkCoreScope<Guid>>().ToTable(Prefijo + "oidc_scope");
         builder.Entity<OpenIddictEntityFrameworkCoreToken<Guid>>().ToTable(Prefijo + "oidc_token");
+
+        builder.Entity<SegundoFactorUsuario>(e =>
+        {
+            e.ToTable(TablaSegundoFactor);
+            e.HasKey(x => x.UsuarioId);
+            e.HasOne<UsuarioAtlas>().WithOne().HasForeignKey<SegundoFactorUsuario>(x => x.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         builder.Entity<EventoSeguridad>(e =>
         {

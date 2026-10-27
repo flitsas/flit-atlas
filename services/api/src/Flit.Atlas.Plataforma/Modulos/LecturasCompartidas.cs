@@ -81,3 +81,48 @@ internal sealed class SinFuentesPublicacion : IFuentesPublicacion
     public Task<IReadOnlyList<FuentePublicacionLeida>> DelRepositorioAsync(string repositorio, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<FuentePublicacionLeida>>([]);
 }
+
+/// <summary>Un documento funcional (manual, guía funcional, ficha comercial) que el portal muestra a una persona externa.</summary>
+/// <param name="AplicativoId">Aplicativo del catálogo al que pertenece; el portal lo pinta en su tarjeta.</param>
+/// <param name="Tipo"><c>manual_usuario</c>, <c>guia_funcional</c>, <c>ficha_comercial</c>…, como los defina la documentación (F5).</param>
+/// <param name="Ruta">Ruta de la PWA donde se lee.</param>
+public sealed record DocumentoDelPortal(Guid Id, Guid AplicativoId, string Titulo, string Tipo, string Ruta);
+
+/// <summary>
+/// Punto de extensión del portal de clientes para la documentación funcional (prompt maestro §7.3 y §8.5,
+/// ATLAS-ADR-0043): lo que <c>ext.cliente_funcional</c> y <c>ext.asesor_comercial</c> ven de los productos que tiene su
+/// organización. Lo implementará el módulo de documentación (F5) con sus niveles de visibilidad (<c>publico_clientes</c>
+/// dentro del alcance); hasta entonces no hay documentos.
+/// </summary>
+public interface IDocumentacionDelPortal
+{
+    /// <summary>Documentos visibles para la persona de la sesión, de los aplicativos dados, siempre de su organización.</summary>
+    Task<IReadOnlyList<DocumentoDelPortal>> DeAplicativosAsync(
+        System.Security.Claims.ClaimsPrincipal usuario, Guid organizacionId, IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default);
+}
+
+/// <summary>Sin módulo de documentación (hasta F5) el portal no muestra documentos.</summary>
+internal sealed class SinDocumentacionDelPortal : IDocumentacionDelPortal
+{
+    public Task<IReadOnlyList<DocumentoDelPortal>> DeAplicativosAsync(
+        System.Security.Claims.ClaimsPrincipal usuario, Guid organizacionId, IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<DocumentoDelPortal>>([]);
+}
+
+/// <summary>
+/// Responsables vigentes (principal o secundario) de los aplicativos, para los demás módulos (HU 4.8, ATLAS-ADR-0046):
+/// los avisos de deprecación de un contrato llegan también a quienes responden por su aplicativo. Lo implementa el módulo
+/// de equipo con su reparto vigente (hoy en Bogotá), sin que nadie más lea sus tablas.
+/// </summary>
+public interface ILectorResponsables
+{
+    /// <summary>Personas responsables vigentes de cada aplicativo pedido; los que no tienen, no aparecen.</summary>
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> DeAplicativosAsync(IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default);
+}
+
+/// <summary>Sin módulo de equipo no hay responsables.</summary>
+internal sealed class SinResponsables : ILectorResponsables
+{
+    public Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> DeAplicativosAsync(IReadOnlyCollection<Guid> aplicativos, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>>(new Dictionary<Guid, IReadOnlyList<Guid>>());
+}

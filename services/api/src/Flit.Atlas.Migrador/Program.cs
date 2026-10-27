@@ -3,7 +3,8 @@
 // idempotente de cada módulo (IModuloAtlas.SembrarAsync, p. ej. el catálogo, ATLAS-ADR-0028) y termina. Los
 // módulos salen de la misma lista que usa atlas-api (ModulosAtlas, ATLAS-ADR-0026).
 // En local lo corre el AppHost antes de atlas-api; en dev/qa/pdn corre como Job o initContainer (HU 1.8).
-// Usa el usuario del servicio (flit_atlas), dueño del esquema atlas según el script de flit.
+// Usa el rol del migrador, dueño del esquema atlas, y al terminar concede al rol de la aplicación (flit_atlas, sin
+// propiedad ni BYPASSRLS) lo justo para que RLS aplique siempre (ATLAS-ADR-0050, deploy/runbook-atlas.md).
 
 using Flit.Atlas.Composicion;
 using Flit.Atlas.Identidad.Datos;
@@ -60,6 +61,30 @@ using (var alcance = host.Services.CreateScope())
 // Datos iniciales de cada módulo (idempotentes: el migrador corre en cada despliegue).
 await ExtensionesModulos.SembrarModulosAsync(host.Services, ModulosAtlas.Registrados);
 
+// Permisos del rol de la aplicación sobre lo que acaba de migrar (ATLAS-ADR-0050). Sin Atlas__BaseDeDatos__RolAplicacion,
+// flit_atlas. Si el migrador corre con el mismo rol de la aplicación (local, o un ambiente sin separar), no hay nada que
+// conceder: atlas-api lo advierte en local y no arranca en dev, qa ni pdn.
+var rolAplicacion = builder.Configuration[RolesBaseDeDatos.ClaveRolAplicacion] ?? RolesBaseDeDatos.RolAplicacionPorDefecto;
+using (var alcance = host.Services.CreateScope())
+{
+    var plataforma = alcance.ServiceProvider.GetRequiredService<PlataformaDbContext>();
+    await plataforma.Database.OpenConnectionAsync();
+    var estado = await RolesBaseDeDatos.RevisarAsync(plataforma.Database.GetDbConnection());
+    if (estado.Rol == rolAplicacion)
+    {
+        Registro.SinSeparar(log, rolAplicacion);
+    }
+    else if (!await RolesBaseDeDatos.ExisteAsync(plataforma.Database.GetDbConnection(), rolAplicacion))
+    {
+        Registro.SinRolAplicacion(log, rolAplicacion);
+    }
+    else
+    {
+        await RolesBaseDeDatos.ConcederAsync(plataforma, rolAplicacion);
+        Registro.Concedido(log, rolAplicacion);
+    }
+}
+
 async Task MigrarAsync(string nombre, Func<IServiceProvider, DbContext> resolver)
 {
     using var alcance = host.Services.CreateScope();
@@ -72,6 +97,15 @@ async Task MigrarAsync(string nombre, Func<IServiceProvider, DbContext> resolver
 
 internal static partial class Registro
 {
+    [LoggerMessage(Level = LogLevel.Information, Message = "Permisos concedidos al rol de la aplicación {Rol}")]
+    public static partial void Concedido(ILogger log, string rol);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "El migrador corre con el rol de la aplicación {Rol}: no se separaron los roles (ATLAS-ADR-0050)")]
+    public static partial void SinSeparar(ILogger log, string rol);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No existe el rol de la aplicación {Rol}: no se concedieron permisos (ATLAS-ADR-0050)")]
+    public static partial void SinRolAplicacion(ILogger log, string rol);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "{Contexto}: {Pendientes} migraciones pendientes")]
     public static partial void Pendientes(ILogger log, string contexto, int pendientes);
 

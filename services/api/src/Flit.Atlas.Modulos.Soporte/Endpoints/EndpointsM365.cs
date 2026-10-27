@@ -72,8 +72,10 @@ internal static class EndpointsM365
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ErrorSoporte>(StatusCodes.Status404NotFound);
 
+        // Revisa a la persona dueña del token (empleada, sin organización): alcance del sistema, pedido aquí (ATLAS-ADR-0050).
         grupo.MapGet(RutaIcs + "{token}.ics", FeedAsync)
             .AllowAnonymous()
+            .ConAlcanceDelSistemaSinSesion()
             .WithName("ObtenerFeedIcsSoporte")
             .WithSummary("Feed .ics (calendario suscrito)")
             .WithDescription(

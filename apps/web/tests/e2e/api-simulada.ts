@@ -209,6 +209,64 @@ const GUIA = {
   aprobadaPor: null, actualizadaEn: '2026-10-23T15:00:00Z',
 };
 
+// Paquetes (HU 4.1): un contrato compartible con dos versiones estables, su índice y una guía aprobada.
+const OPERACIONES_PAQUETE = [
+  { clave: 'GET /tramites/{id}', clase: 'operacion', metodo: 'GET', ruta: '/tramites/{id}', operationId: 'obtenerTramite', resumen: 'Obtener un trámite por su identificador', etiquetas: ['tramites', 'public'], publica: true },
+  { clave: 'POST /tramites', clase: 'operacion', metodo: 'POST', ruta: '/tramites', operationId: 'crearTramite', resumen: 'Radicar un trámite nuevo con sus adjuntos', etiquetas: ['tramites'], publica: false },
+  { clave: 'POST webhook:tramiteRadicado', clase: 'webhook', metodo: 'POST', ruta: 'tramiteRadicado', operationId: 'avisarRadicado', resumen: 'Aviso al cliente cuando se radica', etiquetas: [], publica: true },
+];
+const ELEGIBLE_PAQUETE = {
+  id: 'c1', codigo: 'api-externa', nombre: CONTRATOS[0]!.nombre, tipo: 'openapi', aplicativo: CONTRATOS[0]!.aplicativo,
+  versiones: [
+    { id: 'v13', version: '1.3.0', estado: 'vigente', retiroEn: null, publicadoEn: '2026-10-23T15:00:00Z', operaciones: 3, publicas: 2 },
+    { id: 'v12', version: '1.2.0', estado: 'deprecada', retiroEn: '2027-01-31', publicadoEn: '2026-09-23T15:00:00Z', operaciones: 3, publicas: 2 },
+  ],
+  guias: [{ id: 'g1', titulo: GUIA.titulo, operacion: 'GET /tramites/{id}', revisionPublicada: 2, aplicaDesde: '1.0.0', aplicaHasta: null }],
+};
+
+interface SolicitudPaqueteSimulada {
+  nombre: string;
+  descripcion: string | null;
+  definicion: Array<{ contratoId: string; versionId: string; operaciones: string[]; guias: Array<{ guiaId: string; revision: number | null }> }>;
+  nota: string;
+}
+
+/** Detalle de un paquete simulado a partir de sus revisiones guardadas (la última manda) y la vigente. */
+function detallePaquete(revisiones: SolicitudPaqueteSimulada[], vigente: number | null, gestiona: boolean) {
+  const actual = revisiones.length;
+  const definicion = (r: SolicitudPaqueteSimulada) =>
+    r.definicion.map((e) => {
+      const version = ELEGIBLE_PAQUETE.versiones.find((v) => v.id === e.versionId)!;
+      return {
+        contratoId: e.contratoId, codigo: ELEGIBLE_PAQUETE.codigo, nombre: ELEGIBLE_PAQUETE.nombre, tipo: 'openapi', visibilidad: 'compartible',
+        aplicativo: ELEGIBLE_PAQUETE.aplicativo, versionId: e.versionId, version: version.version, estadoVersion: version.estado,
+        operaciones: e.operaciones, guias: e.guias.map((g) => ({ guiaId: g.guiaId, titulo: GUIA.titulo, revision: g.revision ?? 2 })),
+      };
+    });
+  const detalleRevision = (n: number) => ({
+    numero: n, nombre: revisiones[n - 1]!.nombre, descripcion: revisiones[n - 1]!.descripcion, definicion: definicion(revisiones[n - 1]!),
+    nota: revisiones[n - 1]!.nota, autor: AUTORA_GUIA, guardadaEn: '2026-10-24T15:00:00Z', huella: String(n).repeat(64), vigente: n === vigente,
+  });
+  const ultima = revisiones[actual - 1]!;
+  return {
+    paquete: {
+      id: 'p1', nombre: ultima.nombre, descripcion: ultima.descripcion, estado: vigente === null ? 'borrador' : 'publicado', revisionActual: actual,
+      revisionPublicada: vigente, cambiosSinPublicar: vigente !== actual, publicadaEn: vigente === null ? null : '2026-10-24T16:00:00Z',
+      publicadaPor: vigente === null ? null : AUTORA_GUIA, contratos: ultima.definicion.map((e) => e.contratoId),
+      operaciones: ultima.definicion.reduce((t, e) => t + e.operaciones.length, 0), actualizadoEn: '2026-10-24T15:00:00Z', puedeGestionar: gestiona,
+    },
+    revision: detalleRevision(actual),
+    revisiones: revisiones
+      .map((r, i) => ({
+        numero: i + 1, nombre: r.nombre, nota: r.nota, autor: AUTORA_GUIA, guardadaEn: '2026-10-24T15:00:00Z', huella: String(i + 1).repeat(64),
+        contratos: r.definicion.length, operaciones: r.definicion.reduce((t, e) => t + e.operaciones.length, 0),
+        guias: r.definicion.reduce((t, e) => t + e.guias.length, 0), vigente: i + 1 === vigente,
+      }))
+      .reverse(),
+    detalleRevision,
+  };
+}
+
 /** Consolidado ficticio por ambiente (HU 3.4): un contrato con desfase y breaking pendientes, otro al día. */
 const CONSOLIDADO_CONTRATOS = [
   {
@@ -314,6 +372,9 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
     ? { ...REPARTO_SIMULADO, productos: [...REPARTO_SIMULADO.productos, { aplicativo: REF_FLITO, principal: PRINCIPAL_FLITO, secundario: SECUNDARIO_FLITO }] }
     : REPARTO_SIMULADO;
   let sesionCerrada = false;
+  // Paquetes (HU 4.1): las revisiones guardadas en esta página y la vigente.
+  const revisionesPaquete: SolicitudPaqueteSimulada[] = [];
+  let vigentePaquete: number | null = null;
 
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -398,6 +459,73 @@ export async function simularApi(page: Page, opciones: OpcionesApi): Promise<voi
         if (url.pathname.endsWith('/revisiones/2')) return json(route, REVISIONES_GUIA[0]);
         return json(route, { guia: GUIA, revision: REVISIONES_GUIA[0], puedeEditar: edita, puedeAprobar: false });
       }
+      // Paquetes (HU 4.1): leer con ver_internos; armar con atlas.paquetes.gestionar.
+      case '/api/v1/contratos/paquetes': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        const gestiona = opciones.permisos.includes('atlas.paquetes.gestionar');
+        if (metodo === 'POST') {
+          if (!gestiona) return route.fulfill({ status: 403 });
+          revisionesPaquete.push(route.request().postDataJSON() as SolicitudPaqueteSimulada);
+          const { detalleRevision: _, ...creado } = detallePaquete(revisionesPaquete, vigentePaquete, gestiona);
+          return json(route, creado, 201);
+        }
+        const archivados = url.searchParams.get('estado') === 'archivado';
+        const elementos = revisionesPaquete.length === 0 || archivados ? [] : [detallePaquete(revisionesPaquete, vigentePaquete, gestiona).paquete];
+        return json(route, { puedeCrear: gestiona, elementos });
+      }
+      case '/api/v1/contratos/paquetes/elegibles':
+        if (!opciones.permisos.includes('atlas.paquetes.gestionar')) return route.fulfill({ status: 403 });
+        return json(route, { elementos: [ELEGIBLE_PAQUETE] });
+      case '/api/v1/contratos/paquetes/versiones/v13/operaciones':
+      case '/api/v1/contratos/paquetes/versiones/v12/operaciones': {
+        if (!opciones.permisos.includes('atlas.paquetes.gestionar')) return route.fulfill({ status: 403 });
+        const etiqueta = url.searchParams.get('etiqueta');
+        const soloPublicas = url.searchParams.get('soloPublicas') === 'true';
+        const versionId = url.pathname.includes('/v13/') ? 'v13' : 'v12';
+        return json(route, {
+          contratoId: 'c1', versionId, version: versionId === 'v13' ? '1.3.0' : '1.2.0', total: OPERACIONES_PAQUETE.length, etiquetas: ['public', 'tramites'],
+          elementos: OPERACIONES_PAQUETE.filter((o) => (!soloPublicas || o.publica) && (!etiqueta || o.etiquetas.includes(etiqueta))),
+        });
+      }
+      case '/api/v1/contratos/paquetes/p1':
+      case '/api/v1/contratos/paquetes/p1/revisiones':
+      case '/api/v1/contratos/paquetes/p1/publicacion':
+      case '/api/v1/contratos/paquetes/p1/revisiones/1':
+      case '/api/v1/contratos/paquetes/p1/revisiones/1/fijacion':
+      case '/api/v1/contratos/paquetes/p1/revisiones/2': {
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos') || revisionesPaquete.length === 0) return route.fulfill({ status: 404 });
+        const gestiona = opciones.permisos.includes('atlas.paquetes.gestionar');
+        if (metodo === 'POST' && !gestiona) return route.fulfill({ status: 403 });
+        if (metodo === 'POST' && url.pathname.endsWith('/revisiones')) revisionesPaquete.push(route.request().postDataJSON() as SolicitudPaqueteSimulada);
+        if (metodo === 'POST' && url.pathname.endsWith('/publicacion')) vigentePaquete = revisionesPaquete.length;
+        if (metodo === 'POST' && url.pathname.endsWith('/fijacion')) vigentePaquete = 1;
+        const { detalleRevision, ...detalle } = detallePaquete(revisionesPaquete, vigentePaquete, gestiona);
+        const numero = /\/revisiones\/(\d+)$/.exec(url.pathname)?.[1];
+        if (metodo === 'GET' && numero) return json(route, detalleRevision(Number(numero)));
+        return json(route, detalle, metodo === 'POST' && url.pathname.endsWith('/revisiones') ? 201 : 200);
+      }
+      // «Compartido con» (HU 4.3): una organización con la que ya se comparte y las que se pueden elegir.
+      case '/api/v1/contratos/paquetes/p1/comparticiones':
+        if (!opciones.permisos.includes('atlas.contratos.ver_internos')) return route.fulfill({ status: 403 });
+        return json(route, {
+          puedeCompartir: opciones.permisos.includes('atlas.paquetes.gestionar') && vigentePaquete !== null,
+          elementos: [
+            {
+              id: 'k1', paqueteId: 'p1', paqueteNombre: 'Paquete Integradores Demo', paqueteEstado: 'publicado',
+              organizacion: { id: 'o2', nombre: 'Organismo Demo de Tránsito con un nombre largo', tipo: 'cliente', estado: 'activa' },
+              revisionFijada: null, revisionQueVe: vigentePaquete, puedeExportar: true, puedeSandbox: false,
+              vigenteDesde: '2026-10-24T15:00:00Z', vigenteHasta: '2027-01-31T23:59:59-05:00', estado: 'vigente',
+              otorgadoPor: { id: 'p1', nombre: 'Empleada Demo' }, creadaEn: '2026-10-24T15:00:00Z', actualizadaEn: '2026-10-24T15:00:00Z',
+              revocadaEn: null, puedeGestionar: opciones.permisos.includes('atlas.paquetes.gestionar'),
+            },
+          ],
+        });
+      case '/api/v1/contratos/comparticiones/organizaciones':
+        if (!opciones.permisos.includes('atlas.paquetes.gestionar')) return route.fulfill({ status: 403 });
+        return json(route, [
+          { id: 'o2', nombre: 'Organismo Demo de Tránsito con un nombre largo', tipo: 'cliente' },
+          { id: 'o3', nombre: 'Proveedor Demo', tipo: 'proveedor' },
+        ]);
       // Responsables (HU 2.3 a 2.5).
       case '/api/v1/equipo/responsabilidades':
         if (!opciones.permisos.includes('atlas.equipo.ver')) return route.fulfill({ status: 403 });

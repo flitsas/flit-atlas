@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronRight, Plus } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 
+import { BotonCompartir } from '../../../app/ui/Compartir';
 import { formatearFechaHora } from '../../../app/ui/formato';
 import { Boton, Insignia, Tarjeta } from '../../../app/ui/Tarjeta';
 import {
@@ -49,7 +50,7 @@ export default function GuiasDelContrato({ contratoId, version, guiaId }: { cont
     return <NuevaGuia contratoId={contratoId} alTerminar={(d) => ir(d ? { tipo: 'ver', guiaId: d.guia.id } : { tipo: 'lista' }, d && { tono: 'exito', texto: 'Guía creada en borrador (revisión 1).' })} />;
   }
   if (modo.tipo !== 'lista') {
-    return <Guia modo={modo} aviso={aviso} ir={ir} />;
+    return <Guia contratoId={contratoId} modo={modo} aviso={aviso} ir={ir} />;
   }
 
   return (
@@ -126,10 +127,12 @@ function NuevaGuia({ contratoId, alTerminar }: { contratoId: string; alTerminar:
 }
 
 function Guia({
+  contratoId,
   modo,
   aviso,
   ir,
 }: {
+  contratoId: string;
   modo: { tipo: 'ver' | 'editar' | 'historial'; guiaId: string };
   aviso: Aviso;
   ir: (siguiente: Modo, aviso?: Aviso) => void;
@@ -183,6 +186,7 @@ function Guia({
           >
             Historial
           </Boton>
+          <BotonCompartir ruta={`/contratos/${encodeURIComponent(contratoId)}/guias/${encodeURIComponent(g.id)}`} titulo={g.titulo} que="esta guía" />
           {puedeEditar && (
             <Boton variante="secundario" onClick={() => ir({ tipo: 'editar', guiaId: g.id })}>
               Editar

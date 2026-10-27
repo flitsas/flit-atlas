@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from atlas_docs.ict import mapeo
+from atlas_docs.ict.lenguaje import piezas_internas, textos
 from atlas_docs.ict.saneamiento import buscar_sensibles
 
 
@@ -88,3 +89,16 @@ def test_cada_campo_del_excel_esta_en_el_spec_o_en_el_informe() -> None:
         else:
             assert entrada["destino"] == "informe"
             assert f"`{entrada['campo']}`" in informe
+
+
+@pytest.mark.parametrize("spec", SPECS, ids=lambda a: a.relative_to(CARPETA).as_posix())
+def test_los_textos_de_cara_al_cliente_no_nombran_piezas_internas(spec: Path) -> None:
+    """F4-SEC-09: el spec se comparte podado y la poda no reescribe `description`, `summary` ni `title`."""
+    documento = yaml.safe_load(spec.read_text(encoding="utf-8"))
+
+    internas = piezas_internas(documento)
+
+    assert len(list(textos(documento))) > 100, "el recorrido tiene que ver los textos del spec"
+    assert internas == [], [f"{p.puntero} ({p.tipo}: {p.muestra})" for p in internas]
+    # La procedencia no se pierde: queda en extensiones que la poda quita.
+    assert "Feature #10888" in documento["info"]["x-flit-fuente"]["descripcion_contrato"]

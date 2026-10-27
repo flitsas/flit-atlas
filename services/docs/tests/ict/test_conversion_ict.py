@@ -10,6 +10,7 @@ from conftest import COLABORADOR, CORREO_AJENO, IP_PRIVADA, RUTA_LOCAL, SENSIBLE
 from atlas_docs.ict import mapeo
 from atlas_docs.ict.__main__ import ejecutar, main
 from atlas_docs.ict.excel import leer_libro
+from atlas_docs.ict.lenguaje import piezas_internas
 from atlas_docs.ict.saneamiento import buscar_sensibles
 
 
@@ -254,6 +255,55 @@ def test_cli(tmp_path: Path, excel: Path, flit: Path, capsys: pytest.CaptureFixt
 def test_sin_contrato_de_core_ict_falla(tmp_path: Path, excel: Path) -> None:
     with pytest.raises(SystemExit, match="core-ict.v1.yaml"):
         ejecutar(excel, tmp_path / "vacio", tmp_path / "salida")
+
+
+def _cambiar_login(flit: Path, descripcion: str) -> None:
+    contrato = flit / mapeo.CONTRATO_BASE
+    documento = yaml.safe_load(contrato.read_text(encoding="utf-8"))
+    documento["paths"]["/api/v1/auth/login"]["post"]["description"] = descripcion
+    contrato.write_text(yaml.safe_dump(documento, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def test_los_textos_de_cara_al_cliente_salen_en_lenguaje_funcional(salida: Path) -> None:
+    spec = _spec(salida)
+
+    assert piezas_internas(spec) == []
+    assert spec["info"]["description"] == mapeo.DESCRIPCION_INFO
+    # La procedencia queda en extensiones que la poda quita, no en la descripción.
+    fuente = spec["info"]["x-flit-fuente"]
+    assert fuente["descripcion_contrato"].startswith("Contrato de prueba de core-ict")
+    assert fuente["generador"].startswith("python -m atlas_docs.ict")
+    webhook = spec["webhooks"]["estadoTramite"]["post"]
+    assert "WebhookNotificationJob" in webhook["x-flit-origen"]
+    assert webhook["x-flit-hoja-excel"] == "4 - WebHookTransaction"
+    assert "core-ict" not in webhook["description"]
+
+
+def test_un_texto_del_contrato_reescrito_guarda_el_original_en_una_extension(
+    tmp_path: Path, excel: Path, flit: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    interno = "Autentica contra services/core-ict (`IctAuthEndpoints.LoginAsync`, Bug #1234)."
+    _cambiar_login(flit, interno)
+    puntero = "/paths/~1api~1v1~1auth~1login/post/description"
+    monkeypatch.setitem(mapeo.TEXTOS_FUNCIONALES, puntero, ("Autentica al cliente ICT.", "nombra piezas internas"))
+
+    ejecutar(excel, flit, tmp_path / "salida")
+
+    login = _spec(tmp_path / "salida")["paths"]["/api/v1/auth/login"]["post"]
+    assert login["description"].endswith("Autentica al cliente ICT.")
+    assert login["x-flit-descripcion-contrato"] == interno
+    informe = (tmp_path / "salida" / "informe.md").read_text(encoding="utf-8")
+    assert "Textos del contrato reescritos en lenguaje funcional" in informe
+
+
+def test_un_texto_con_piezas_internas_sin_reescribir_hace_fallar_la_generacion(
+    tmp_path: Path, excel: Path, flit: Path
+) -> None:
+    _cambiar_login(flit, "Autentica contra el Gateway YARP (Feature #10888).")
+
+    with pytest.raises(ValueError, match="piezas internas"):
+        ejecutar(excel, flit, tmp_path / "salida")
+    assert not (tmp_path / "salida").exists()
 
 
 @pytest.mark.parametrize("valor", [TOKEN_FICTICIO, CORREO_AJENO, RUTA_LOCAL, IP_PRIVADA])

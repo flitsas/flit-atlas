@@ -105,6 +105,16 @@ Hechos verificados (solo lectura de `flit` y `flit-gitops`):
   privadas, hosts internos) y por nombre de campo en los ejemplos. Una última pasada recorre todo el árbol y la
   escritura falla si algo sobrevive. El informe cuenta lo sensible del Excel sin copiarlo; el changelog dice «Equipo
   de integraciones de FLIT» en lugar del nombre de la persona (Ley 1581, minimización del §12).
+- **Lenguaje funcional y procedencia** (revisión de seguridad de la F4, F4-SEC-09): el spec se comparte podado y la
+  poda no reescribe textos (ATLAS-ADR-0038), así que `description`, `summary`, `title` y `x-enum-descriptions` salen
+  del script en lenguaje funcional, sin rutas de repo, archivos, clases, proyectos, números de feature o ticket,
+  comandos, nombres de servicios internos, hosts ni IP internos, ADR ni notas del equipo («[por verificar]», el Excel
+  y sus hojas). La procedencia que sirve al equipo **no va en las descripciones**: va en extensiones `x-flit-*` que
+  la poda quita (`info.x-flit-fuente` con la descripción original del contrato y el generador, `x-flit-origen`,
+  `x-flit-hoja-excel`, `x-flit-descripcion-contrato` junto a cada texto del contrato reescrito) o en el informe y la
+  trazabilidad. Los textos del contrato de `flit` que nombran piezas internas se reescriben desde
+  `mapeo.TEXTOS_FUNCIONALES` y cada cambio queda en el informe; la conversión falla si un texto de cara al cliente
+  conserva una pieza interna (`lenguaje.py`), igual que con los datos sensibles.
 - **Dónde vive:** opción 1. `contracts/ict/core-ict.enriquecido.v1.yaml`, `informe.md`, `trazabilidad.json` y
   `propuesta-flit/` (el contrato listo para reemplazar a `core-ict.v1.yaml` y su README). Se retira
   `contracts/legado/` con sus specs por repo, su informe, su trazabilidad y los PR propuestos a los `BackApiExternal*`.
@@ -116,8 +126,9 @@ Hechos verificados (solo lectura de `flit` y `flit-gitops`):
   propios y agrega ejemplos obligatorios, versión semántica, título propio, visibilidad declarada, servidores sin
   hosts internos y seguridad en toda operación pública salvo la que entrega el token. El job `contratos` lo corre con
   vacuum 0.32.0 sobre el spec y la propuesta; el job `python` corre las pruebas del script con fixtures ficticias (un
-  core-ict mínimo y un xlsx generado) y la prueba que recorre `contracts/ict/` buscando datos sensibles, una sola URL
-  base por ambiente y la trazabilidad.
+  core-ict mínimo y un xlsx generado) y la prueba que recorre `contracts/ict/` buscando datos sensibles, piezas
+  internas en los textos de cara al cliente, una sola URL base por ambiente y la trazabilidad. En la API,
+  `PodaIctDescripcionesTests` poda el ICT real hacia pdn y revisa los mismos patrones en el resultado.
 
 ## Consecuencias
 

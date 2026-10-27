@@ -18,7 +18,16 @@ cleanupOutdatedCaches();
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), {
     // /visor/: el visor de contratos (ATLAS-ADR-0039) es otra página, con su propia CSP, y no se precarga.
-    denylist: [/^\/api\//, /^\/hubs\//, /^\/connect\//, /^\/\.well-known\//, /^\/health/, /^\/visor\//],
+    // /atlas-<ambiente>/: el bucket del S3 en el mismo origen (ATLAS-ADR-0051); la descarga firmada va a la red.
+    denylist: [
+      /^\/api\//,
+      /^\/hubs\//,
+      /^\/connect\//,
+      /^\/\.well-known\//,
+      /^\/health/,
+      /^\/visor\//,
+      /^\/atlas-[a-z0-9-]+\//,
+    ],
   }),
 );
 

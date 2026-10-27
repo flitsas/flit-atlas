@@ -105,6 +105,7 @@ public static class ExtensionesIdentidad
         servicios.AddScoped<RegistroSeguridad>();
         servicios.AddScoped<IInvalidadorSesiones, InvalidadorSesiones>();
         servicios.AddScoped<VerificadorContrasena>();
+        servicios.AddScoped<LimiteIngresoPorCuenta>();
         LimitacionTasa.Agregar(servicios);
         servicios.AddSingleton(new ProveedoresHabilitados(entraHabilitado, simulado));
         AgregarAutorizacion(servicios);
@@ -145,6 +146,7 @@ public static class ExtensionesIdentidad
     {
         servicios.AgregarManifiestoPermisos(PermisosIdentidad.Manifiesto);
         servicios.AddScoped<IPermisosDeSesion, PermisosDeSesion>();
+        servicios.AddSingleton<IVerificadorReautenticacion, Seguridad.VerificadorReautenticacion>();
         servicios.Replace(ServiceDescriptor.Scoped<IAlcanceDatos, AlcanceDatosDeSesion>());
         servicios.AddScoped<AdministracionRoles>();
         servicios.AddOptions<OpcionesVencimientos>().BindConfiguration(OpcionesVencimientos.Seccion);
@@ -228,6 +230,9 @@ public static class ExtensionesIdentidad
         });
         servicios.AddSingleton<PasosTemporales>();
         servicios.AddScoped<CorreosExternos>();
+        // La recuperación pedida por la persona y los avisos de seguridad salen fuera de la petición (ATLAS-ADR-0049).
+        servicios.AddSingleton<ColaCorreosIdentidad>();
+        servicios.AddHostedService<TrabajoCorreosIdentidad>();
         servicios.AddScoped<DocumentosLegales>();
         servicios.AddScoped<FactoresExternos>();
         servicios.AddScoped<SesionExterna>();
@@ -332,6 +337,9 @@ public static class ExtensionesIdentidad
             o.Events.OnTokenValidated = async ctx =>
             {
                 await previo(ctx).ConfigureAwait(false);
+                // La devolución de Entra corre antes de la sesión y aprovisiona a la persona por su oid: alcance del
+                // sistema pedido explícitamente (ATLAS-ADR-0050).
+                using var sistema = AlcanceDelSistema.Abrir();
                 await IngresoEntra.AlValidarTokenAsync(ctx, tenantFlit).ConfigureAwait(false);
             };
             o.Events.OnRemoteFailure = IngresoEntra.AlFallarAsync;

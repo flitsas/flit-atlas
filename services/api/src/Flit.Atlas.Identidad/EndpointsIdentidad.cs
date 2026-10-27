@@ -61,7 +61,11 @@ public static class EndpointsIdentidad
         var proveedores = rutas.ServiceProvider.GetService(typeof(ProveedoresHabilitados)) as ProveedoresHabilitados
             ?? throw new InvalidOperationException("Falta AgregarIdentidad en el arranque.");
 
-        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad").WithMetadata(new MetadatoLimiteTasa());
+        // Sin sesión, el ingreso, las invitaciones, la recuperación y la emergencia buscan a la persona por su correo,
+        // enlace o credencial en todas las organizaciones: piden el alcance del sistema (ATLAS-ADR-0050). Con sesión manda
+        // la de la persona.
+        var identidad = rutas.MapGroup("/api/v1/identidad").WithTags("Identidad").WithMetadata(new MetadatoLimiteTasa())
+            .ConAlcanceDelSistemaSinSesion();
 
         identidad.MapGet("/proveedores", () => proveedores)
             .WithName("ListarProveedoresDeIngreso")
@@ -191,6 +195,7 @@ public static class EndpointsIdentidad
         rutas.MapDirectorio();
         rutas.MapAdministracionExternos();
         rutas.MapErroresCliente();
+        rutas.MapReportesCsp();
         return rutas;
     }
 
@@ -202,6 +207,8 @@ public static class EndpointsIdentidad
     /// de correlación de OIDC. Tampoco se exige a las peticiones con <c>Authorization: Bearer</c> (HU 1.3c): esa cabecera
     /// ya prueba lo mismo que la propia (un sitio ajeno no puede ponerla sin CORS) y el token no es una credencial que el
     /// navegador mande solo; esas peticiones solo valen en endpoints con <c>RequiereScope</c>, nunca con la cookie.
+    /// Ni a los informes de la CSP (<see cref="EndpointsReportesCsp.Ruta"/>, ATLAS-ADR-0048): los manda el navegador sin
+    /// cabeceras propias (desde el visor, con <c>Origin: null</c>), no usan la sesión y solo escriben en el log, con tope.
     /// </summary>
     public static IApplicationBuilder UseAntifalsificacionApi(this IApplicationBuilder app) =>
         app.Use(async (http, siguiente) =>
@@ -210,7 +217,11 @@ public static class EndpointsIdentidad
             var cambia = !(HttpMethods.IsGet(peticion.Method) || HttpMethods.IsHead(peticion.Method) || HttpMethods.IsOptions(peticion.Method));
             if (cambia && peticion.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
                 && !peticion.Path.Equals(RutaRetornoEntra, StringComparison.OrdinalIgnoreCase)
-                && !peticion.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                && !peticion.Path.Equals(EndpointsReportesCsp.Ruta, StringComparison.OrdinalIgnoreCase)
+                // La exención del Bearer no vale si también viene la cookie del BFF (revisión F4, F4-SEC-33): esa petición
+                // se puede autenticar con la cookie y debe pasar la antifalsificación como cualquier otra.
+                && !(peticion.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    && !peticion.Cookies.ContainsKey(ClaimsAtlas.NombreCookie)))
             {
                 var origen = peticion.Headers.Origin.ToString();
                 var mismoOrigen = string.IsNullOrEmpty(origen)
