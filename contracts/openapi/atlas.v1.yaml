@@ -2501,7 +2501,7 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.catalogo.gestionar
-  '/api/v1/catalogo/aplicativos/{slug}':
+  '/api/v1/catalogo/aplicativos/{aplicativo}':
     get:
       tags:
         - Catálogo
@@ -2509,7 +2509,7 @@ paths:
       description: 'Datos del aplicativo, su ruta (ancestros), sus hijos y lo que la persona puede hacer con él. 404 si no existe. Requiere atlas.catalogo.ver.'
       operationId: ObtenerFichaAplicativo
       parameters:
-        - name: slug
+        - name: aplicativo
           in: path
           description: Slug del aplicativo.
           required: true
@@ -2534,7 +2534,6 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.catalogo.ver
-  '/api/v1/catalogo/aplicativos/{id}':
     put:
       tags:
         - Catálogo
@@ -2542,7 +2541,7 @@ paths:
       description: 'Reemplaza sus datos. Cambiar slug, tipo, padre o grupo exige además atlas.catalogo.gestionar; el grupo de un producto se propaga a sus descendientes. Queda en la auditoría. Requiere atlas.catalogo.editar sobre el aplicativo o un ancestro.'
       operationId: ActualizarAplicativo
       parameters:
-        - name: id
+        - name: aplicativo
           in: path
           description: Id del aplicativo.
           required: true
@@ -2599,7 +2598,7 @@ paths:
       description: 'Solo si no tiene hijos (si los tiene, elimínalos primero o márcalo retirado). La semilla no lo vuelve a crear. Queda en la auditoría. Requiere atlas.catalogo.gestionar.'
       operationId: EliminarAplicativo
       parameters:
-        - name: id
+        - name: aplicativo
           in: path
           description: Id del aplicativo.
           required: true
