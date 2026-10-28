@@ -141,6 +141,11 @@ public sealed class ModuloContratos : IModuloAtlas
     {
         servicios.AgregarProveedorBusqueda<BusquedaContratos>();
         servicios.AddOptions<OpcionesCanales>().BindConfiguration(OpcionesCanales.Seccion).PostConfigure(o => o.Normalizar());
+        // Paquetes (HU 4.1): en QA también las candidatas rc; en pdn solo estables, y si alguien configura otra cosa no arranca.
+        servicios.AddOptions<Paquetes.OpcionesPaquetes>().BindConfiguration(Paquetes.OpcionesPaquetes.Seccion)
+            .Validate(o => configuracion["Atlas:Ambiente"] != "pdn" || o.PrereleasesAceptadas.Count == 0,
+                $"{Paquetes.OpcionesPaquetes.Seccion}:PrereleasesAceptadas debe ir vacía en pdn: los clientes solo reciben versiones estables.")
+            .ValidateOnStart();
         // Exportaciones (HU 4.5, ATLAS-ADR-0042): la cola de resultados de atlas-docs, la retención y la consulta del portal.
         servicios.AddOptions<Exportaciones.OpcionesExportaciones>().BindConfiguration(Exportaciones.OpcionesExportaciones.Seccion).ValidateOnStart();
         servicios.AddSingleton<IValidateOptions<Exportaciones.OpcionesExportaciones>, Exportaciones.ValidadorOpcionesExportaciones>();

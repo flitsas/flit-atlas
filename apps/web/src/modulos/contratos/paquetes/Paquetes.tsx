@@ -77,7 +77,7 @@ function Lista() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Paquetes de contratos</h1>
-          <p className="text-sm text-atlas-texto-suave">Selecciones de contratos compartibles, en versiones estables, para compartir con clientes.</p>
+          <p className="text-sm text-atlas-texto-suave">Selecciones de contratos compartibles, en versiones estables (en QA, también candidatas), para compartir con clientes.</p>
         </div>
         {lista.data?.puedeCrear && (
           <Link

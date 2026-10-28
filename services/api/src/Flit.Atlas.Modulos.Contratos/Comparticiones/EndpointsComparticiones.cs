@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using static Flit.Atlas.Modulos.Contratos.Guias.EndpointsGuias;
 
 namespace Flit.Atlas.Modulos.Contratos.Comparticiones;
@@ -200,7 +201,7 @@ internal static class EndpointsComparticiones
         [Description("Id del paquete.")] Guid paqueteId,
         [Description("La organización, la revisión, los permisos y la vigencia.")] SolicitudComparticion solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, IOptions<OpcionesPaquetes> opcionesPaquetes, TimeProvider reloj, CancellationToken ct)
     {
         var (paquete, error) = await GestionableAsync(paqueteId, solicitud?.RevisionFijada, http.User, contexto, lector, permisosDeSesion, ct);
         if (paquete is null)
@@ -231,7 +232,7 @@ internal static class EndpointsComparticiones
         {
             errores[campo] = mensajes;
         }
-        if (await ErrorDeRevisionAsync(paquete, solicitud.RevisionFijada, errores, contexto, ct) is { } conflicto)
+        if (await ErrorDeRevisionAsync(paquete, solicitud.RevisionFijada, errores, contexto, opcionesPaquetes.Value, ct) is { } conflicto)
         {
             return conflicto;
         }
@@ -283,7 +284,8 @@ internal static class EndpointsComparticiones
         [Description("Id de la compartición.")] Guid comparticionId,
         [Description("La revisión, los permisos y la vigencia.")] SolicitudCambioComparticion solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, Sandbox.ServicioSandbox sandbox, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, Sandbox.ServicioSandbox sandbox, IOptions<OpcionesPaquetes> opcionesPaquetes, TimeProvider reloj,
+        CancellationToken ct)
     {
         var comparticion = await contexto.Comparticiones.FirstOrDefaultAsync(c => c.Id == comparticionId && c.PaqueteId == paqueteId, ct);
         if (comparticion is null)
@@ -307,7 +309,7 @@ internal static class EndpointsComparticiones
         var ahora = reloj.GetUtcNow();
         var (desde, hasta, errores) = ReglasComparticiones.Vigencia(solicitud.VigenteDesde ?? comparticion.VigenteDesde, solicitud.VigenteHasta,
             tipo ?? TipoOrganizacion.Cliente, ahora);
-        if (await ErrorDeRevisionAsync(paquete, solicitud.RevisionFijada, errores, contexto, ct) is { } conflicto)
+        if (await ErrorDeRevisionAsync(paquete, solicitud.RevisionFijada, errores, contexto, opcionesPaquetes.Value, ct) is { } conflicto)
         {
             return conflicto;
         }
@@ -384,7 +386,8 @@ internal static class EndpointsComparticiones
 
     /// <summary>La revisión fijada debe existir y cumplir hoy las reglas de publicación (409 no_publicable con el detalle).</summary>
     private static async Task<IResult?> ErrorDeRevisionAsync(
-        PaqueteContratos paquete, int? revisionFijada, Dictionary<string, string[]> errores, ContratosDbContext contexto, CancellationToken ct)
+        PaqueteContratos paquete, int? revisionFijada, Dictionary<string, string[]> errores, ContratosDbContext contexto,
+        OpcionesPaquetes opciones, CancellationToken ct)
     {
         if (revisionFijada is not { } numero)
         {
@@ -396,7 +399,7 @@ internal static class EndpointsComparticiones
             return null;
         }
         var revision = await contexto.RevisionesPaquete.AsNoTracking().FirstAsync(r => r.PaqueteId == paquete.Id && r.Numero == numero, ct);
-        var problemas = await EndpointsPaquetes.ProblemasParaPublicarAsync(contexto, FotoPaquete.LeerDefinicion(revision.Definicion), ct);
+        var problemas = await EndpointsPaquetes.ProblemasParaPublicarAsync(contexto, FotoPaquete.LeerDefinicion(revision.Definicion), opciones, ct);
         return problemas.Count == 0
             ? null
             : Results.Json(new ErrorComparticion("no_publicable", $"La revisión {numero} ya no se puede compartir: {problemas[0]}", [.. problemas.Take(20)]),

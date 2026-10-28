@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Flit.Atlas.Modulos.Contratos.Paquetes;
 using Flit.Atlas.Modulos.Contratos.Tests;
 using Flit.Atlas.Plataforma.Permisos;
 using Flit.Atlas.Plataforma.Publicacion;
@@ -44,8 +45,8 @@ public sealed class PaquetesContratosTests(EntornoApi entorno) : IDisposable
                 : []);
     }
 
-    private WebApplicationFactory<Program> Api() => entorno.Api(
-        configuracion: new Dictionary<string, string>
+    private WebApplicationFactory<Program> Api(Dictionary<string, string>? extra = null) => entorno.Api(
+        configuracion: new Dictionary<string, string>(extra ?? [])
         {
             [$"{OpcionesPublicacion.Seccion}:Audiencia"] = GitHubActionsSimulado.Audiencia,
             [$"{OpcionesPublicacion.Seccion}:Propietarios:0"] = GitHubActionsSimulado.Propietario,
@@ -93,7 +94,7 @@ public sealed class PaquetesContratosTests(EntornoApi entorno) : IDisposable
         return [.. (await Json(respuesta)).GetProperty("errors").EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal)];
     }
 
-    /// <summary>Un aplicativo del catálogo con su fuente de publicación (develop y release).</summary>
+    /// <summary>Un aplicativo del catálogo con su fuente de publicación (develop, staging y release).</summary>
     private static async Task<(Guid Id, string Slug)> AplicativoAsync(Navegador lider)
     {
         var slug = $"api-paquetes-{Guid.NewGuid().ToString("N")[..10]}";
@@ -104,7 +105,7 @@ public sealed class PaquetesContratosTests(EntornoApi entorno) : IDisposable
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var fuente = await Enviar(lider, HttpMethod.Post, "/api/v1/catalogo/fuentes-publicacion", new
         {
-            aplicativo = slug, repositorio = $"{GitHubActionsSimulado.Propietario}/{slug}", ramas = new[] { "develop", "release" }, workflow = (string?)null,
+            aplicativo = slug, repositorio = $"{GitHubActionsSimulado.Propietario}/{slug}", ramas = new[] { "develop", "staging", "release" }, workflow = (string?)null,
             tipos = new[] { "openapi" }, nota = "Prueba de la HU 4.1.",
         });
         Assert.Equal(HttpStatusCode.Created, fuente.StatusCode);
@@ -117,7 +118,7 @@ public sealed class PaquetesContratosTests(EntornoApi entorno) : IDisposable
     {
         var info = version.Split('-')[0];
         var spec = SpecsDeEjemplo.OpenApiYaml.Replace("  version: 1.2.0\n", $"  version: {info}\n" + (compartible ? Compartible : string.Empty), StringComparison.Ordinal);
-        var rama = version.Contains('-', StringComparison.Ordinal) ? "develop" : "release";
+        var rama = version.Contains("-rc.", StringComparison.Ordinal) ? "staging" : version.Contains('-', StringComparison.Ordinal) ? "develop" : "release";
         using var cliente = api.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
         using var peticion = new HttpRequestMessage(HttpMethod.Post, "/api/v1/contratos/publicaciones")
         {
@@ -274,6 +275,46 @@ public sealed class PaquetesContratosTests(EntornoApi entorno) : IDisposable
         Assert.All(acciones, a => Assert.DoesNotContain("Operaciones públicas", a.Datos, StringComparison.Ordinal));
         using var fijacion = JsonDocument.Parse(acciones[5].Datos!);
         Assert.Equal((2, 3), (fijacion.RootElement.GetProperty("revision").GetInt32(), fijacion.RootElement.GetProperty("anterior").GetInt32()));
+    }
+
+    [Fact]
+    public async Task Donde_se_aceptan_las_candidatas_rc_van_en_paquetes_y_las_de_develop_no()
+    {
+        // QA (decisión del líder del 28/10/2026): Contratos:Paquetes:PrereleasesAceptadas = rc. En pdn va vacía.
+        await using var api = Api(new() { [$"{OpcionesPaquetes.Seccion}:PrereleasesAceptadas:0"] = "rc" });
+        var (lider, _) = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
+        var (_, slug) = await AplicativoAsync(lider);
+        // Sin estable todavía: la candidata fija que el contrato es compartible; la de develop no cuenta.
+        var (contratoId, rc) = await PublicarAsync(api, slug, "api-candidata", "2.0.0-rc.a1b2c3d", compartible: true);
+        var (_, dev) = await PublicarAsync(api, slug, "api-candidata", "2.1.0-dev.b2c3d4e", compartible: true);
+
+        var elegibles = (await Json(await lider.GetAsync("/api/v1/contratos/paquetes/elegibles"))).GetProperty("elementos").EnumerateArray().ToList();
+        var elegible = Assert.Single(elegibles, e => e.GetProperty("aplicativo").GetProperty("slug").GetString() == slug);
+        Assert.Equal(contratoId.ToString(), elegible.GetProperty("id").GetString());
+        Assert.Equal(["2.0.0-rc.a1b2c3d"], elegible.GetProperty("versiones").EnumerateArray().Select(v => v.GetProperty("version").GetString()));
+
+        var paquetes = "/api/v1/contratos/paquetes";
+        Assert.Equal(["definicion[0].versionId"], await Errores(await Enviar(lider, HttpMethod.Post, paquetes, Paquete([Entrada(contratoId, dev, ["GET /tramites/{id}"])]))));
+        var creado = await Enviar(lider, HttpMethod.Post, paquetes, Paquete([Entrada(contratoId, rc, ["GET /tramites/{id}"])]));
+        Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
+        var id = (await Json(creado)).GetProperty("paquete").GetProperty("id").GetString();
+        Assert.Equal(HttpStatusCode.OK, (await Enviar(lider, HttpMethod.Post, $"{paquetes}/{id}/publicacion", new { revision = 1 })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Sin_configurarlas_una_candidata_rc_no_va_en_paquetes()
+    {
+        await using var api = Api();
+        var (lider, _) = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
+        var (_, slug) = await AplicativoAsync(lider);
+        var (contratoId, _) = await PublicarAsync(api, slug, "api-candidata", "1.0.0", compartible: true);
+        var (_, rc) = await PublicarAsync(api, slug, "api-candidata", "1.1.0-rc.c3d4e5f", compartible: true);
+
+        var elegibles = (await Json(await lider.GetAsync("/api/v1/contratos/paquetes/elegibles"))).GetProperty("elementos").EnumerateArray().ToList();
+        var elegible = Assert.Single(elegibles, e => e.GetProperty("aplicativo").GetProperty("slug").GetString() == slug);
+        Assert.Equal(["1.0.0"], elegible.GetProperty("versiones").EnumerateArray().Select(v => v.GetProperty("version").GetString()));
+        Assert.Equal(["definicion[0].versionId"], await Errores(await Enviar(lider, HttpMethod.Post, "/api/v1/contratos/paquetes",
+            Paquete([Entrada(contratoId, rc, ["GET /tramites/{id}"])]))));
     }
 
     [Fact]
