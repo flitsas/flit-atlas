@@ -13,10 +13,13 @@
 {% if pdf %}{{ impresion }}{% endif %}
 </style>
 </head>
+{#- `vista` dice qué partes del documento van (el PDF se dibuja por partes, `pdf.py`); `paginas`, el número de página de
+    cada ancla para el índice del PDF. El HTML usa la vista completa y no lleva números. #}
+{%- macro pagina(ancla) %}{% if paginas %} data-pagina="{{ paginas.get(ancla, '') }}"{% endif %}{% endmacro %}
 <body>
 <div class="marca-agua" aria-hidden="true">{{ d.marca_agua }}</div>
 <main>
-{% if pdf %}<span class="cadena-marca">{{ d.marca_agua }}</span><span class="cadena-huella">SHA-256 {{ d.hash[:16] }}…</span>{% endif %}
+{% if vista.frente %}
 <header class="portada" id="portada">
   <div class="marca">FLIT · ATLAS</div>
   <h1>{{ d.paquete }}</h1>
@@ -34,13 +37,13 @@
 <nav class="indice" id="indice" aria-label="Índice">
   <h2>Índice</h2>
   <ol>
-    <li><a href="#changelog">Cambios del paquete</a></li>
-    {% if d.guias %}<li><a href="#guias">Guías</a>
-      <ol>{% for g in d.guias %}<li><a href="#{{ g.ancla }}">{{ g.titulo }}</a></li>{% endfor %}</ol>
+    <li><a href="#changelog"{{ pagina("changelog") }}>Cambios del paquete</a></li>
+    {% if d.guias %}<li><a href="#guias"{{ pagina("guias") }}>Guías</a>
+      <ol>{% for g in d.guias %}<li><a href="#{{ g.ancla }}"{{ pagina(g.ancla) }}>{{ g.titulo }}</a></li>{% endfor %}</ol>
     </li>{% endif %}
     {% for c in d.contratos %}
-    <li><a href="#{{ c.ancla }}">{{ c.titulo }} {{ c.version }}</a>
-      <ol>{% for op in c.operaciones %}<li><a href="#{{ op.ancla }}">{{ op.metodo }} {{ op.ruta }} · {{ op.titulo }}</a></li>{% endfor %}</ol>
+    <li><a href="#{{ c.ancla }}"{{ pagina(c.ancla) }}>{{ c.titulo }} {{ c.version }}</a>
+      <ol>{% for op in c.operaciones %}<li><a href="#{{ op.ancla }}"{{ pagina(op.ancla) }}>{{ op.metodo }} {{ op.ruta }} · {{ op.titulo }}</a></li>{% endfor %}</ol>
     </li>
     {% endfor %}
   </ol>
@@ -55,11 +58,12 @@
   </table>
   {% else %}<p>Primera revisión del paquete.</p>{% endif %}
 </section>
+{% endif %}
 
-{% if d.guias %}
-<section id="guias">
-  <h2>Guías</h2>
-  {% for g in d.guias %}
+{% if vista.guias %}
+<section{% if vista.titulo_guias %} id="guias"{% endif %}>
+  {% if vista.titulo_guias %}<h2>Guías</h2>{% endif %}
+  {% for g in vista.guias %}
   <article class="guia" id="{{ g.ancla }}">
     <h3>{{ g.titulo }}</h3>
     {{ md(g.markdown) }}
@@ -68,8 +72,9 @@
 </section>
 {% endif %}
 
-{% for c in d.contratos %}
-<section class="contrato" id="{{ c.ancla }}">
+{% for b in vista.bloques %}{% set c = b.contrato %}
+<section class="contrato"{% if b.cabecera %} id="{{ c.ancla }}"{% endif %}>
+  {% if b.cabecera %}
   <h2>{{ c.titulo }} {{ c.version }}</h2>
   <p class="etiqueta">Contrato {{ c.contrato }} · {{ c.tipo }}</p>
   {{ md(c.descripcion) }}
@@ -83,8 +88,9 @@
   <table><thead><tr><th>Versión</th><th>Fecha</th><th>Cambio</th></tr></thead>
   <tbody>{% for h in c.historial %}<tr><td>{{ h.version }}</td><td>{{ h.fecha }}</td><td>{{ h.cambio }}</td></tr>{% endfor %}</tbody></table>
   {% endif %}
+  {% endif %}
 
-  {% for op in c.operaciones %}
+  {% for op in b.operaciones %}
   <article class="operacion" id="{{ op.ancla }}">
     <h3><span class="metodo">{{ op.metodo }}</span> <span class="ruta">{{ op.ruta }}</span></h3>
     <p><strong>{{ op.titulo }}</strong> <span class="etiqueta">· {{ op.etiqueta }} · {{ op.operation_id }}</span>{% if op.deprecada %} <span class="deprecada">Deprecada</span>{% endif %}</p>
@@ -138,23 +144,29 @@
   </article>
   {% endfor %}
 
-  {% if c.tablas %}
-  <h3>Tablas de referencia</h3>
-  {% for t in c.tablas %}
+  {% if b.tablas %}
+  {% if b.titulo_tablas %}<h3>Tablas de referencia</h3>{% endif %}
+  {% for trozo in b.tablas %}{% set t = trozo.tabla %}
+  {% if trozo.primero %}
   <h4 id="{{ c.ancla }}-tabla-{{ t.id | lower }}">{{ t.titulo }}</h4>
   {% if t.descripcion %}<p class="etiqueta">{{ t.descripcion }}</p>{% endif %}
+  {% else %}
+  <h4>{{ t.titulo }} (continuación)</h4>
+  {% endif %}
   <table><thead><tr>{% for col in t.columnas %}<th>{{ col }}</th>{% endfor %}</tr></thead>
-  <tbody>{% for fila in t.filas %}<tr>{% for v in fila %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+  <tbody>{% for fila in trozo.filas %}<tr>{% for v in fila %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
   {% endfor %}
   {% endif %}
 </section>
 {% endfor %}
 
+{% if vista.pie %}
 <footer class="pie">
   <p>{{ d.leyenda }}</p>
   <p>SHA-256 del contenido exportado: <span class="hash">{{ d.hash }}</span></p>
   <p>Generado por Flit Atlas. Las URL de producción solo se usan con credenciales entregadas por FLIT.</p>
 </footer>
+{% endif %}
 </main>
 </body>
 </html>

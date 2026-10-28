@@ -16,13 +16,14 @@ dependencies = [
     "markdown-it-py>=4.2.0,<4.3",
     "aio-pika>=10.1.0,<10.1.1",
     "pyjwt[crypto]>=2.15.1,<2.16",
+    # Une las partes del PDF (exportes/pdf.py, ATLAS-ADR-0042). 6.19.0 es del 16/09/2026.
+    "pypdf>=6.19.0,<6.20",
 ]
 
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1,<2.14",
     "jsonschema>=4.26.0,<4.27",
-    "pypdf>=6.19.0,<6.20",
     "pytest>=9.1.1,<10",
     "ruff>=0.16.10,<0.17",
 ]

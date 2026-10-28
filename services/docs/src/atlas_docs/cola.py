@@ -9,7 +9,12 @@ Solo atlas-api publica en `flit.atlas`.
 Entrega al menos una vez: la salida es determinista, así que una reentrega regenera los mismos bytes en las mismas
 claves y vuelve a publicar el resultado; atlas-api ignora el resultado de una exportación ya terminada. Un fallo de
 infraestructura (S3 o el broker) se reintenta a los 30 s por la cola de reintentos; a la quinta vez el mensaje pasa a
-la cola de errores. Un error del contenido (spec inválido, entrada ilegible) no se reintenta: se publica `fallida`.
+la cola de errores y se publica `fallida`. Un error del contenido (spec inválido, entrada ilegible) no se reintenta:
+se publica `fallida` de una vez.
+
+Si el pod muere con el mensaje en la mano (sin memoria, por ejemplo), RabbitMQ lo vuelve a entregar marcado como
+reentregado. Procesarlo enseguida repetiría la caída sin fin, así que cuenta como un fallo más y va por la misma cola de
+reintentos: a la quinta, `fallida`.
 """
 
 import asyncio
@@ -212,6 +217,29 @@ class ManejadorExportaciones:
         )
         log.info("Exportación %s lista: %d archivos", exportacion_id, len(archivos))
 
+    async def abandonar(self, cuerpo: bytes) -> None:
+        """Publica `fallida` (interno) de una exportación que no se terminó tras los reintentos. Si el sobre no se puede
+        atribuir a una exportación, no publica nada (va igual a la cola de errores)."""
+        if len(cuerpo) > MAX_BYTES_MENSAJE:
+            return
+        try:
+            recibido = SobreSolicitado.model_validate_json(cuerpo)
+        except ValidationError:
+            return
+        exportacion_id = recibido.data.get("exportacionId")
+        if (
+            recibido.type != SOLICITADA
+            or not isinstance(exportacion_id, str)
+            or not re.fullmatch(PATRON_UUID, exportacion_id)
+        ):
+            return
+        datos = {
+            "exportacionId": exportacion_id,
+            "codigo": "interno",
+            "mensaje": "La exportación no se pudo generar después de varios intentos. Solicítala de nuevo.",
+        }
+        await self._publicador.publicar(sobre(FALLIDA, datos, recibido.tenant_id, recibido.correlation_id))
+
 
 # --- Broker ---
 
@@ -324,6 +352,10 @@ class ConsumidorExportaciones:
 
 async def atender(mensaje: AbstractIncomingMessage, manejador: ManejadorExportaciones, por_defecto: Any) -> None:
     """Procesa, confirma o devuelve un mensaje según el resultado."""
+    if mensaje.redelivered:
+        # Nadie lo confirmó: el pod que lo tenía murió a mitad. Cuenta como un fallo y espera en la cola de reintentos.
+        await _fallo(mensaje, manejador, por_defecto, "se interrumpió (el pod se reinició)")
+        return
     try:
         await manejador.procesar(mensaje.body)
     except MensajeIlegibleError as error:
@@ -331,15 +363,24 @@ async def atender(mensaje: AbstractIncomingMessage, manejador: ManejadorExportac
         await _a_errores(mensaje, por_defecto)
         return
     except Exception:  # noqa: BLE001 — fallo de infraestructura: reintento o errores
-        veces = muertes(mensaje.headers)
-        if veces + 1 >= MAXIMO_MUERTES:
-            log.exception("La exportación falló %d veces; pasa a %s", veces + 1, COLA_ERRORES)
-            await _a_errores(mensaje, por_defecto)
-        else:
-            log.exception("Fallo de infraestructura; se reintenta en %d s", ESPERA_REINTENTO_MS // 1000)
-            await mensaje.nack(requeue=False)
+        log.exception("Fallo de infraestructura al exportar")
+        await _fallo(mensaje, manejador, por_defecto, "falló la infraestructura")
         return
     await mensaje.ack()
+
+
+async def _fallo(
+    mensaje: AbstractIncomingMessage, manejador: ManejadorExportaciones, por_defecto: Any, motivo: str
+) -> None:
+    """A la cola de reintentos o, a la quinta vez, a la de errores con la exportación en `fallida`."""
+    veces = muertes(mensaje.headers) + 1
+    if veces >= MAXIMO_MUERTES:
+        log.error("La exportación %s %d veces; pasa a %s", motivo, veces, COLA_ERRORES)
+        await manejador.abandonar(mensaje.body)
+        await _a_errores(mensaje, por_defecto)
+    else:
+        log.warning("La exportación %s; se reintenta en %d s", motivo, ESPERA_REINTENTO_MS // 1000)
+        await mensaje.nack(requeue=False)
 
 
 async def _a_errores(mensaje: AbstractIncomingMessage, por_defecto: Any) -> None:
