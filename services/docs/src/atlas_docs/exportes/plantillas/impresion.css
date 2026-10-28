@@ -1,25 +1,17 @@
-/* Solo para el PDF (WeasyPrint): página A4, encabezado con la marca de agua y pie con el número de página. */
+/* Solo para el PDF (WeasyPrint): página A4. El encabezado (marca de agua) y el pie (huella y número de página) van en
+   la capa de `capa.html.j2`, que se superpone después de unir las partes (`pdf.py`). */
 @page {
   size: A4;
   margin: 20mm 14mm 20mm 14mm;
-  @top-left { content: "FLIT · Atlas"; font-size: 8pt; color: #476bd9; font-weight: bold; }
-  @top-right { content: string(marca); font-size: 8pt; color: #445569; }
-  @bottom-left { content: string(huella); font-size: 7pt; color: #445569; }
-  @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #445569; }
-}
-@page :first {
-  @top-left { content: none; }
-  @top-right { content: none; }
 }
 html { font-size: 10pt; }
 main { max-width: none; padding: 0; }
-.cadena-marca { string-set: marca content(); display: block; height: 0; overflow: hidden; color: transparent; }
-.cadena-huella { string-set: huella content(); display: block; height: 0; overflow: hidden; color: transparent; }
 .marca-agua { position: fixed; top: 120mm; font-size: 32pt; }
 .portada { page-break-after: always; min-height: 230mm; }
 .indice { page-break-after: always; }
 .indice a { text-decoration: none; color: inherit; }
-.indice a::after { content: leader(".") target-counter(attr(href), page); }
+/* El número de página lo calcula pdf.py: cada parte se dibuja aparte y target-counter no vería las demás. */
+.indice a[data-pagina]::after { content: leader(".") attr(data-pagina); }
 .contrato { page-break-before: always; }
 .guia { page-break-before: always; }
 h2, h3, h4 { page-break-after: avoid; }

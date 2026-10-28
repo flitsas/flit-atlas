@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+{#- Capa del PDF (pdf.py): páginas vacías del mismo tamaño y márgenes que el contenido, solo con el encabezado (marca
+    de agua) y el pie (huella y «Página X de Y»). Se superpone a cada página después de unir las partes, así el número
+    de página y el total no dependen de cómo se partió el documento. #}
+<style>
+@page {
+  size: A4;
+  margin: 20mm 14mm 20mm 14mm;
+  @top-left { content: "FLIT · Atlas"; font-size: 8pt; color: #476bd9; font-weight: bold; }
+  @top-right { content: string(marca); font-size: 8pt; color: #445569; }
+  @bottom-left { content: string(huella); font-size: 7pt; color: #445569; }
+  @bottom-right { content: string(numero); font-size: 8pt; color: #445569; }
+}
+{% if portada %}
+@page :first {
+  @top-left { content: none; }
+  @top-right { content: none; }
+}
+{% endif %}
+/* Los márgenes de @page heredan de `html`, no de `body`. */
+html { font-family: "DejaVu Sans", "Liberation Sans", "Segoe UI", Arial, sans-serif; }
+body { margin: 0; }
+.hoja { page-break-after: always; height: 0; }
+.hoja:last-child { page-break-after: auto; }
+.cadena { display: block; height: 0; overflow: hidden; color: transparent; }
+.marca { string-set: marca content(); }
+.huella { string-set: huella content(); }
+.numero { string-set: numero content(); }
+</style>
+</head>
+<body>
+<span class="cadena marca">{{ marca }}</span><span class="cadena huella">SHA-256 {{ huella }}…</span>
+{% for n in numeros %}<div class="hoja"><span class="cadena numero">Página {{ n }} de {{ total }}</span></div>
+{% endfor %}
+</body>
+</html>
