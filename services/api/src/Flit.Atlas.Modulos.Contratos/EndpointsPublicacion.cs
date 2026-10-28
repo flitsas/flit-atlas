@@ -104,7 +104,8 @@ internal static partial class EndpointsPublicacion
     private static async Task<IResult> PublicarAsync(
         [Description("La versión a publicar.")] SolicitudPublicacion solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, IFuentesPublicacion fuentes,
-        IOptionsMonitor<OpcionesPublicacion> opciones, TimeProvider reloj, ILoggerFactory logs, CancellationToken ct)
+        IOptionsMonitor<OpcionesPublicacion> opciones, IOptions<Paquetes.OpcionesPaquetes> opcionesPaquetes, TimeProvider reloj,
+        ILoggerFactory logs, CancellationToken ct)
     {
         var log = logs.CreateLogger(typeof(EndpointsPublicacion));
         var publicador = http.Publicador();
@@ -189,7 +190,7 @@ internal static partial class EndpointsPublicacion
         try
         {
             var publicada = await GuardarAsync(contexto, plataforma, http, publicador, fuente, aplicativo, codigo, tipo.Value, version, spec, tamano,
-                sha, analizado, changelog, tieneBreaking, changelogBase, ahora, ct);
+                sha, analizado, changelog, tieneBreaking, changelogBase, opcionesPaquetes.Value.Acepta(version.Prerelease), ahora, ct);
             if (publicada is Created<VersionPublicada> { Value: { } creada })
             {
                 Publicada(log, publicador.Repositorio, aplicativo, codigo, creada.Version);
@@ -212,7 +213,8 @@ internal static partial class EndpointsPublicacion
     private static async Task<IResult> GuardarAsync(
         ContratosDbContext contexto, PlataformaDbContext plataforma, HttpContext http, PublicadorCi publicador, FuentePublicacionLeida fuente,
         string aplicativo, string codigo, TipoContrato tipo, VersionSemantica version, string spec, int tamano, string sha,
-        SpecAnalizado analizado, string changelog, bool tieneBreaking, string? changelogBase, DateTimeOffset ahora, CancellationToken ct)
+        SpecAnalizado analizado, string changelog, bool tieneBreaking, string? changelogBase, bool fijaVisibilidad, DateTimeOffset ahora,
+        CancellationToken ct)
     {
         var contrato = await contexto.Contratos.FirstOrDefaultAsync(c => c.AplicativoId == fuente.AplicativoId && c.Codigo == codigo, ct);
         if (contrato is not null && contrato.Tipo != tipo)
@@ -230,9 +232,10 @@ internal static partial class EndpointsPublicacion
         contrato.Nombre = nombre;
         contrato.Descripcion = analizado.Descripcion;
         contrato.Repositorio = publicador.Repositorio;
-        // La visibilidad la decide el repo (info.x-flit-visibilidad) y sigue a la última versión estable: una prerelease de
-        // develop no cambia lo que puede ir en paquetes de clientes. Sin la marca, interna (HU 4.1, ATLAS-ADR-0041).
-        if (version.EsEstable)
+        // La visibilidad la decide el repo (info.x-flit-visibilidad) y sigue a la última versión que puede ir en paquetes:
+        // la estable o, donde el ambiente lo permite (QA), la candidata rc. Una prerelease de develop no cambia lo que va
+        // a clientes. Sin la marca, interna (HU 4.1, ATLAS-ADR-0041).
+        if (fijaVisibilidad)
         {
             contrato.Visibilidad = analizado.VisibilidadDeclarada ?? VisibilidadContrato.Interna;
         }

@@ -101,6 +101,16 @@ Al **publicar** (la última revisión) o **fijar** (una anterior a la última) s
 
 La publicación desde la CI lee `info.x-flit-visibilidad` (OpenAPI y AsyncAPI) y, **solo en una versión estable**, la copia al contrato (sin la marca, `interna`). Una prerelease de `develop` no cambia lo que puede ir en paquetes. Proto no la declara todavía (queda interno).
 
+### Candidatas `-rc` en QA (28/10/2026)
+
+Decisión del líder: en QA las versiones candidatas de `staging` (`X.Y.Z-rc.<sha7>`) también van en paquetes, para probar
+el portal y las exportaciones antes de que el contrato llegue a `release`. `Contratos:Paquetes:PrereleasesAceptadas`
+lista los prefijos de prerelease aceptados (en QA, `rc`; vacía por defecto). Una versión aceptada cuenta como una
+estable en las tres reglas: aparece en `GET /paquetes/elegibles`, pasa la validación al guardar, publicar, fijar y
+compartir, y al publicarse copia `info.x-flit-visibilidad` al contrato. Las de `develop` (`dev`) siguen fuera. En pdn
+la lista va vacía y atlas-api **no arranca** si trae algo (`ValidateOnStart`): los clientes de producción solo reciben
+versiones estables.
+
 ### API (`/api/v1/contratos/paquetes`)
 
 | Método y ruta | Permiso |

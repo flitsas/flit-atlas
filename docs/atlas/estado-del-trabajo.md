@@ -1,6 +1,6 @@
 # Estado del trabajo · Flit Atlas
 
-> **Corte:** 26/10/2026, noche (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
+> **Corte:** 28/10/2026, mañana (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
 > Se actualiza al cerrar cada jornada. El prompt maestro (`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`) sigue
 > siendo la fuente que prevalece; aquí solo va **dónde quedamos** y **qué sigue**.
 
@@ -39,6 +39,9 @@ en `c8c64ee` y el PR se integró. Revisar el CI de `develop` sobre `f635cce`.
    `atlas_docs.ict` falla si un texto de cara al cliente nombra piezas internas (`ict/lenguaje.py`); la procedencia va en
    `x-flit-*` y en `contracts/ict/informe.md`. El **PR #698 de flit** ya tiene el contrato limpio (commit `90f24be`).
    Pendiente menor: ¿renombrar `info.title` «FLIT Core ICT API»?
+   27/10: con flit y flit-atlas públicos (temporal; vuelven a privado ~3/11) la CI de flit #697 y #698 ya corre: los 23
+   contratos validan y core-ict avisa el breaking del registro (excepción `breaking: advertencia`). Falta que el líder
+   los saque de borrador e integre (#697 primero) y acepte la excepción.
 2. **PR #76 de flit-gitops (borrador)**: https://github.com/flitsas/flit-gitops/pull/76, rama `atlas/qa-f4`, worktree
    `D:/FLIT/Code/flit-gitops-atlas-f4` (el checkout principal de gitops sigue en la rama ajena `docs/flito-pdn-argocd`).
    Trae atlas-docs (`replicas: 0` hasta sellar), MinIO propio `atlas-s3` (`replicas: 0`), NetworkPolicy, RabbitMQ con
@@ -63,7 +66,19 @@ en `c8c64ee` y el PR se integró. Revisar el CI de `develop` sobre `f635cce`.
      sigue con la versión anterior y atlas-docs en `ImagePullBackOff` (esperado).
    - 27/10, después: facturación arreglada, CD relanzado y **F4 corriendo en QA** (Argo Synced/Healthy, 5 pods 1/1,
      `/health/ready` Healthy). Cierre (paso 7) hecho: gitops #78 (`ef1ab00`, migrador solo con su cadena) y HSTS quitada
-     del nginx del host (llega una sola vez, la de atlas-web). Falta el paso 8: una exportación de punta a punta.
+     del nginx del host (llega una sola vez, la de atlas-web).
+   - 27-28/10: **exportación verificada en QA de punta a punta** (contrato `atlas` 1.0.0-rc, 215 operaciones: solicitud,
+     cola, atlas-docs, S3, descarga por `/atlas-qa/` con 200 y auditoría). En el camino:
+     - `ATLAS_URL` = `https://qa.atlas.flitsas.com` como variable de organización (repos seleccionados: flit-atlas y
+       flit). El CD publica `atlas` y `atlas-eventos` en QA.
+     - PR #33: `atlas.v1.yaml` tenía dos firmas iguales (`/catalogo/aplicativos/{slug}` y `{id}`) y Atlas lo rechazaba
+       con 422; ahora `{aplicativo}` y una prueba que lo impide.
+     - PR #35: el PDF de 470 páginas mataba a atlas-docs por memoria (1,14 GiB con límite de 1 GiB; el líder pidió no
+       subir el límite). PDF por partes con pypdf: pico de ~220-260 MiB en QA, 70 s. Un mensaje reentregado tras una
+       caída ya no se reprocesa sin fin (ATLAS-ADR-0042).
+     - En QA el asistente de paquetes no ofrece contratos: solo acepta compartibles con versión estable (sale de
+       `release`). La exportación se probó por versión desde la consola (`POST /exportaciones` con `versionId`); la PWA
+       no tiene ese botón.
 2. **DBA:** pasos 1 a 5 de `docs/host-177/atlas-qa-roles-base.md` (incluye permisos puente para la versión actual y `pg_hba`).
 3. nginx del host: copiar `docs/host-177/atlas-qa.nginx.conf` (trae `location /atlas-qa/`), `nginx -t` y recargar.
 4. **Sellar** con los tres scripts (`gen-atlas-qa-s3.sh` además crea bucket, política y usuarios en el MinIO de
@@ -72,7 +87,8 @@ en `c8c64ee` y el PR se integró. Revisar el CI de `develop` sobre `f635cce`.
 6. Abrir e integrar el PR `develop → staging` de la F4: el CD fija los cuatro digests y el migrador concede permisos.
    **Si la F4 llega a staging antes del paso 2, atlas-api queda no lista y QA se queda sin API.**
 7. PR de cierre en gitops: quitar el `envFrom` de `atlas-api-secrets` del migrador y la HSTS del sitio del host.
-8. Verificar en QA: portal con una organización de prueba, una exportación de punta a punta, cabeceras/CSP, límites.
+8. Verificar en QA: ~~una exportación de punta a punta~~ (28/10); falta el portal con una organización de prueba (necesita
+   un contrato compartible con versión estable), cabeceras/CSP y límites.
 
 **Ojo:** atlas-api ya **no arranca** en qa/pdn sin `Atlas__Proxy__RedesConfiables` (F4-SEC-13). Verificar también que el
 nginx del host reemplace `X-Forwarded-For` en vez de encadenarlo.

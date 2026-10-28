@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using static Flit.Atlas.Modulos.Contratos.EndpointsContratos;
 using static Flit.Atlas.Modulos.Contratos.Guias.EndpointsGuias;
 
@@ -136,7 +137,7 @@ internal static class EndpointsPaquetes
         [property: Description("La última revisión, con su definición.")] RevisionPaqueteDetalle Revision,
         [property: Description("Todas las revisiones, de la más reciente a la más antigua.")] IReadOnlyList<RevisionPaqueteResumen> Revisiones);
 
-    [Description("Versión estable que puede ir en un paquete.")]
+    [Description("Versión que puede ir en un paquete: estable o, donde el ambiente lo permite (QA), candidata rc.")]
     public sealed record VersionElegible(
         Guid Id,
         string Version,
@@ -155,7 +156,7 @@ internal static class EndpointsPaquetes
         [property: Description("Primera versión a la que aplica; vacío = desde la primera.")] string? AplicaDesde,
         [property: Description("Última versión a la que aplica; vacío = hasta la última.")] string? AplicaHasta);
 
-    [Description("Contrato compartible con sus versiones estables y sus guías compartibles.")]
+    [Description("Contrato compartible con sus versiones elegibles y sus guías compartibles.")]
     public sealed record ContratoElegible(
         Guid Id,
         string Codigo,
@@ -347,7 +348,8 @@ internal static class EndpointsPaquetes
     }
 
     private static async Task<IResult> ElegiblesAsync(
-        ClaimsPrincipal usuario, ContratosDbContext contexto, ILectorAplicativos lector, IPermisosDeSesion permisosDeSesion, CancellationToken ct)
+        ClaimsPrincipal usuario, ContratosDbContext contexto, ILectorAplicativos lector, IPermisosDeSesion permisosDeSesion,
+        IOptions<OpcionesPaquetes> opcionesPaquetes, CancellationToken ct)
     {
         var permisos = await permisosDeSesion.ObtenerAsync(usuario, ct);
         var aplicativos = (await lector.ListarAsync(ct)).ToDictionary(a => a.Id);
@@ -355,15 +357,17 @@ internal static class EndpointsPaquetes
             .Where(c => ReglasPaquetes.PuedeUsar(permisos, c.AplicativoId, aplicativos))
             .ToList();
         var ids = contratos.Select(c => c.Id).ToList();
+        var aceptadas = opcionesPaquetes.Value.PrereleasesAceptadas.Count > 0;
         var versiones = (await contexto.Versiones.AsNoTracking()
-                .Where(v => ids.Contains(v.ContratoId) && v.EsEstable && v.Estado != EstadoVersion.Retirada)
+                .Where(v => ids.Contains(v.ContratoId) && (v.EsEstable || aceptadas) && v.Estado != EstadoVersion.Retirada)
                 .Select(v => new
                 {
-                    v.Id, v.ContratoId, v.Version, v.Estado, v.RetiroEn, v.PublicadoEn,
+                    v.Id, v.ContratoId, v.Version, v.Prerelease, v.Estado, v.RetiroEn, v.PublicadoEn,
                     Operaciones = contexto.Operaciones.Count(o => o.VersionId == v.Id),
                     Publicas = contexto.Operaciones.Count(o => o.VersionId == v.Id && o.Publica),
                 })
                 .ToListAsync(ct))
+            .Where(v => opcionesPaquetes.Value.Acepta(v.Prerelease))
             .ToLookup(v => v.ContratoId);
         var guias = (await contexto.Guias.AsNoTracking()
                 .Where(g => ids.Contains(g.ContratoId) && g.Visibilidad == VisibilidadGuia.Compartible && g.RevisionPublicada != null)
@@ -414,7 +418,7 @@ internal static class EndpointsPaquetes
     private static async Task<IResult> CrearAsync(
         [Description("El paquete y su primera revisión.")] SolicitudPaquete solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, IOptions<OpcionesPaquetes> opcionesPaquetes, TimeProvider reloj, CancellationToken ct)
     {
         var (nombre, descripcion, definicion, nota, errores) = ReglasPaquetes.Leer(solicitud?.Nombre, solicitud?.Descripcion, solicitud?.Definicion, solicitud?.Nota);
         if (definicion is null)
@@ -427,7 +431,7 @@ internal static class EndpointsPaquetes
         {
             return SinPermiso();
         }
-        var (final, problemas) = await ValidarAsync(contexto, definicion, ct);
+        var (final, problemas) = await ValidarAsync(contexto, definicion, opcionesPaquetes.Value, ct);
         if (final is null)
         {
             return Results.ValidationProblem(problemas);
@@ -447,7 +451,7 @@ internal static class EndpointsPaquetes
         [Description("Id del paquete.")] Guid paqueteId,
         [Description("La revisión nueva.")] SolicitudPaquete solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, IOptions<OpcionesPaquetes> opcionesPaquetes, TimeProvider reloj, CancellationToken ct)
     {
         var paquete = await contexto.Paquetes.FirstOrDefaultAsync(p => p.Id == paqueteId, ct);
         if (paquete is null)
@@ -478,7 +482,7 @@ internal static class EndpointsPaquetes
         {
             return Desactualizada(paquete);
         }
-        var (final, problemas) = await ValidarAsync(contexto, definicion, ct);
+        var (final, problemas) = await ValidarAsync(contexto, definicion, opcionesPaquetes.Value, ct);
         if (final is null)
         {
             return Results.ValidationProblem(problemas);
@@ -513,7 +517,7 @@ internal static class EndpointsPaquetes
         [Description("Id del paquete.")] Guid paqueteId,
         [Description("La revisión a publicar.")] SolicitudPublicacionPaquete solicitud,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, IOptions<OpcionesPaquetes> opcionesPaquetes, TimeProvider reloj, CancellationToken ct)
     {
         var (paquete, ultima, error) = await PaqueteParaGestionarAsync(paqueteId, null, http.User, contexto, lector, permisosDeSesion, ct);
         if (paquete is null)
@@ -532,14 +536,14 @@ internal static class EndpointsPaquetes
         {
             return Conflicto("ya_publicada", $"La revisión {paquete.RevisionActual} ya es la vigente.");
         }
-        return await VolverVigenteAsync(http, contexto, plataforma, lector, permisosDeSesion, reloj, paquete, ultima!, AccionPublicado, ct);
+        return await VolverVigenteAsync(http, contexto, plataforma, lector, permisosDeSesion, reloj, paquete, ultima!, AccionPublicado, opcionesPaquetes.Value, ct);
     }
 
     private static async Task<IResult> FijarAsync(
         [Description("Id del paquete.")] Guid paqueteId,
         [Description("Revisión anterior que vuelve a ser la vigente.")] int numero,
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector,
-        IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
+        IPermisosDeSesion permisosDeSesion, IOptions<OpcionesPaquetes> opcionesPaquetes, TimeProvider reloj, CancellationToken ct)
     {
         var (paquete, objetivo, error) = await PaqueteParaGestionarAsync(paqueteId, numero, http.User, contexto, lector, permisosDeSesion, ct);
         if (paquete is null)
@@ -558,7 +562,7 @@ internal static class EndpointsPaquetes
         {
             return Conflicto("ya_vigente", $"La revisión {numero} ya es la vigente.");
         }
-        return await VolverVigenteAsync(http, contexto, plataforma, lector, permisosDeSesion, reloj, paquete, objetivo!, AccionFijado, ct);
+        return await VolverVigenteAsync(http, contexto, plataforma, lector, permisosDeSesion, reloj, paquete, objetivo!, AccionFijado, opcionesPaquetes.Value, ct);
     }
 
     private static async Task<IResult> ArchivarAsync(
@@ -595,10 +599,10 @@ internal static class EndpointsPaquetes
     /// </summary>
     private static async Task<IResult> VolverVigenteAsync(
         HttpContext http, ContratosDbContext contexto, PlataformaDbContext plataforma, ILectorAplicativos lector, IPermisosDeSesion permisosDeSesion,
-        TimeProvider reloj, PaqueteContratos paquete, RevisionPaquete revision, string accion, CancellationToken ct)
+        TimeProvider reloj, PaqueteContratos paquete, RevisionPaquete revision, string accion, OpcionesPaquetes opciones, CancellationToken ct)
     {
         var foto = FotoPaquete.De(revision);
-        var problemas = await ProblemasParaPublicarAsync(contexto, foto.Definicion, ct);
+        var problemas = await ProblemasParaPublicarAsync(contexto, foto.Definicion, opciones, ct);
         if (problemas.Count > 0)
         {
             return Results.Json(new ErrorPaquete("no_publicable", $"La revisión {revision.Numero} no se puede publicar: {problemas[0]}",
@@ -678,7 +682,7 @@ internal static class EndpointsPaquetes
     /// la versión. Devuelve la definición con las revisiones de guía completas o los errores por campo (400).
     /// </summary>
     private static async Task<(IReadOnlyList<EntradaPaquete>? Definicion, Dictionary<string, string[]> Errores)> ValidarAsync(
-        ContratosDbContext contexto, IReadOnlyList<EntradaSolicitada> definicion, CancellationToken ct)
+        ContratosDbContext contexto, IReadOnlyList<EntradaSolicitada> definicion, OpcionesPaquetes opciones, CancellationToken ct)
     {
         var errores = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var datos = await DatosDeAsync(contexto, definicion.Select(e => (e.ContratoId, e.VersionId, e.Guias.Select(g => (g.GuiaId, g.Revision)))), ct);
@@ -688,7 +692,7 @@ internal static class EndpointsPaquetes
             var e = definicion[i];
             var campo = $"definicion[{i}]";
             var (contrato, version) = (datos.Contratos.GetValueOrDefault(e.ContratoId), datos.Versiones.GetValueOrDefault(e.VersionId));
-            var error = ErrorDeContrato(contrato, version, e.ContratoId);
+            var error = ErrorDeContrato(contrato, version, e.ContratoId, opciones);
             if (error is { } x)
             {
                 errores[$"{campo}.{x.Campo}"] = [x.Mensaje];
@@ -719,7 +723,8 @@ internal static class EndpointsPaquetes
     }
 
     /// <summary>Lo que impide publicar (o fijar) una revisión hoy, en frases; vacío si se puede.</summary>
-    internal static async Task<List<string>> ProblemasParaPublicarAsync(ContratosDbContext contexto, IReadOnlyList<EntradaPaquete> definicion, CancellationToken ct)
+    internal static async Task<List<string>> ProblemasParaPublicarAsync(
+        ContratosDbContext contexto, IReadOnlyList<EntradaPaquete> definicion, OpcionesPaquetes opciones, CancellationToken ct)
     {
         var problemas = new List<string>();
         if (!ReglasPaquetes.TieneAlgoQueCompartir(definicion))
@@ -731,7 +736,7 @@ internal static class EndpointsPaquetes
         {
             var (contrato, version) = (datos.Contratos.GetValueOrDefault(e.ContratoId), datos.Versiones.GetValueOrDefault(e.VersionId));
             var nombre = contrato?.Codigo ?? e.ContratoId.ToString();
-            if (ErrorDeContrato(contrato, version, e.ContratoId) is { } x)
+            if (ErrorDeContrato(contrato, version, e.ContratoId, opciones) is { } x)
             {
                 problemas.Add($"{nombre}: {Minuscula(x.Mensaje)}");
                 continue;
@@ -753,7 +758,8 @@ internal static class EndpointsPaquetes
         return problemas;
     }
 
-    private static (string Campo, string Mensaje)? ErrorDeContrato(Contrato? contrato, VersionContrato? version, Guid contratoId)
+    private static (string Campo, string Mensaje)? ErrorDeContrato(
+        Contrato? contrato, VersionContrato? version, Guid contratoId, OpcionesPaquetes opciones)
     {
         if (contrato is null)
         {
@@ -767,7 +773,7 @@ internal static class EndpointsPaquetes
         {
             return ("versionId", "La versión no es de este contrato.");
         }
-        if (!version.EsEstable)
+        if (!opciones.Acepta(version.Prerelease))
         {
             return ("versionId", $"La versión {version.Version} es una prerelease: solo las estables van en paquetes de clientes.");
         }

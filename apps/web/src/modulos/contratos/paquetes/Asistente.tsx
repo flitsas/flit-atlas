@@ -24,7 +24,7 @@ import {
 const PASOS = ['Contratos', 'Operaciones', 'Guías', 'Resumen'] as const;
 
 /**
- * Asistente de paquetes (HU 4.1, plan 00 §8.9 «Paquetes»): 1. contratos compartibles y su versión estable; 2. operaciones
+ * Asistente de paquetes (HU 4.1, plan 00 §8.9 «Paquetes»): 1. contratos compartibles y su versión; 2. operaciones
  * con filtro por etiqueta y «solo x-public», seleccionar todo o ninguna; 3. guías compartibles publicadas; y un resumen
  * con el nombre, la nota y «Guardar revisión». Cada guardado es una revisión nueva: publicarla es otro paso. Va en su
  * propio chunk (la lista y el detalle no lo descargan). Móvil primero: una columna, hojas inferiores y objetivos de 44 px.
@@ -130,13 +130,14 @@ function PasoContratos({ estado, elegibles, alCambiar }: { estado: EstadoAsisten
   const seleccion = eligiendo ? estado.contratos.find((s) => s.contratoId === eligiendo.id) : undefined;
 
   return (
-    <Tarjeta titulo="1. Contratos y versiones estables">
+    <Tarjeta titulo="1. Contratos y versiones">
       <p className="mb-3 text-sm text-atlas-texto-suave">
-        Solo los contratos compartibles con clientes y sus versiones estables (sin prerelease, vigentes o deprecadas).
+        Solo los contratos compartibles con clientes y sus versiones estables, vigentes o deprecadas. En QA también
+        entran las candidatas de staging (-rc), para probar antes de producción.
       </p>
       {elegibles.length === 0 ? (
         <p className="rounded-xl border border-border p-4 text-sm">
-          No hay contratos compartibles que puedas usar. Un contrato es compartible cuando su última versión estable declara{' '}
+          No hay contratos compartibles que puedas usar. Un contrato es compartible cuando su última versión estable (o candidata, en QA) declara{' '}
           <code className="break-all">info.x-flit-visibilidad: compartible</code>.
         </p>
       ) : (
@@ -185,7 +186,7 @@ function PasoContratos({ estado, elegibles, alCambiar }: { estado: EstadoAsisten
       <Hoja abierta={eligiendo !== null} alCerrar={() => setEligiendo(null)} titulo={eligiendo ? `Versión de ${eligiendo.nombre}` : 'Versión'}>
         {eligiendo && (
           <fieldset className="flex flex-col gap-1 px-4 pt-2 pb-5">
-            <legend className="sr-only">Versiones estables</legend>
+            <legend className="sr-only">Versiones</legend>
             {eligiendo.versiones.map((v) => (
               <label
                 key={v.id}

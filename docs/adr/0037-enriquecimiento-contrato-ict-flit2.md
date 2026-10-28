@@ -129,6 +129,13 @@ Hechos verificados (solo lectura de `flit` y `flit-gitops`):
   core-ict mínimo y un xlsx generado) y la prueba que recorre `contracts/ict/` buscando datos sensibles, piezas
   internas en los textos de cara al cliente, una sola URL base por ambiente y la trazabilidad. En la API,
   `PodaIctDescripcionesTests` poda el ICT real hacia pdn y revisa los mismos patrones en el resultado.
+- **Excepción de breaking en la 1.1.0 (28/10/2026, aceptada por el líder):** la propuesta corrige el cuerpo de
+  `POST /api/v1/external-transaction/register`, que el contrato de `flit` declaraba como objeto `{ transactions }`
+  y `RegisterRowInput` siempre leyó como arreglo de filas. oasdiff lo marca incompatible
+  (`request-body-type-changed` y `transactions` quitado) frente a la 1.0.0, y la regla 2 del plan 00 §8.2 pediría
+  subir la MAJOR. No se sube: el servicio no cambia y ningún cliente pudo usar la forma declarada, así que una
+  `/v2` solo movería la ruta sin motivo. En `flit` (PR #698), core-ict publica con `breaking: advertencia` solo
+  para esta versión; la excepción se quita cuando la 1.1.0 llegue a `release`.
 
 ## Consecuencias
 

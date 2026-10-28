@@ -10521,7 +10521,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GuiaElegible'
-      description: Contrato compartible con sus versiones estables y sus guías compartibles.
+      description: Contrato compartible con sus versiones elegibles y sus guías compartibles.
     ContratoResumen:
       required:
         - id
@@ -16995,7 +16995,7 @@ components:
             - string
           description: Cuántas de ellas son x-public o llevan la etiqueta public.
           format: int32
-      description: Versión estable que puede ir en un paquete.
+      description: 'Versión que puede ir en un paquete: estable o, donde el ambiente lo permite (QA), candidata rc.'
     VersionPublicada:
       required:
         - contratoId
