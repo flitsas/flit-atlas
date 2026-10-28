@@ -100,7 +100,7 @@ Hechos verificados:
   | OpenAPI YAML y JSON | El spec podado tal cual, leído con un `SafeLoader` sin timestamps (las fechas siguen siendo texto) y escrito en YAML legible y JSON con sangría. No se le agrega nada: el hash va en el manifiesto. |
   | Postman v2.1 | Opción 3: una colección por spec OpenAPI, carpeta por etiqueta, variables `{{baseUrl}}` (QA si se reconoce) y `{{token}}` (vacía), Bearer `{{token}}` en la colección y `noauth` en `security: []`, variables de ruta `:id`, cuerpo de ejemplo, sin scripts. Ids `uuid5` deterministas. Los webhooks no van (los envía FLIT). |
   | HTML | Jinja2 con autoescape y `StrictUndefined`, CSS embebido con la marca FLIT (azul `#557eff`, tinta `#476bd9`, azul noche `#162744`), sin JS y con `Content-Security-Policy: default-src 'none'` en un `<meta>`. Markdown con markdown-it-py en modo CommonMark con el HTML crudo apagado; un enlace externo pierde el `href` y su dirección queda como texto; una imagen queda como su texto alternativo. |
-  | PDF | Opción 1: WeasyPrint sobre el mismo HTML con `@page` A4, índice con número de página (`target-counter`), marca de agua diagonal fija en cada página y en el encabezado, hash en el pie. `url_fetcher` que rechaza todo recurso. |
+  | PDF | Opción 1: WeasyPrint sobre el mismo HTML con `@page` A4, índice con número de página, marca de agua diagonal fija en cada página y en el encabezado, hash y «Página X de Y» en el pie. `url_fetcher` que rechaza todo recurso. **Dibujado por partes** (ver «PDF por partes»). |
   | Word | python-docx: portada, índice (lista de secciones; python-docx no pagina), cambios, guías (Markdown a párrafos, listas, código y tablas), contratos y tablas; marca de agua en el encabezado y hash en el pie de cada página. |
   | Excel | openpyxl con la forma del Excel de contratos (estructura y estilos, no datos): «Portada», «Índice», «Cambios», una hoja por servicio con el orden del original y las tablas de referencia a la derecha, «Tablas de referencia» y «Guías». Con matriz, una columna «OBLIGATORIO <tipo>» por tipo de trámite con S, N o N/A y la condición en «Observaciones». Marca de agua en el encabezado de impresión. |
   | ZIP | Todo lo anterior bajo una carpeta, más `LEEME.md` y `manifiesto.json` (hash del contenido y SHA-256, tamaño y formato de cada archivo). |
@@ -109,9 +109,31 @@ Hechos verificados:
   cada formato (y en la descripción de la colección Postman); no cambia si el spec llega en YAML o en JSON.
 - **Salida determinista:** los ZIP (también los `.docx` y `.xlsx`, que son ZIP) se reescriben con la fecha del
   paquete a las 00:00 y permisos fijos; las propiedades de Word y Excel llevan esa fecha y «Flit Atlas» como autor
-  (el Excel se guarda con `ExcelWriter` porque `save_workbook` sella la hora actual); el PDF lleva un
-  identificador derivado del hash y sin fecha de creación. Probado: dos exportaciones iguales dan los mismos bytes
+  (el Excel se guarda con `ExcelWriter` porque `save_workbook` sella la hora actual); el PDF no lleva fecha de
+  creación (pypdf lo une sin `/ID` ni fechas). Probado: dos exportaciones iguales dan los mismos bytes
   en los siete formatos.
+- **PDF por partes (27/10/2026).** WeasyPrint diagrama el documento entero y guarda todas sus páginas antes de
+  escribirlo: el contrato de Atlas (215 operaciones, ~470 páginas) llegó a 1,14 GiB y en QA el pod de atlas-docs
+  (límite de 1 GiB) se cayó por memoria a mitad de la primera exportación real. Se decidió no subir el límite y
+  acotar el consumo. `exportes/pdf.py`:
+  1. parte el cuerpo (guías, operaciones y trozos de tablas de referencia) en partes de hasta `PESO_MAXIMO_PARTE`
+     filas (unas 30 páginas); cada parte se dibuja y se escribe sola, y de ella solo quedan su PDF y sus anclas,
+     enlaces y marcadores;
+  2. dibuja el frente (portada, índice y cambios) con el número de página de cada ancla, que ya se conoce
+     (`target-counter` no vería las otras partes);
+  3. une todo con pypdf (6.19.0, pasa de dependencia de pruebas a dependencia del servicio), superpone una capa
+     de páginas vacías con el encabezado y el pie (también por tramos) y rehace los enlaces internos y los
+     marcadores sobre el documento unido.
+
+  Medido con el contrato de Atlas en el contenedor: pico de **214 MiB** (antes 1142), 46 s (antes 46), 2,8 MB
+  (antes 1,8; cada parte lleva su subconjunto de fuentes). El pico depende del tamaño de una parte, no del
+  contrato. Se descartó diagramar por partes y unir con `Document.copy()` de WeasyPrint (595 MiB: sigue creciendo
+  con el documento) y los ajustes de CSS (sin `target-counter`, sin marca fija, sin total de páginas: ninguno
+  bajó de 1 GiB).
+- **Caídas a mitad de una exportación:** si el pod muere con el mensaje (sin memoria, por ejemplo), RabbitMQ lo
+  reentrega. atlas-docs no lo procesa de inmediato: cuenta como un fallo y va por la cola de reintentos; a la
+  quinta vez pasa a la cola de errores y publica `exportacion_fallida` (`interno`). Antes se reprocesaba sin fin y
+  la exportación no salía de `procesando`.
 - **Endpoint interno:** opción 1 como paso previo a la cola. `POST /exportes` recibe el paquete; con
   `?formatos=` elige formatos; sin `exportacionId` responde el ZIP con `X-Atlas-Hash-Contenido`; con
   `exportacionId` (uuid) sube cada archivo a `exportaciones/<exportacionId>/<ruta>` con `almacenamiento.subir` (el
@@ -367,9 +389,9 @@ enlace interno, el PDF llega a la hoja como `File`, axe sin errores críticos y 
 - La marca de agua de Word es texto en el encabezado y el pie, no un sello diagonal (python-docx no lo expone sin
   VML a mano); la del Excel está en el encabezado de impresión y en la portada.
 - El índice de Word no tiene números de página.
-- Exportar el contrato de Atlas (171 operaciones) tarda entre uno y dos minutos con el PDF en un contenedor de
-  desarrollo (el PDF es casi todo):
-  tiene que ir por la cola y con concurrencia 1.
+- Exportar el contrato de Atlas (215 operaciones) tarda cerca de un minuto con el PDF en un contenedor de
+  desarrollo (el PDF es casi todo): tiene que ir por la cola y con concurrencia 1. El PDF por partes pesa un poco
+  más que dibujado de una vez (cada parte lleva su subconjunto de fuentes).
 - En Windows sin GTK el PDF no se genera en local (503); el resto sí.
 
 ## Opciones descartadas y por qué

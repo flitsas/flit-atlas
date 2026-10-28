@@ -188,9 +188,10 @@ def test_s3_caido_se_propaga_para_reintentar() -> None:
 
 
 class MensajeFalso:
-    def __init__(self, cuerpo: bytes, cabeceras: dict | None = None) -> None:
+    def __init__(self, cuerpo: bytes, cabeceras: dict | None = None, reentregado: bool = False) -> None:
         self.body = cuerpo
         self.headers = cabeceras or {}
+        self.redelivered = reentregado
         self.message_id = "x"
         self.type = "atlas.contratos.exportacion_solicitada"
         self.content_type = "application/json"
@@ -212,8 +213,9 @@ class ExchangeFalso:
         self.publicados.append(routing_key)
 
 
-def _atender(s3: S3Falso, mensaje: MensajeFalso) -> ExchangeFalso:
-    manejador = ManejadorExportaciones(lambda: s3, "atlas", PublicadorFalso(), anyio.CapacityLimiter(1))  # type: ignore[arg-type,return-value]
+def _atender(s3: S3Falso, mensaje: MensajeFalso, publicador: PublicadorFalso | None = None) -> ExchangeFalso:
+    publicador = publicador or PublicadorFalso()
+    manejador = ManejadorExportaciones(lambda: s3, "atlas", publicador, anyio.CapacityLimiter(1))  # type: ignore[arg-type,return-value]
     por_defecto = ExchangeFalso()
     asyncio.run(atender(mensaje, manejador, por_defecto))  # type: ignore[arg-type]
     return por_defecto
@@ -241,13 +243,48 @@ def test_un_fallo_de_infraestructura_va_a_reintentos() -> None:
     assert mensaje.acciones == ["nack:False"]
 
 
-def test_a_la_quinta_falla_pasa_a_errores() -> None:
+def test_a_la_quinta_falla_pasa_a_errores_y_la_exportacion_queda_fallida() -> None:
     s3 = S3Falso()
     s3.caido = True
     mensaje = MensajeFalso(_solicitud(), _muerto(4))
+    publicador = PublicadorFalso()
 
-    assert _atender(s3, mensaje).publicados == [cola.COLA_ERRORES]
+    assert _atender(s3, mensaje, publicador).publicados == [cola.COLA_ERRORES]
     assert mensaje.acciones == ["ack"]
+    assert publicador.tipos() == [cola.INICIADA, cola.FALLIDA]
+    assert publicador.eventos[-1]["data"]["exportacionId"] == EXPORTACION
+    assert publicador.eventos[-1]["data"]["codigo"] == "interno"
+
+
+def test_un_mensaje_reentregado_no_se_procesa_y_va_a_reintentos() -> None:
+    # El pod anterior murió con el mensaje (sin memoria, por ejemplo): procesarlo ya repetiría la caída sin fin.
+    s3 = S3Falso()
+    _con_entrada(s3)
+    mensaje = MensajeFalso(_solicitud(), reentregado=True)
+    publicador = PublicadorFalso()
+
+    assert _atender(s3, mensaje, publicador).publicados == []
+    assert mensaje.acciones == ["nack:False"]
+    assert publicador.eventos == []
+
+
+def test_a_la_quinta_reentrega_la_exportacion_queda_fallida() -> None:
+    s3 = S3Falso()
+    _con_entrada(s3)
+    mensaje = MensajeFalso(_solicitud(), _muerto(4), reentregado=True)
+    publicador = PublicadorFalso()
+
+    assert _atender(s3, mensaje, publicador).publicados == [cola.COLA_ERRORES]
+    assert mensaje.acciones == ["ack"]
+    assert publicador.tipos() == [cola.FALLIDA]
+
+
+def test_un_reentregado_ilegible_va_a_errores_sin_publicar() -> None:
+    mensaje = MensajeFalso(b"basura", _muerto(4), reentregado=True)
+    publicador = PublicadorFalso()
+
+    assert _atender(S3Falso(), mensaje, publicador).publicados == [cola.COLA_ERRORES]
+    assert publicador.eventos == []
 
 
 def test_un_mensaje_ilegible_va_directo_a_errores() -> None:
