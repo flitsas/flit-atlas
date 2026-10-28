@@ -57,7 +57,7 @@ const conContrato = (estado: EstadoAsistente, contratoId: string, cambio: (c: Se
   contratos: estado.contratos.map((c) => (c.contratoId === contratoId ? cambio(c) : c)),
 });
 
-/** Paso 1: incluir (con su última versión estable) o quitar un contrato. */
+/** Paso 1: incluir (con su versión elegible más reciente) o quitar un contrato. */
 export function alternarContrato(estado: EstadoAsistente, contrato: ContratoElegible): EstadoAsistente {
   if (estado.contratos.some((c) => c.contratoId === contrato.id)) {
     return { ...estado, contratos: estado.contratos.filter((c) => c.contratoId !== contrato.id) };
