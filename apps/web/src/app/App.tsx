@@ -17,6 +17,8 @@ import { Boton } from './ui/Tarjeta';
 const Buscar = diferido(() => import('./paginas/Buscar'));
 const Notificaciones = diferido(() => import('./paginas/Notificaciones'));
 const Ajustes = diferido(() => import('./paginas/Ajustes'));
+// Seguridad de la cuenta local (F4-SEC-31): contraseña, passkeys y códigos de recuperación.
+const SeguridadCuenta = diferido(() => import('./paginas/SeguridadCuenta'));
 // Páginas públicas de las cuentas externas (HU 1.5): sin sesión y con el token en el fragmento de la URL.
 const AceptarInvitacion = diferido(() => import('./externos/AceptarInvitacion'));
 const Recuperar = diferido(() => import('./externos/Recuperar'));
@@ -52,6 +54,7 @@ export function rutasAtlas(modulos: readonly ModuloAtlas[] = MODULOS_REGISTRADOS
         { path: 'buscar', element: <Buscar /> },
         { path: 'notificaciones', element: <Notificaciones /> },
         { path: 'ajustes', element: <Ajustes /> },
+        { path: 'ajustes/seguridad', element: <SeguridadCuenta /> },
         ...modulos.flatMap((modulo) =>
           modulo.rutas.map((ruta) => ({
             path: `${ruta.path.replace(/^\//, '')}/*`,

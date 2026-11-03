@@ -8,10 +8,10 @@ using Microsoft.Extensions.Logging;
 namespace Flit.Atlas.Identidad.Externos;
 
 /// <summary>
-/// Correos de las cuentas externas: invitación y recuperación (ATLAS-ADR-0025). Los enlaces llevan el token en el
-/// <b>fragmento</b> (<c>#…</c>): el navegador no lo envía a ningún servidor, así que no queda en los logs de nginx, del
-/// Ingress ni de Vite, ni en el <c>Referer</c>. La PWA lo lee y lo manda a la API en el cuerpo de un POST. Ni el token,
-/// ni el enlace, ni el destinatario van a los logs.
+/// Correos de las cuentas externas: invitación, recuperación y avisos de seguridad (ATLAS-ADR-0025 y ATLAS-ADR-0049). Los
+/// enlaces llevan el token en el <b>fragmento</b> (<c>#…</c>): el navegador no lo envía a ningún servidor, así que no
+/// queda en los logs de nginx, del Ingress ni de Vite, ni en el <c>Referer</c>. La PWA lo lee y lo manda a la API en el
+/// cuerpo de un POST. Ni el token, ni el enlace, ni el destinatario van a los logs. Los avisos no llevan enlaces.
 /// </summary>
 public sealed partial class CorreosExternos(IEnviadorCorreo enviador, IConfiguration configuracion, ILogger<CorreosExternos> log)
 {
@@ -87,6 +87,49 @@ public sealed partial class CorreosExternos(IEnviadorCorreo enviador, IConfigura
                 "Si no fuiste tú, alguien pudo entrar a tu buzón de correo: cambia ya la contraseña de tu correo y escribe a quien te invitó a Atlas o al equipo de FLIT para que bloqueen tu acceso y restablezcan tu cuenta.",
             ]);
         return new MensajeCorreo(correo, nombre, "Se recuperó tu cuenta de Flit Atlas", html, texto);
+    }
+
+    /// <summary>Cambios de la seguridad de la cuenta que se avisan al titular (F4-SEC-31).</summary>
+    public static class CambiosSeguridad
+    {
+        public const string Contrasena = "contrasena";
+        public const string Passkey = "passkey";
+        public const string CodigosRecuperacion = "codigos_recuperacion";
+    }
+
+    /// <summary>
+    /// Aviso al titular de que cambió la seguridad de su cuenta desde Atlas (F4-SEC-31, ATLAS-ADR-0049 §10): contraseña
+    /// nueva, passkey agregada o códigos de recuperación nuevos. Como el de la recuperación, sin botón ni enlaces.
+    /// </summary>
+    public static MensajeCorreo AvisoCambioSeguridad(string correo, string nombre, string cambio, DateTimeOffset momento)
+    {
+        var (asunto, que, efecto) = cambio switch
+        {
+            CambiosSeguridad.Contrasena => ("Cambiaste la contraseña de Flit Atlas",
+                "se cambió la contraseña de tu cuenta de Flit Atlas",
+                "La contraseña anterior dejó de servir y se cerraron tus demás sesiones y los accesos de las aplicaciones conectadas."),
+            CambiosSeguridad.Passkey => ("Agregaste una passkey a Flit Atlas",
+                "se agregó una passkey nueva a tu cuenta de Flit Atlas",
+                "Desde ahora puedes entrar también con esa passkey."),
+            CambiosSeguridad.CodigosRecuperacion => ("Generaste códigos de recuperación nuevos en Flit Atlas",
+                "se generaron códigos de recuperación nuevos para tu cuenta de Flit Atlas",
+                "Los códigos anteriores dejaron de servir."),
+            _ => throw new ArgumentOutOfRangeException(nameof(cambio)),
+        };
+        var (html, texto) = PlantillaCorreo.Armar(
+            asunto,
+            [
+                $"Hola, {nombre}.",
+                $"El {Fecha(momento)} (hora de Colombia) {que}, desde una sesión abierta que confirmó tu identidad.",
+                efecto,
+            ],
+            null,
+            null,
+            [
+                "Si fuiste tú, no tienes que hacer nada.",
+                "Si no fuiste tú, alguien pudo entrar a tu cuenta: recupérala desde la pantalla de ingreso de Atlas (opción «Recuperar mi cuenta») y escribe a quien te invitó o al equipo de FLIT para que revisen tu acceso.",
+            ]);
+        return new MensajeCorreo(correo, nombre, asunto, html, texto);
     }
 
     /// <summary>Envía el mensaje; <c>false</c> si el ambiente no tiene correo o el servidor no lo aceptó.</summary>
