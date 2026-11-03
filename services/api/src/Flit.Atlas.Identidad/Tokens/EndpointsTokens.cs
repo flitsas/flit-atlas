@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Flit.Atlas.Identidad.Datos;
@@ -11,6 +12,7 @@ using Flit.Atlas.Plataforma.Entidades;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
@@ -33,6 +35,19 @@ public static class EndpointsTokens
 {
     /// <summary>Instante de la autorización original (privado: solo viaja en el código y el refresh, cifrados).</summary>
     internal const string ClaimConcedidoEn = "atlas.concedido_en";
+
+    /// <summary>
+    /// Parámetro propio de <c>/connect/authorize</c> con la decisión de la pantalla de confirmación (F4-SEC-20): el
+    /// consentimiento protegido con Data Protection o <see cref="Denegar"/>.
+    /// </summary>
+    internal const string ParametroConsentimiento = "atlas_consentimiento";
+
+    internal const string Denegar = "denegar";
+
+    /// <summary>Lo que dura la confirmación: lo justo para leer la pantalla y elegir.</summary>
+    internal static readonly TimeSpan VigenciaConsentimiento = TimeSpan.FromMinutes(10);
+
+    private const string PropositoConsentimiento = "Flit.Atlas.Identidad.Tokens.Consentimiento.v1";
 
     [Description("Quién es el portador del token de acceso: un usuario de Atlas (código con PKCE) o un servicio (client_credentials).")]
     public sealed record PortadorToken(
@@ -81,7 +96,7 @@ public static class EndpointsTokens
     /// </summary>
     private static async Task<IResult> AutorizarAsync(
         HttpContext http, IOptions<OpcionesTokens> opciones, ProveedoresHabilitados proveedores, UserManager<UsuarioAtlas> usuarios,
-        PlataformaDbContext plataforma, TimeProvider reloj, CancellationToken ct)
+        PlataformaDbContext plataforma, IDataProtectionProvider proteccion, TimeProvider reloj, CancellationToken ct)
     {
         var solicitud = http.GetOpenIddictServerRequest() ?? throw new InvalidOperationException("Falta la solicitud de OpenIddict.");
         if (!opciones.Value.Clientes.TryGetValue(solicitud.ClientId ?? string.Empty, out var cliente))
@@ -107,6 +122,25 @@ public static class EndpointsTokens
         if (titular is null)
         {
             return Rechazar(Errors.AccessDenied, "La cuenta no está activa.");
+        }
+
+        if (RequiereConsentimiento(solicitud))
+        {
+            var decision = (string?)solicitud.GetParameter(ParametroConsentimiento);
+            if (decision == Denegar)
+            {
+                return Rechazar(Errors.AccessDenied, "La persona no autorizó el acceso.");
+            }
+            var protector = proteccion.CreateProtector(PropositoConsentimiento).ToTimeLimitedDataProtector();
+            var huella = HuellaConsentimiento(sesion.Principal, solicitud);
+            if (!ConsentimientoValido(protector, decision, huella))
+            {
+                if (solicitud.HasPromptValue(PromptValues.None))
+                {
+                    return Rechazar(Errors.ConsentRequired, "Falta confirmar el acceso en Atlas.");
+                }
+                return PedirConsentimiento(solicitud, cliente, titular.Value.Persona, protector.Protect(huella, VigenciaConsentimiento));
+            }
         }
 
         var identidad = Identidad(titular.Value.Usuario, titular.Value.Persona, Permitidos(solicitud.GetScopes(), cliente),
@@ -142,12 +176,72 @@ public static class EndpointsTokens
     }
 
     /// <summary>
-    /// Rebote tras el ingreso: una página mínima de Atlas que navega a <c>/connect/authorize</c> con la misma consulta.
-    /// El destino es fijo (no hay redirección abierta) y la página no tiene scripts.
+    /// Rebote tras el ingreso: una página mínima de Atlas con un enlace a <c>/connect/authorize</c> con la misma consulta.
+    /// El destino es fijo (no hay redirección abierta) y la página no tiene scripts. La persona hace clic: ya no hay
+    /// <c>meta refresh</c> que encadene sin interacción un enlace ajeno, el ingreso con Microsoft y la emisión del
+    /// código (F4-SEC-20, ATLAS-ADR-0049).
     /// </summary>
     private static PaginaSinCache Continuar(HttpContext http) =>
-        Pagina("Continuando…", "Volviendo a la aplicación que pidió el acceso.", null,
-            ("Continuar", ServidorTokens.RutaAutorizar + http.Request.QueryString.Value), redirigir: true);
+        Pagina("Ingreso listo",
+            "Ya entraste a Atlas. Continúa para volver a la aplicación que pidió el acceso; si no lo pediste tú, cierra esta pestaña.",
+            null, ("Continuar", ServidorTokens.RutaAutorizar + http.Request.QueryString.Value));
+
+    /// <summary>
+    /// ¿Hay que confirmar con la persona (F4-SEC-20)? Si la respuesta sale del equipo de la persona (redirect que no es de
+    /// loopback, RFC 8252 §7.3) o el cliente pide <c>prompt=consent</c>. Un cliente nativo con redirect de loopback (CLI,
+    /// MCP) solo entrega el código a un proceso del mismo equipo: sigue sin pantalla (ATLAS-ADR-0024).
+    /// </summary>
+    internal static bool RequiereConsentimiento(OpenIddictRequest solicitud) =>
+        solicitud.HasPromptValue(PromptValues.Consent)
+        || !Uri.TryCreate(solicitud.RedirectUri, UriKind.Absolute, out var destino)
+        || !(destino.Scheme == Uri.UriSchemeHttp && destino.IsLoopback);
+
+    /// <summary>
+    /// Lo que la persona confirma: su sesión, el cliente, el destino, los scopes y el reto PKCE de esta solicitud. Una
+    /// confirmación no sirve para otra sesión ni para otra solicitud.
+    /// </summary>
+    private static string HuellaConsentimiento(ClaimsPrincipal sesion, OpenIddictRequest solicitud) =>
+        string.Join('\n',
+            sesion.FindFirstValue(ClaimsAtlas.Sid) ?? sesion.FindFirstValue(ClaimsAtlas.Sub),
+            solicitud.ClientId,
+            solicitud.RedirectUri,
+            string.Join(' ', solicitud.GetScopes().Order(StringComparer.Ordinal)),
+            solicitud.CodeChallenge);
+
+    private static bool ConsentimientoValido(ITimeLimitedDataProtector protector, string? consentimiento, string huella)
+    {
+        if (string.IsNullOrEmpty(consentimiento))
+        {
+            return false;
+        }
+        try
+        {
+            return string.Equals(protector.Unprotect(consentimiento, out _), huella, StringComparison.Ordinal);
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Pantalla de confirmación: qué aplicación, a dónde va el acceso y con qué scopes. Son enlaces y no un formulario:
+    /// la CSP de estas páginas tiene <c>form-action 'none'</c>, que Chrome también aplica a la redirección que sigue al
+    /// envío (la que lleva el código al cliente).
+    /// </summary>
+    private static PaginaSinCache PedirConsentimiento(OpenIddictRequest solicitud, ClienteTokens cliente, Persona persona, string consentimiento)
+    {
+        var consulta = new QueryString(Consulta(solicitud, excluir: [ParametroConsentimiento]));
+        var nombre = cliente.Nombre ?? solicitud.ClientId;
+        var destino = Uri.TryCreate(solicitud.RedirectUri, UriKind.Absolute, out var uri) ? uri.GetLeftPart(UriPartial.Authority) : "?";
+        var scopes = string.Join(", ", solicitud.GetScopes().Order(StringComparer.Ordinal));
+        return Pagina(
+            $"¿Autorizar a {nombre}?",
+            $"{nombre} pide acceso a Flit Atlas en nombre de {persona.Nombre} ({persona.Correo}), con estos permisos: {scopes}. " +
+            $"El acceso se entregará a {destino}. Si no lo pediste tú, cancela.",
+            ("Cancelar", ServidorTokens.RutaAutorizar + consulta.Add(ParametroConsentimiento, Denegar).Value),
+            ("Permitir", ServidorTokens.RutaAutorizar + consulta.Add(ParametroConsentimiento, consentimiento).Value));
+    }
 
     /// <summary><c>/connect/token</c>: código, refresh y client_credentials.</summary>
     private static async Task<IResult> EmitirAsync(
@@ -319,17 +413,15 @@ public static class EndpointsTokens
             .Select(p => new KeyValuePair<string, string?>(p.Key, (string?)p.Value))).Value ?? string.Empty;
 
     /// <summary>Página HTML mínima, sin scripts ni recursos externos.</summary>
-    private static PaginaSinCache Pagina(string titulo, string texto, (string Texto, string Ruta)? secundario, (string Texto, string Ruta) principal,
-        bool redirigir = false)
+    private static PaginaSinCache Pagina(string titulo, string texto, (string Texto, string Ruta)? secundario, (string Texto, string Ruta) principal)
     {
         var html = HtmlEncoder.Default;
         var destino = html.Encode(principal.Ruta);
-        var refresco = redirigir ? $"<meta http-equiv=\"refresh\" content=\"0;url={destino}\">" : string.Empty;
         var enlaceSecundario = secundario is { } s ? $"<a href=\"{html.Encode(s.Ruta)}\">{html.Encode(s.Texto)}</a> · " : string.Empty;
         var cuerpo = $"""
             <!doctype html>
             <html lang="es-CO">
-            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">{refresco}<title>{html.Encode(titulo)} · Flit Atlas</title></head>
+            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.Encode(titulo)} · Flit Atlas</title></head>
             <body><h1>{html.Encode(titulo)}</h1><p>{html.Encode(texto)}</p><p>{enlaceSecundario}<a href="{destino}">{html.Encode(principal.Texto)}</a></p></body>
             </html>
             """;
