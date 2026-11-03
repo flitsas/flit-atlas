@@ -9,7 +9,7 @@ elementos: []
 reemplaza: []
 reemplazado_por: []
 alias: []
-fuentes: [prompt maestro §6 y §12, docs/seguridad/revision-f4.md (F4-SEC-01 a 08, 13, 14, 18, 19 y 21), ATLAS-ADR-0022, ATLAS-ADR-0025, ATLAS-ADR-0027, ATLAS-ADR-0030, ATLAS-ADR-0048]
+fuentes: [prompt maestro §6 y §12, docs/seguridad/revision-f4.md (F4-SEC-01 a 08, 13, 14, 15, 16, 18, 19, 20, 21 y 24), ATLAS-ADR-0022, ATLAS-ADR-0025, ATLAS-ADR-0027, ATLAS-ADR-0030, ATLAS-ADR-0048]
 ---
 
 # ATLAS-ADR-0049 · Endurecimiento de la identidad en F4
@@ -201,6 +201,35 @@ En local y dev basta el loopback. Documentado en `deploy/runbook-atlas.md` §4.
   colector y de ahí a Loki) filtrado a las advertencias de `RegistroSeguridad`, que son los eventos
   `identidad.emergencia.*` con su tipo y su id, y vacía el exportador al terminar. La consola sigue mostrando solo la
   salida del comando (el enlace).
+- **F4-SEC-15** (03/11/2026). Al crear una invitación, un administrador de organización recibe **un único 409**
+  `correo_no_disponible` con el mismo mensaje sea el correo de un empleado, de una cuenta de otra organización o de una
+  invitación viva (de otra organización o de la suya), como pide ATLAS-ADR-0025 §2: no enumera correos de Atlas. Quien
+  administra desde FLIT sigue viendo el motivo (`correo_no_disponible` o `invitacion_existente`) para resolverlo.
+- **F4-SEC-16** (03/11/2026). Suspender, renovar y revocar abren una transacción, toman la fila de la invitación con
+  `FOR UPDATE` (RLS sigue aplicando: lo que la sesión no ve no se bloquea y responde 404) y la leen **después** del
+  candado, igual que la aceptación. Una aceptación en curso termina primero y la acción decide con la persona ya
+  confirmada: revocar retira sus roles y cierra sus sesiones, suspender la suspende y renovar no devuelve a pendiente
+  una invitación aceptada. Si la acción llega primero, la aceptación ve el estado nuevo y responde 410. Se prefirió el
+  candado a `xmin` como token de concurrencia: es el mismo mecanismo de la aceptación y no convierte la carrera en un
+  error que haya que reintentar. La invitación se confirma antes de retirar roles e invalidar sesiones (que tienen sus
+  propias escrituras), como antes.
+- **F4-SEC-20** (03/11/2026). El rebote `/connect/continuar` ya no tiene `meta refresh`: muestra un enlace «Continuar»
+  que la persona pulsa. Si la `redirect_uri` de la solicitud **no es de loopback** (RFC 8252 §7.3) o el cliente pide
+  `prompt=consent`, `/connect/authorize` muestra una pantalla de confirmación (aplicación, a nombre de quién, a qué
+  origen va el acceso y con qué scopes) y solo emite el código con «Permitir». La decisión viaja en el parámetro
+  `atlas_consentimiento`, protegido con Data Protection, de 10 minutos y ligado a la sesión (`sid`), el cliente, la
+  redirect, los scopes y el reto PKCE: no sirve inventado, en otra sesión ni para otra solicitud, y no se salta
+  aunque el enlace ajeno lo traiga ni cruce el ingreso con Microsoft. «Cancelar» devuelve `access_denied` y con
+  `prompt=none` se responde `consent_required`. Son enlaces y no un formulario: la CSP de estas páginas sigue con
+  `default-src 'none'` y `form-action 'none'` (sin scripts ni estilos en línea), y Chrome aplica `form-action` también
+  a la redirección que sigue al envío, la que lleva el código al cliente. Los clientes con alguna redirect fuera del
+  loopback quedan con `consent_type = explicit`; `atlas-cli` y `atlas-mcp` (solo loopback) siguen sin pantalla
+  (ATLAS-ADR-0024).
+- **F4-SEC-24** (03/11/2026). La calculadora de permisos solo suma los roles implícitos por propiedad (responsable de
+  un aplicativo) a un **empleado**: un externo que figure en el reparto no edita nada. Restaurar una versión del
+  reparto revalida lo que exige cambiar un responsable: si alguna persona de la versión ya no es empleada (o no
+  existe), responde 409 `persona_no_empleada` con sus nombres. Una persona inactiva sí se restaura: el historial la
+  nombra y, sin estar activa, no tiene permisos.
 
 ## Consecuencias
 
@@ -246,9 +275,12 @@ En local y dev basta el loopback. Documentado en `deploy/runbook-atlas.md` §4.
 - Pruebas: `services/api/tests/Flit.Atlas.Api.Tests/Seguridad/PentestCuentasExternasTests.cs` (F4-SEC-01 a 06),
   `PentestSesionesTests.cs` (07 y 18), `SincronizacionPersonasTests.Recalcula_los_roles_de_los_grupos…` (08 y 07 en la
   sincronización), `ProxyTests` (13), `CuentasExternasTests.Un_admin_de_organizacion_no_reactiva…` (14),
-  `TokensTests.El_refresh_de_un_externo…` (19), `EmergenciaTests.Los_logs_del_comando…` (21), `SeguridadTests`.
-- Sin hacer aquí (otros hallazgos bajos de identidad): F4-SEC-15 (409 distinguibles para el admin de organización),
-  F4-SEC-16 (`FOR UPDATE` al revocar), F4-SEC-17 (`TomarAsync` en los pasos), F4-SEC-20 (consentimiento implícito) y la
-  agrupación de IPv6 por /64.
+  `TokensTests.El_refresh_de_un_externo…` (19), `EmergenciaTests.Los_logs_del_comando…` (21), `SeguridadTests`,
+  `CuentasExternasTests.Un_admin_de_organizacion_no_enumera_correos…` (15),
+  `CuentasExternasTests.Pentest_revocar_suspender_o_renovar_durante_una_aceptacion…` (16),
+  `TokensTests.Pentest_un_enlace_ajeno_no_obtiene_un_codigo…` y `…se_vuelve_por_el_rebote` (20),
+  `ModuloEquipoTests.El_rol_implicito_de_responsable_exige_ser_empleado…` (24).
+- Sin hacer aquí (otros hallazgos bajos de identidad): F4-SEC-17 (`TomarAsync` en los pasos) y la agrupación de IPv6
+  por /64.
 - ATLAS-ADR-0022 (bloqueo y límites), ATLAS-ADR-0025 (cuentas externas y recuperación), ATLAS-ADR-0027 (emergencia),
   ATLAS-ADR-0030 (sincronización con Graph), ATLAS-ADR-0048 (endurecimiento de F4).
