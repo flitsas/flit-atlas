@@ -20,6 +20,9 @@ namespace Flit.Atlas.Api.Tests;
 /// </summary>
 public partial class CuentasExternasTests
 {
+    /// <summary>Tipos de evento de la seguridad de la propia cuenta (F4-SEC-31), probados con su auditoría en este archivo.</summary>
+    public static readonly string[] TiposDeEventoSeguridadCuenta = [TiposEventoSeguridad.ContrasenaCambiada];
+
     private const string RutaCuenta = "/api/v1/identidad/cuenta";
     private const string ContrasenaNueva = "Nevado del Ruiz en la tarde 2026";
 
