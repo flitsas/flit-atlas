@@ -17,6 +17,12 @@ public static class ClaimsGitHub
 {
     public const string Repositorio = "repository";
     public const string Propietario = "repository_owner";
+
+    /// <summary>Id numérico del repo: no cambia si el repo se renombra, y uno nuevo con el mismo nombre trae otro.</summary>
+    public const string RepositorioId = "repository_id";
+
+    /// <summary>Id numérico del dueño (organización o usuario): un nombre liberado y vuelto a registrar trae otro.</summary>
+    public const string PropietarioId = "repository_owner_id";
     public const string Ref = "ref";
     public const string TipoRef = "ref_type";
     public const string Sha = "sha";
@@ -163,9 +169,11 @@ internal sealed partial class ManejadorGitHubActions(
 /// <param name="Rama">Nombre de la rama (sin <c>refs/heads/</c>).</param>
 /// <param name="Workflow">Ruta del workflow que llamó (<c>.github/workflows/ci.yml</c>), sacada de <c>workflow_ref</c>.</param>
 /// <param name="WorkflowDelJob"><c>job_workflow_ref</c>: el workflow reutilizable que corre el job.</param>
+/// <param name="RepositorioId"><c>repository_id</c> (numérico), si lo trae; lo revisa <see cref="ListaBlancaPublicacion"/> (F4-SEC-27).</param>
+/// <param name="PropietarioId"><c>repository_owner_id</c> (numérico), si lo trae.</param>
 public sealed record PublicadorCi(
     string Repositorio, string Propietario, string Rama, string Commit, string? Workflow, string WorkflowDelJob, string Evento,
-    string? Ejecucion, string? Intento)
+    string? Ejecucion, string? Intento, string? RepositorioId = null, string? PropietarioId = null)
 {
     /// <summary><c>github:dueño/repo@rama</c> (plan 00 §8.4, <c>publicado_por</c>).</summary>
     public string Firma => $"github:{Repositorio}@{Rama}";
@@ -189,7 +197,8 @@ public sealed record PublicadorCi(
             return null;
         }
         return new PublicadorCi(repositorio, propietario, referencia["refs/heads/".Length..], sha.ToLowerInvariant(),
-            RutaWorkflow(Valor(ClaimsGitHub.Workflow), repositorio), deljob, evento, Valor(ClaimsGitHub.Ejecucion), Valor(ClaimsGitHub.Intento));
+            RutaWorkflow(Valor(ClaimsGitHub.Workflow), repositorio), deljob, evento, Valor(ClaimsGitHub.Ejecucion), Valor(ClaimsGitHub.Intento),
+            Valor(ClaimsGitHub.RepositorioId), Valor(ClaimsGitHub.PropietarioId));
     }
 
     /// <summary><c>dueño/repo/.github/workflows/ci.yml@refs/heads/develop</c> → <c>.github/workflows/ci.yml</c>.</summary>
