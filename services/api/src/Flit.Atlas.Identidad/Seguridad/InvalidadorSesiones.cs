@@ -44,6 +44,13 @@ public interface IInvalidadorSesiones
     /// <param name="actorPersonaId">Quién hizo el cambio; <c>null</c> si fue el sistema (p. ej. un vencimiento).</param>
     /// <returns>Cuántas sesiones activas se revocaron.</returns>
     Task<int> InvalidarSesionesAsync(Guid personaId, string motivo, Guid? actorPersonaId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lo mismo que <see cref="InvalidarSesionesAsync"/>, pero no revoca la sesión del BFF <paramref name="sesionConservada"/>:
+    /// la de la persona que cambia su propia contraseña o sus factores (F4-SEC-31). Esa sesión queda con el sello anterior:
+    /// quien llama debe volver a firmarla con el sello nuevo en la misma petición o deja de servir en la siguiente.
+    /// </summary>
+    Task<int> InvalidarOtrasSesionesAsync(Guid personaId, Guid sesionConservada, string motivo, CancellationToken ct = default);
 }
 
 internal sealed class InvalidadorSesiones(
@@ -54,7 +61,13 @@ internal sealed class InvalidadorSesiones(
     IOpenIddictAuthorizationManager autorizaciones,
     IOpenIddictTokenManager tokens) : IInvalidadorSesiones
 {
-    public async Task<int> InvalidarSesionesAsync(Guid personaId, string motivo, Guid? actorPersonaId = null, CancellationToken ct = default)
+    public Task<int> InvalidarSesionesAsync(Guid personaId, string motivo, Guid? actorPersonaId = null, CancellationToken ct = default) =>
+        InvalidarAsync(personaId, motivo, actorPersonaId, null, ct);
+
+    public Task<int> InvalidarOtrasSesionesAsync(Guid personaId, Guid sesionConservada, string motivo, CancellationToken ct = default) =>
+        InvalidarAsync(personaId, motivo, personaId, sesionConservada, ct);
+
+    private async Task<int> InvalidarAsync(Guid personaId, string motivo, Guid? actorPersonaId, Guid? conservada, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(motivo);
         var usuario = await usuarios.Users.FirstOrDefaultAsync(u => u.PersonaId == personaId, ct);
@@ -76,7 +89,7 @@ internal sealed class InvalidadorSesiones(
             }
         }
 
-        var revocadas = await sesiones.RevocarTodasAsync(usuario.Id, motivo, ct: ct);
+        var revocadas = await sesiones.RevocarTodasAsync(usuario.Id, motivo, conservada, ct);
         var sub = usuario.Id.ToString();
         await autorizaciones.RevokeBySubjectAsync(sub, ct);
         var tokensRevocados = await tokens.RevokeBySubjectAsync(sub, ct);

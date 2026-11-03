@@ -54,6 +54,9 @@ public static class TiposEventoSeguridad
     /// <summary>Se registró un factor: passkey, contraseña, TOTP o códigos de recuperación (detalle <c>metodo</c>).</summary>
     public const string FactorRegistrado = "factor_registrado";
 
+    /// <summary>La persona cambió su contraseña desde la seguridad de su cuenta (F4-SEC-31, ATLAS-ADR-0049 §10).</summary>
+    public const string ContrasenaCambiada = "contrasena_cambiada";
+
     /// <summary>Se quitaron los factores anteriores (recuperación o restablecimiento forzado).</summary>
     public const string FactoresRetirados = "factores_retirados";
 

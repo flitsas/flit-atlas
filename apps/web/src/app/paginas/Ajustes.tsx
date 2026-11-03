@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellRing, LogOut, Send } from 'lucide-react';
+import { BellRing, LogOut, Send, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 
 import { activarPush, desactivarPush, estadoPush, type EstadoPush, instalada } from '../../pwa/push';
 import { type Canal, enviarPushDePrueba, guardarPreferencia, obtenerPreferencias } from '../api';
@@ -74,6 +75,16 @@ export default function Ajustes() {
             </dd>
           </div>
         </dl>
+        {(yo.proveedor === 'local' || yo.proveedor === 'emergencia') && (
+          // Cuentas locales (externos y emergencia): sus factores se administran en Atlas (F4-SEC-31).
+          <Link
+            to="/ajustes/seguridad"
+            className="mt-4 flex min-h-toque items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium hover:bg-atlas-activo"
+          >
+            <ShieldCheck className="size-4" aria-hidden="true" />
+            Seguridad de la cuenta: contraseña, passkeys y códigos
+          </Link>
+        )}
         <Boton variante="secundario" className="mt-4" onClick={() => void cerrarSesion()}>
           <LogOut className="size-4" aria-hidden="true" />
           Cerrar sesión

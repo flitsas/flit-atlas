@@ -69,16 +69,54 @@ internal static class ServicioExportaciones
         JsonSerializer.Deserialize<List<ArchivoExportado>>(json, EntradaExportacion.Json) ?? [];
 
     /// <summary>
-    /// Sube la entrada y guarda la exportación pendiente con su evento y su auditoría. Si la base falla, la entrada queda
-    /// huérfana en el S3 (no tiene datos que nadie más lea; la limpia la regla de ciclo de vida del bucket, si existe).
+    /// Sube la entrada y guarda la exportación pendiente con su evento y su auditoría. Si algo falla antes de confirmar la
+    /// transacción (el tope en curso, la base, una cancelación), se borra lo subido: la entrada no queda huérfana en el S3
+    /// (F4-SEC-28; para una versión interna es el spec completo). Si falla al confirmar, no se borra: el resultado del
+    /// COMMIT es incierto y la fila pudo quedar; lo que sobre lo limpia la regla de ciclo de vida del bucket.
     /// </summary>
     public static async Task<ExportacionContratos> CrearAsync(
         ContratosDbContext contexto, PlataformaDbContext plataforma, Plataforma.Almacenamiento.IAlmacenObjetos almacen,
         ExportacionContratos borrador, EntradaExportacion entrada, ActorAuditoria actor, DateTimeOffset ahora, CancellationToken ct,
         TopeEnCurso? tope = null)
     {
+        ArgumentNullException.ThrowIfNull(almacen);
+        ArgumentNullException.ThrowIfNull(borrador);
         var bytes = entrada.AJson();
         await almacen.SubirAsync(borrador.EntradaClave, bytes, "application/json", ct).ConfigureAwait(false);
+        var confirmando = false;
+        try
+        {
+            return await GuardarAsync(contexto, plataforma, borrador, entrada, bytes, actor, ahora, tope, () => confirmando = true, ct)
+                .ConfigureAwait(false);
+        }
+        catch when (!confirmando)
+        {
+            await BorrarSubidoAsync(almacen, borrador).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Borra todo lo subido bajo el prefijo de una exportación que no llegó a la base. Sin el token de la petición (si se
+    /// canceló, igual hay que limpiar) y sin tapar el error original: si el S3 tampoco responde, queda para el ciclo de vida.
+    /// </summary>
+    private static async Task BorrarSubidoAsync(Plataforma.Almacenamiento.IAlmacenObjetos almacen, ExportacionContratos borrador)
+    {
+        try
+        {
+            await almacen.BorrarPrefijoAsync(Prefijo(borrador.Id), CancellationToken.None).ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // Limpieza de mejor esfuerzo: el error que importa es el que se relanza.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+    }
+
+    private static async Task<ExportacionContratos> GuardarAsync(
+        ContratosDbContext contexto, PlataformaDbContext plataforma, ExportacionContratos borrador, EntradaExportacion entrada, byte[] bytes,
+        ActorAuditoria actor, DateTimeOffset ahora, TopeEnCurso? tope, Action alConfirmar, CancellationToken ct)
+    {
         var exportacion = new ExportacionContratos
         {
             Id = borrador.Id,
@@ -130,6 +168,7 @@ internal static class ServicioExportaciones
             new OrigenEvento(Texto(exportacion.Origen), exportacion.PaqueteId, exportacion.Revision, exportacion.VersionId)),
             exportacion.OrganizacionId);
         await plataforma.SaveChangesAsync(ct).ConfigureAwait(false);
+        alConfirmar();
         await transaccion.CommitAsync(ct).ConfigureAwait(false);
         await plataforma.Database.UseTransactionAsync(null, ct).ConfigureAwait(false);
         return exportacion;

@@ -249,4 +249,22 @@ public class PermisosTests(Contenedores contenedores)
         // Lo que da un rol global vale en cualquier recurso.
         Assert.True(permisos.TieneEn("atlas.docs.exportar", new AlcanceAsignacion(TiposAlcance.Aplicativo, "vigia")));
     }
+
+    /// <summary>F4-SEC-24 (ATLAS-ADR-0049): un externo que figure como responsable no recibe el rol implícito.</summary>
+    [Fact]
+    public async Task El_rol_implicito_no_vale_para_un_externo()
+    {
+        var bd = await contenedores.CrearBaseAsync();
+        var catalogo = Catalogo();
+        await using var contexto = bd.Contexto();
+        await SembradorPermisos.SembrarAsync(contexto, catalogo, Ct);
+        var (persona, _) = await PersonaConRolAsync(contexto, TipoPersona.Externo, RolesAtlas.Integrador, DateTimeOffset.UtcNow.AddMinutes(-1), null);
+        var flito = new AlcanceAsignacion(TiposAlcance.Aplicativo, "flito");
+
+        var permisos = await new CalculadoraPermisos(contexto, catalogo, new Implicitos(new RolImplicito(RolesAtlas.Responsable, flito)), TimeProvider.System)
+            .CalcularAsync(persona, Ct);
+
+        Assert.Equal([RolesAtlas.Integrador], permisos.Roles);
+        Assert.False(permisos.TieneEn("atlas.docs.aprobar", flito));
+    }
 }

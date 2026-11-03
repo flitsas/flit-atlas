@@ -8,6 +8,8 @@
 #    ficticias de scripts/atlas-publicar/fixtures/asyncapi/: resuelve las externas, deja las locales, no toca un spec sin
 #    externas y falla con una $ref rota.
 # 3. Comprueba que las copias de los rulesets de vacuum embebidas en el workflow coinciden con contracts/vacuum/.
+# 4. F4-SEC-27: el token OIDC siempre se pide para atlas_url (la URL a la que se envía) y la entrada obsoleta «audiencia»
+#    solo pasa vacía o igual a atlas_url (corre el bloque «# >>> audiencia» tal cual).
 #
 # Requiere bash, node, yq (mikefarah/yq v4, el de los runners de GitHub) y oasdiff (la misma versión del CI, 1.33.0) en el
 # PATH. Lo corre el job «contratos» de ci.yml.
@@ -150,6 +152,17 @@ for par in "COMPARTIBLE:openapi-compartible.yaml" "INTERNO:openapi.yaml" "ASYNCA
     fallos=$((fallos + 1))
   fi
 done
+
+# F4-SEC-27: la audiencia del token es siempre la URL a la que se envía.
+extraer '# >>> audiencia' '# <<< audiencia' > "$trabajo/audiencia.sh"
+[ -s "$trabajo/audiencia.sh" ] || { echo "No se encontró el bloque de la audiencia en $workflow" >&2; exit 1; }
+# audiencia_falla <AUDIENCIA> <ATLAS_URL>: 1 si el bloque rechaza la combinación.
+audiencia_falla() { (fallo=0; AUDIENCIA="$1" ATLAS_URL="$2"; source "$trabajo/audiencia.sh" > /dev/null; echo "$fallo"); }
+afirmar "audiencia vacía: vale" '[ "$(audiencia_falla "" "https://atlas.ejemplo.com")" = 0 ]'
+afirmar "audiencia igual a atlas_url: vale" '[ "$(audiencia_falla "https://atlas.ejemplo.com" "https://atlas.ejemplo.com")" = 0 ]'
+afirmar "audiencia distinta de atlas_url: falla" '[ "$(audiencia_falla "https://atlas.ejemplo.com" "https://otro.ejemplo.com")" = 1 ]'
+afirmar "todo getIDToken pide el token para ATLAS_URL" \
+  '[ "$(grep -c "core.getIDToken(" "$workflow")" -gt 0 ] && [ "$(grep -c "core.getIDToken(" "$workflow")" = "$(grep -c "core.getIDToken(ATLAS_URL)" "$workflow")" ]'
 
 echo
 if [ "$fallos" -gt 0 ]; then
