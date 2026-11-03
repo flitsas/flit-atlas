@@ -282,6 +282,48 @@ public class ModuloEquipoTests(EntornoApi entorno)
         Assert.True(await PuedeEditar("firmas"));
     }
 
+    /// <summary>
+    /// F4-SEC-24 (ATLAS-ADR-0049): el rol implícito por propiedad es solo de empleados. Si una persona del reparto deja de
+    /// serlo (aquí pasa a externa de un cliente), no conserva la edición de sus aplicativos, y una versión que la nombra
+    /// no se restaura.
+    /// </summary>
+    [Fact]
+    public async Task El_rol_implicito_de_responsable_exige_ser_empleado_y_restaurar_lo_revalida()
+    {
+        await using var e = await EscenarioAsync();
+        await ImportarAsync(e.Lider);
+        var (septima, correo) = e.Personas["Persona Demo Séptima"];
+        var cambio = await Enviar(e.Lider, HttpMethod.Put, "/api/v1/equipo/responsabilidades", new
+        {
+            aplicativoId = await AplicativoAsync(e.Lider, "certify"), tipo = "principal", personaId = e.Personas["Persona Demo Uno"].Id,
+            nota = "Certify pasa a Persona Demo Uno.",
+        });
+        Assert.Equal(HttpStatusCode.OK, cambio.StatusCode);
+
+        await using (var plataforma = entorno.Plataforma(e.Base))
+        {
+            var cliente = new Organizacion { Nombre = $"Organismo Demo {Guid.NewGuid():N}", Tipo = TipoOrganizacion.Cliente };
+            plataforma.Organizaciones.Add(cliente);
+            await plataforma.SaveChangesAsync(Ct);
+            await plataforma.Personas.Where(p => p.Id == septima)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Tipo, TipoPersona.Externo).SetProperty(p => p.OrganizacionId, cliente.Id), Ct);
+        }
+
+        // Sigue en el reparto vigente (principal de Reportes, Ayuda y Doctor FLIT; secundaria de Firmas), pero sin el rol.
+        using var externa = await EntrarComoPersonaAsync(e.Api, septima, correo);
+        var yo = await JsonAsync(await externa.GetAsync("/api/v1/plataforma/yo"));
+        Assert.DoesNotContain(RolesAtlas.Responsable, yo.GetProperty("roles").EnumerateArray().Select(r => r.GetString()));
+        Assert.Empty(yo.GetProperty("permisos").EnumerateArray());
+
+        // La versión 5 la tenía como principal de Certify: no se restaura.
+        var restaurar = await Enviar(e.Lider, HttpMethod.Post, "/api/v1/equipo/versiones/5/restauracion", new { nota = "Volvemos a la versión 5." });
+        Assert.Equal(HttpStatusCode.Conflict, restaurar.StatusCode);
+        var error = await JsonAsync(restaurar);
+        Assert.Equal("persona_no_empleada", error.GetProperty("codigo").GetString());
+        Assert.Contains("Persona Demo Séptima", error.GetProperty("mensaje").GetString(), StringComparison.Ordinal);
+        Assert.Equal(6, (await JsonAsync(await e.Lider.GetAsync("/api/v1/equipo/versiones"))).EnumerateArray().First().GetProperty("numero").GetInt32());
+    }
+
     [Fact]
     public async Task El_traspaso_exige_un_despliegue_y_una_guardia_antes_de_habilitar()
     {

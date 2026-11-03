@@ -6075,7 +6075,7 @@ paths:
       tags:
         - Equipo
       summary: Restaurar una versión del reparto
-      description: 'Deja el reparto como en esa versión y crea una versión nueva igual a ella (misma huella), con la nota. Un secundario que cambia empieza en acompañamiento. Queda en la auditoría. Requiere atlas.equipo.gestionar.'
+      description: 'Deja el reparto como en esa versión y crea una versión nueva igual a ella (misma huella), con la nota. Un secundario que cambia empieza en acompañamiento. Si alguna persona de esa versión ya no es empleada de FLIT, responde 409 persona_no_empleada. Queda en la auditoría. Requiere atlas.equipo.gestionar.'
       operationId: RestaurarVersionReparto
       parameters:
         - name: numero
@@ -11282,7 +11282,7 @@ components:
       properties:
         codigo:
           type: string
-          description: 'Código: no_encontrado, version_no_valida, hay_pendientes, vista_previa_cambio, sin_reparto, checklist_incompleto, no_es_secundario, ya_habilitado, version_repetida.'
+          description: 'Código: no_encontrado, version_no_valida, hay_pendientes, vista_previa_cambio, sin_reparto, checklist_incompleto, no_es_secundario, ya_habilitado, version_repetida, persona_no_empleada.'
         mensaje:
           type: string
           description: 'Qué pasó, en español.'

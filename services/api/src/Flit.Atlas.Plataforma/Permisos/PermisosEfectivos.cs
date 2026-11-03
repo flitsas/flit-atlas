@@ -102,7 +102,7 @@ public sealed class PermisosEfectivos
 
 /// <summary>
 /// Calcula los <see cref="PermisosEfectivos"/> de una persona con la hora actual: asignaciones vigentes (manuales, de
-/// grupos de Entra o de invitaciones), <see cref="RolesAtlas.Lector"/> para todo empleado y los roles implícitos. Una
+/// grupos de Entra o de invitaciones), y para todo empleado <see cref="RolesAtlas.Lector"/> y los roles implícitos. Una
 /// persona inactiva o suspendida, o de una organización suspendida, no tiene permisos; <see cref="RolesAtlas.AdminOrganizacion"/>
 /// solo cuenta si su organización lo tiene habilitado. Una asignación vencida deja de
 /// contar en la primera petición después de su vencimiento, sin que nadie intervenga.
@@ -158,12 +158,14 @@ public sealed class CalculadoraPermisos(
         if (persona.Tipo == TipoPersona.Empleado)
         {
             concesiones.Add(new ConcesionRol(RolesAtlas.Lector, persona.OrganizacionId, AlcanceAsignacion.Global, null, OrigenBase));
-        }
-        foreach (var implicito in await implicitos.ObtenerAsync(personaId, ct))
-        {
-            if (catalogo.Rol(implicito.Rol)?.Tipo == TipoRol.Implicito && !implicito.Alcance.EsGlobal)
+            // Los roles implícitos por propiedad (responsable de un aplicativo, §7.2) son solo de empleados: un externo que
+            // quede como responsable (p. ej. al restaurar una versión vieja del reparto) no edita nada (F4-SEC-24).
+            foreach (var implicito in await implicitos.ObtenerAsync(personaId, ct))
             {
-                concesiones.Add(new ConcesionRol(implicito.Rol, persona.OrganizacionId, implicito.Alcance, null, OrigenImplicito));
+                if (catalogo.Rol(implicito.Rol)?.Tipo == TipoRol.Implicito && !implicito.Alcance.EsGlobal)
+                {
+                    concesiones.Add(new ConcesionRol(implicito.Rol, persona.OrganizacionId, implicito.Alcance, null, OrigenImplicito));
+                }
             }
         }
         return PermisosEfectivos.Desde(catalogo, concesiones);
