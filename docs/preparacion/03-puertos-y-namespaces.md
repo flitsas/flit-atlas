@@ -58,7 +58,7 @@ La cookie del BFF es `SameSite=Strict` (ATLAS-ADR-0008), así que la PWA y la AP
 | Ambiente | Clúster | Namespace | Application de Argo CD | Raíz que la lee |
 |---|---|---|---|---|
 | qa | k3s 177 | `atlas-qa` | `atlas-qa` | `clusters/vps-177/` |
-| pdn | k3s 169 | `atlas-pdn` | `atlas-pdn` | `clusters/vps-169/` |
+| pdn | k3s 145 (28/10/2026; antes 169) | `atlas-pdn` | `atlas-pdn` | `clusters/vps-145/` |
 | sandbox (Microcks, F4) | k3s 177 | `atlas-sandbox` | `atlas-sandbox` | `clusters/vps-177/` |
 
 **Confirmado el 22/10/2026 (ATLAS-ADR-0019):** namespaces propios y sin ambiente dev desplegado; `develop` solo corre el CI.
@@ -75,7 +75,7 @@ Secretos: en la 177, sellados con su llave propia. En la 169, con la llave compa
 
 ## 5. Hosts
 
-ATLAS-ADR-0019 (22/10/2026): `qa.atlas.flitsas.com` (177) y `atlas.flitsas.com` (169). No hay host de dev.
+ATLAS-ADR-0019 (22/10/2026): `qa.atlas.flitsas.com` (177) y `atlas.flitsas.com` (la 145 desde el 28/10/2026, donde ya apuntaba el DNS; antes 169). No hay host de dev.
 
 ## 6. Qué se hace al confirmar
 

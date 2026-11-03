@@ -1,146 +1,109 @@
 # Estado del trabajo · Flit Atlas
 
-> **Corte:** 28/10/2026, mañana (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
+> **Corte:** 03/11/2026 (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
 > Se actualiza al cerrar cada jornada. El prompt maestro (`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`) sigue
 > siendo la fuente que prevalece; aquí solo va **dónde quedamos** y **qué sigue**.
 
 ## 1. Dónde estamos
 
+**El MVP (F0–F4) está construido y corriendo en QA y en pdn.** Lo que falta es formalizar la entrega a `release`,
+cerrar los pendientes de seguridad antes de abrir a externos e invitar al cliente piloto.
+
 | Fase | Estado | Dónde |
 |---|---|---|
-| F0–F2 | Integradas en `develop` y desplegadas en QA | — |
-| F3 · Contratos internos y legado ICT | Integrada en `develop` (PR #29) y en `staging` (PR #30, 24/10). El CD desplegó en QA (gitops `07e5eb1`, «atlas-qa: despliegue cf56f28») | Tag `v1` del workflow reutilizable sobre `b957751` |
-| **F4 · Portal, exportes y pdn** | **Código completo hasta la ola 3 + correcciones de seguridad.** Falta la ola 4 (despliegue) | **PR #31 integrado en `develop`** el 26/10 (`f635cce`, cabeza `c8c64ee`). Aún no va a `staging`: ver sección 3 |
+| F0–F3 | Integradas y desplegadas en QA | — |
+| F4 · Portal, exportes y pdn | Código completo (PR #31, #33, #35, #37) en `develop` y `staging`; CD de `staging` en verde el 28/10 (PR #38) | QA: `qa.atlas.flitsas.com` |
+| HU 4.11 · pdn | **Encendido el 28/10** en la **145** (flit-gitops #85 y #86): `atlas.flitsas.com` responde `/health/ready` 200, con los digests de QA hasta el primer CD de `release` | `services/atlas-pdn/` de flit-gitops |
+| Bajos de la revisión de seguridad | PR #39 (F4-SEC-15, 16, 20, 24) y PR #40 apilado (F4-SEC-17, 27, 28, 31, 32), abiertos el 03/11 | Esperan revisión del líder |
 
-### Lo que ya trae la rama `f4/portal-integracion`
+La tabla de HU y ADR de la F4 (4.1 a 4.10, ADR 0038 y 0041 a 0051) está en el historial de este archivo (corte del
+28/10) y en `docs/adr/README.md`.
 
-| HU | Qué | ADR |
-|---|---|---|
-| 4.1 | Paquetes con revisiones inmutables, asistente de 3 pasos, publicar y fijar revisión anterior | 0041 |
-| 4.2 | Poda de specs OpenAPI/AsyncAPI con lista blanca de extensiones, fail-closed | 0038 |
-| 4.3 / 4.4 | Comparticiones con organizaciones (RLS), portal del cliente y pruebas de aislamiento bloqueantes | 0043 |
-| 4.5 | Exportes en atlas-docs (7 formatos, marca de agua, hash) por cola RabbitMQ, URL firmada de 15 min, token de servicio OpenIddict | 0042, 0044 |
-| 4.6 | Compartir desde el móvil (Web Share, descargas en iOS) | 0042 §3 |
-| 4.7 | Sandbox nivel 1 con Microcks detrás de un proxy en atlas-api con llave por compartición | 0045 |
-| 4.8 / 4.9 | Avisos de deprecación (bandeja, push, correo) y favoritos sin conexión | 0046, 0034 |
-| 4.10 | CSP estricta, cabeceras, límites de tasa por organización, prueba de carga k6, runbook (`deploy/runbook-atlas.md`), revisión de seguridad y pentest de identidad (`docs/seguridad/revision-f4.md`) | 0048 |
-| Seguridad | Correcciones de identidad (F4-SEC-01 a 08, 13 y bajos) y de datos (F4-SEC-09 a 12 y bajos) | 0049, 0050 (**aceptados por el líder el 24/10**) |
-| F4-SEC-02 (26/10) | Un fallo rezagado ya no suma con la cuenta bloqueada (contraseña y segundo factor): evitaba un segundo bloqueo que duplicaba la duración. Queda como `inicio_rechazado` | 0049 |
+### Decisiones de pdn (28/10/2026, ATLAS-ADR-0019 y 0051 actualizados el 03/11)
 
-Última verificación local: `dotnet test Flit.Atlas.slnx` **788 de 789** (la omitida es la prueba de carga, que corre solo con
-`ATLAS_CARGA_K6`). Web: Vitest 218/218 en serie, bundle inicial ~176,5 KB gzip. atlas-docs: pytest en verde (el PDF corre en
-el contenedor con Pango y `ATLAS_DOCS_EXIGIR_PDF=1`). El CI del PR #31 sobre `056d541` falló en una prueba de 798
-(`Pentest_veinte_contrasenas_erradas_concurrentes_bloquean_la_cuenta`, carrera real de F4-SEC-02, intermitente); se corrigió
-en `c8c64ee` y el PR se integró. Revisar el CI de `develop` sobre `f635cce`.
+- Servidor: la **145** (donde ya apuntaba el DNS), no la 169. Argo lee `clusters/vps-145/atlas-pdn.yaml` (solo
+  `root-vps-145`; nunca `apps/`).
+- S3: **MinIO propio** en `atlas-pdn`, bucket `atlas-pdn`, reenvío `/atlas-pdn/` en el nginx de la 145. No Contabo (sus
+  llaves son de toda la cuenta).
+- Postgres: base `atlas` propia por PgBouncer (`pool_mode=session`), roles separados como en QA.
+- Entra: pdn **reusa el registro de QA** (con el redirect de pdn). Rotar su secreto afecta a los dos ambientes.
+- Abierto solo a empleados hasta invitar al cliente piloto. Paquetes solo con versiones estables (en QA, también `-rc`).
 
-## 2. Ola 4: lo que ya quedó listo
+### Verificado el 03/11 desde fuera
 
-1. **Limpieza de descripciones del contrato ICT**: integrada en `f4/portal-integracion` (`8078bad`). El generador
-   `atlas_docs.ict` falla si un texto de cara al cliente nombra piezas internas (`ict/lenguaje.py`); la procedencia va en
-   `x-flit-*` y en `contracts/ict/informe.md`. El **PR #698 de flit** ya tiene el contrato limpio (commit `90f24be`).
-   Pendiente menor: ¿renombrar `info.title` «FLIT Core ICT API»?
-   27/10: con flit y flit-atlas públicos (temporal; vuelven a privado ~3/11) la CI de flit #697 y #698 ya corre: los 23
-   contratos validan y core-ict avisa el breaking del registro (excepción `breaking: advertencia`). Falta que el líder
-   los saque de borrador e integre (#697 primero) y acepte la excepción.
-2. **PR #76 de flit-gitops (borrador)**: https://github.com/flitsas/flit-gitops/pull/76, rama `atlas/qa-f4`, worktree
-   `D:/FLIT/Code/flit-gitops-atlas-f4` (el checkout principal de gitops sigue en la rama ajena `docs/flito-pdn-argocd`).
-   Trae atlas-docs (`replicas: 0` hasta sellar), MinIO propio `atlas-s3` (`replicas: 0`), NetworkPolicy, RabbitMQ con
-   permisos mínimos por servicio, roles de base (`docs/host-177/atlas-qa-roles-base.md`), scripts
-   `gen-atlas-qa-{migrador,rabbitmq,s3}.sh`, sitio nginx del S3 público y el runbook en `docs/atlas/`.
-   - **S3 decidido (26/10, ATLAS-ADR-0051):** el de FLIT 2 de cada ambiente. QA = MinIO de `filemanager-qa`, bucket
-     `atlas-qa`, usuarios `atlas-qa-api`/`atlas-qa-docs`; descargas por `https://qa.atlas.flitsas.com/atlas-qa/…` (nginx
-     del host hacia `10.43.51.9:9000` conservando el Host). Ya no hay `REEMPLAZAR`. gitops `45d127f` quitó el MinIO propio.
-     El service worker deja pasar `/atlas-<ambiente>/` (`501a6f6`).
-   - pdn (Contabo) por verificar antes de la HU 4.11: las llaves de Contabo son de toda la cuenta (alcanzarían los adjuntos
-     de FLIT 2), ciclo de vida, región para SigV4 y cómo reenviar `/atlas-pdn-eu2/` en la 169.
-   - Dudas a verificar: que el MinIO de `filemanager-qa` traiga `mc` (el script se detiene si no); el JWKS por HTTP interno
-     (OpenIddict exige HTTPS; solo afecta `POST /exportes`, la vía normal es la cola); medir memoria de atlas-docs.
-   - **No volver a correr** `servicio-con-esquema-propio.sql` para atlas: deshace la separación de roles.
+- Cabeceras en QA y pdn: CSP estricta (sin `unsafe-inline`), Trusted Types en Report-Only, HSTS una sola vez, COOP/CORP,
+  `nosniff`, `Referrer-Policy`, `Permissions-Policy`.
+- Límites en QA: 130 peticiones anónimas a `/.well-known/openid-configuration` en un minuto → 120 × 200 y 10 × 429 con
+  `Retry-After: 60`.
+- `Plataforma__Publicacion__Audiencia` no está definida en QA ni en pdn: la regla nueva del PR #40 (F4-SEC-27) no
+  impide que arranquen.
 
-## 3. Orden para llevar la F4 a QA (detalle en el README de `services/atlas-qa` del PR #76)
+## 2. Qué sigue (en orden)
 
-1. ~~PR #31 integrado en `develop`~~ (26/10, `f635cce`).
-   - 27/10: PR #76 de gitops integrado (00:26 UTC) y PR #32 `develop → staging` integrado (10:14 UTC), pero el CI y el CD de
-     `staging` no arrancaron por facturación de la organización en GitHub (pago fallido o límite de gasto). Cuando un admin lo
-     resuelva: confirmar el paso 2 (DBA) y relanzar `gh run rerun 40486905544` (cd) y `40486905524` (ci). Hasta entonces QA
-     sigue con la versión anterior y atlas-docs en `ImagePullBackOff` (esperado).
-   - 27/10, después: facturación arreglada, CD relanzado y **F4 corriendo en QA** (Argo Synced/Healthy, 5 pods 1/1,
-     `/health/ready` Healthy). Cierre (paso 7) hecho: gitops #78 (`ef1ab00`, migrador solo con su cadena) y HSTS quitada
-     del nginx del host (llega una sola vez, la de atlas-web).
-   - 27-28/10: **exportación verificada en QA de punta a punta** (contrato `atlas` 1.0.0-rc, 215 operaciones: solicitud,
-     cola, atlas-docs, S3, descarga por `/atlas-qa/` con 200 y auditoría). En el camino:
-     - `ATLAS_URL` = `https://qa.atlas.flitsas.com` como variable de organización (repos seleccionados: flit-atlas y
-       flit). El CD publica `atlas` y `atlas-eventos` en QA.
-     - PR #33: `atlas.v1.yaml` tenía dos firmas iguales (`/catalogo/aplicativos/{slug}` y `{id}`) y Atlas lo rechazaba
-       con 422; ahora `{aplicativo}` y una prueba que lo impide.
-     - PR #35: el PDF de 470 páginas mataba a atlas-docs por memoria (1,14 GiB con límite de 1 GiB; el líder pidió no
-       subir el límite). PDF por partes con pypdf: pico de ~220-260 MiB en QA, 70 s. Un mensaje reentregado tras una
-       caída ya no se reprocesa sin fin (ATLAS-ADR-0042).
-     - En QA el asistente de paquetes no ofrece contratos: solo acepta compartibles con versión estable (sale de
-       `release`). La exportación se probó por versión desde la consola (`POST /exportaciones` con `versionId`); la PWA
-       no tiene ese botón.
-2. **DBA:** pasos 1 a 5 de `docs/host-177/atlas-qa-roles-base.md` (incluye permisos puente para la versión actual y `pg_hba`).
-3. nginx del host: copiar `docs/host-177/atlas-qa.nginx.conf` (trae `location /atlas-qa/`), `nginx -t` y recargar.
-4. **Sellar** con los tres scripts (`gen-atlas-qa-s3.sh` además crea bucket, política y usuarios en el MinIO de
-   `filemanager-qa`), agregar los archivos a `resources` y poner `replicas: 1` en atlas-docs, en el mismo PR #76.
-5. Integrar el **PR #76** (reinicia RabbitMQ y atlas-api con la versión actual).
-6. Abrir e integrar el PR `develop → staging` de la F4: el CD fija los cuatro digests y el migrador concede permisos.
-   **Si la F4 llega a staging antes del paso 2, atlas-api queda no lista y QA se queda sin API.**
-7. PR de cierre en gitops: quitar el `envFrom` de `atlas-api-secrets` del migrador y la HSTS del sitio del host.
-8. Verificar en QA: ~~una exportación de punta a punta~~ (28/10); falta el portal con una organización de prueba (necesita
-   un contrato compartible con versión estable), cabeceras/CSP y límites.
+1. **Revisar e integrar el PR #39 y luego el #40** en `develop` (el #40 cambia de base solo). Después, `develop → staging`
+   para que lleguen a QA. Al integrar el #40 en QA, probar «Seguridad de la cuenta» con un externo y el clic de
+   «Continuar» de `/connect/continuar` en Chrome, Edge, Firefox y Safari (cookie `SameSite=Strict`, F4-SEC-20).
+2. **Primer CD de `release`**: PR `staging → release` (hoy `release` está en el commit de la F0). El CD fija los digests
+   de producción en `services/atlas-pdn` de gitops. Antes, confirmar que `release` tiene las protecciones y el entorno
+   del CD.
+3. **Verificación de pdn desde la 145** (README de `services/atlas-pdn`, sección «Verificación»): Argo Synced/Healthy,
+   pods 1/1, permisos del migrador, IP real en `identidad_evento_seguridad.ip` tras un ingreso con Microsoft, y una
+   exportación con descarga por `/atlas-pdn/`.
+4. **QA:** portal con una organización de prueba (las `-rc` ya se pueden empaquetar): crear la organización, compartir un
+   paquete, invitar a una cuenta de prueba y entrar como cliente.
+5. **Antes de abrir a externos en pdn** (`docs/seguridad/revision-f4.md` §8): suite de la OpenID Foundation contra QA,
+   `auth_time` en el registro de Entra, RBAC de `kubectl exec` (cuenta de emergencia), NetworkPolicy de atlas-docs,
+   decidir si la cuenta de emergencia existe en pdn, alerta de Loki para `identidad.emergencia.*`, proteger los tags `v*`.
+6. Invitar al cliente piloto (organización y paquete por definir, por ejemplo ICT).
 
-**Ojo:** atlas-api ya **no arranca** en qa/pdn sin `Atlas__Proxy__RedesConfiables` (F4-SEC-13). Verificar también que el
-nginx del host reemplace `X-Forwarded-For` en vez de encadenarlo.
+## 3. Decisiones del líder registradas
 
-## 4. Después (HU 4.11 · producción) — requiere visto bueno del líder
-
-- Supuestos vigentes (el líder no los ha contradicho): `atlas.flitsas.com`, namespace propio `atlas-pdn` en la 169; sandbox
-  en QA (`sandbox.qa.atlas.flitsas.online` solo como ejemplo, configurable); la revisión de seguridad la hizo Claude.
-- Antes de abrir a externos en pdn (`docs/seguridad/revision-f4.md` §8): suite de la OpenID Foundation contra QA,
-  `auth_time` en el registro de Entra, RBAC de `kubectl exec` (cuenta de emergencia), NetworkPolicy de atlas-docs,
-  decidir si la cuenta de emergencia existe en pdn, alerta de Loki para `identidad.emergencia.*`.
-- Invitar al cliente piloto (por definir: organización y paquete, por ejemplo ICT).
-
-## 5. Decisiones del líder registradas
-
-- **P-01:** `flitsas/flit` pasa a privado (aún figura PUBLIC al 24/10); trabajar como si ya lo fuera. Acceso de Actions de
-  flit-atlas en `organization` y tag `v1` creados. Cuando flit sea privado, volver a correr el CI de los PR #697 y #698.
+- **P-01:** `flitsas/flit` y `flitsas/flit-atlas` siguen **públicos** al 03/11; el plan era volverlos privados ~3/11.
+  Al hacerlo, relanzar el CI de flit que publica en Atlas (con los dos privados el workflow reutilizable sigue sirviendo).
+  flit-gitops ya es privado.
 - ADR 0049 y 0050 aceptados (24/10). El spec compartido no lleva extensiones internas (lista blanca, ADR 0038).
-- Recomendaciones aplicadas que el líder puede cambiar: Excel exportado conserva el morado `#4E00EB`; Word con sello de
-  texto como marca de agua; tabla de visibilidad por rol externo del ADR 0043.
+- 28/10: pdn en la 145, MinIO propio, encender solo para empleados, QA acepta `-rc` en paquetes (ADR 0041).
+- Excepción de breaking de core-ict 1.1.0 aceptada (ADR 0037); se quita cuando la 1.1.0 llegue a `release`.
+- Recomendaciones aplicadas que el líder puede cambiar: Excel exportado con el morado `#4E00EB`; Word con sello de texto
+  como marca de agua; tabla de visibilidad por rol externo del ADR 0043.
 
-## 6. Pendientes abiertos (para preguntar o decidir)
+## 4. Pendientes abiertos (para preguntar o decidir)
 
-- ICT: host de QA, autenticación del webhook, códigos de error no declarados en core-ict; excepción `breaking: advertencia`
-  del PR #698.
+- Del PR #39/#40: enlaces en lugar de botones en el consentimiento (F4-SEC-20, por la CSP); restaurar el reparto con
+  personas inactivas (hoy se permite); HIBP caído falla abierto contra la lista local de 10.000 (¿alerta?); ids de repos
+  fijados por configuración o en la base; quitar passkey, cambiar TOTP y reautenticar en la página quedan fuera.
+- ICT: host de QA, autenticación del webhook, códigos de error no declarados en core-ict; ¿renombrar `info.title`
+  «FLIT Core ICT API»?
 - Guías: quién aprueba si un aplicativo no tiene responsables; si se exige aprobación de otra persona.
 - Visor: CORS con `Origin: null` y los hosts de `ATLAS_VISOR_CONEXIONES`.
-- Portal: URL públicas por contrato y ambiente (`Contratos:Portal:Servidores`); vigencia máxima al compartir con proveedores;
-  si los empleados pueden previsualizar el portal como una organización.
-- Dependencias con parche reciente (subir cuando cumplan 2 semanas): `dompurify` 3.4.17 (desde el 26/10), Pillow 13 y
-  brotli 1.2.1 en atlas-docs; Go 1.26.x del CI (18 avisos de la librería estándar; atlas-render aún no se despliega).
-- Bajos sin hacer de la revisión: F4-SEC-15, 16, 17, 20, 24, 27, 28, 31, 32; agrupación IPv6 /64 en los límites; límites
-  de tasa en memoria por réplica.
+- Portal: URL públicas por contrato y ambiente (`Contratos:Portal:Servidores`, vacías en pdn); vigencia máxima al
+  compartir con proveedores; si los empleados pueden previsualizar el portal como una organización.
+- Sandbox en pdn deshabilitado (`Contratos__Sandbox__TrabajoHabilitado: false`) hasta decidir el despliegue de Microcks.
+- Dependencias: `brotli`/`brotlicffi` 1.2.1 desde ~07/11; `dompurify` 3.4.17 desde ~09/11; revisar los otros topes del
+  24/10 en `services/docs/pyproject.toml`.
+- Bajos que siguen sin hacer: agrupación IPv6 /64 en los límites; límites de tasa en memoria por réplica.
 - flit: lint de vacuum de los OpenAPI de FLIT 2 (core-api con 354 errores); AsyncAPI con `$ref` externos se publican
   empaquetados.
-- Pasos del líder de fases anteriores: variable de organización `ATLAS_URL`, proteger ramas `develop`/`staging`/`release`,
-  pasos de M365 (buzón compartido, RBAC de Exchange, flujo de Workflows, `Soporte__M365__Buzon`), alcance del equipo de
-  soporte de Operaciones, importar responsables y Excel de soporte en QA, rotar el secreto de Entra expuesto el 22/10,
+- Pasos del líder de fases anteriores: proteger ramas `develop`/`staging`/`release`, pasos de M365 (buzón compartido,
+  RBAC de Exchange, flujo de Workflows, `Soporte__M365__Buzon`), alcance del equipo de soporte de Operaciones, importar
+  responsables y Excel de soporte en QA, **rotar el secreto de Entra expuesto el 22/10** (ahora lo comparten QA y pdn),
   activar el claim `auth_time`, aceptar los ADR 0020 a 0048 que siguen propuestos.
-- Disco C: llegó a 0 MB libres (Docker se cayó). Hay ~12 GB en dos carpetas de Temp con workloads de .NET MAUI/Android.
+- Medir la CPU real de `atlas-pdn` en la 145 (va con requests mínimos y sin límite).
 
-## 7. Cómo retomar
+## 5. Cómo retomar
 
 1. Leer el prompt maestro y este archivo.
-2. `git fetch && git checkout develop && git pull` (la rama `f4/portal-integracion` ya está integrada).
-3. `gh run list --branch develop --limit 3`; `gh pr list -R flitsas/flit-gitops --author @me`.
-4. `gh pr view 76 -R flitsas/flit-gitops` y `gh pr view 698 -R flitsas/flit` (sección 2).
-5. Seguir la sección 3.
+2. `git fetch && git checkout develop && git pull`.
+3. `gh pr list`; `gh run list --branch develop --limit 3`; `gh pr list -R flitsas/flit-gitops --author @me`.
+4. Seguir la sección 2.
 
 Notas operativas:
 - El hook de pre-commit exige gitleaks en el PATH en formato POSIX: `PATH="/d/FLIT/tmp/gl-bin:$PATH" git commit -F <archivo>` (no `C:/` ni `$TEMP`).
+- Las pruebas .NET usan Microsoft.Testing.Platform: filtrar con
+  `dotnet test --project services/api/tests/Flit.Atlas.Api.Tests --filter-class '*Clase'` (`--filter` no aplica).
 - No correr la suite .NET y Vitest al mismo tiempo; Vitest falla por tiempo con la máquina cargada
   (`vitest run --no-file-parallelism` es estable).
 - El E2E corre contra `ATLAS_API_URL=http://localhost:1 pnpm exec vite preview --port <n> --strictPort` con `ATLAS_E2E_URL`;
   detener solo ese proceso por su PID.
+- **No volver a correr** `servicio-con-esquema-propio.sql` para atlas: deshace la separación de roles.
+- atlas-api no arranca en qa/pdn sin `Atlas__Proxy__RedesConfiables` (F4-SEC-13).

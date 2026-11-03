@@ -22,7 +22,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
 | 2.1 | `pgvector` en el Postgres 16 de la 177 (dev y qa) | ⏳ | La base es del host, no del clúster: no hay rastro en `flit-gitops`. Verificar con `SELECT * FROM pg_available_extensions WHERE name='vector'`; si no está, instalar el paquete del sistema | Daniel Mejía | HU 1.1 en el clúster (en local lo da la imagen de Aspire) |
-| 2.2 | `pgvector` en el Postgres 16 de la 169 (pdn) | ⏳ | Igual que 2.1. Instalarlo implica un reinicio de Postgres: programarlo un domingo, como los del 11 y el 12/10/2026 | Daniel Mejía | F4 (salida a pdn) |
+| 2.2 | `pgvector` en el Postgres 16 de pdn (la 145 desde el 28/10/2026) | ✅ | Instalado en la 145 (paquete `postgresql-16-pgvector`) con `unaccent` en el esquema `atlas` de la base `atlas` (flit-gitops `docs/host-145/atlas-pdn-roles-base.md`, 28/10/2026) | Daniel Mejía | F4 (salida a pdn) |
 | 2.3 | `unaccent` en 177 y 169 | ⏳ | Es de `contrib`, normalmente disponible. Verificar con la misma consulta | Daniel Mejía | HU 1.2 |
 | 2.4 | Esquema `atlas` y usuario `flit_atlas` por ambiente | 📋 | `servicio-con-esquema-propio.sql -v servicio=atlas` y `CREATE EXTENSION vector, unaccent` como administrador. Línea en `pg_hba.conf` para la red de pods, como se hizo con `flit2-dev` | Daniel Mejía | HU 1.8 |
 | 2.5 | En qué base vive el esquema `atlas` de cada ambiente | ⏳ | La propuesta es la misma base de FLIT 2.0 del ambiente. En pdn el respaldo diario cubre `flitpdn` y `flit`; confirmar que el esquema quede dentro de una de ellas | Jorman Copete | HU 1.8 |
@@ -33,7 +33,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
 | 3.1 | CPU y RAM libres en la 177 para `atlas-qa` y `atlas-sandbox` | ⏳ | Medir peticiones contra capacidad asignable del nodo. Presupuesto inicial de Atlas por ambiente **[por estimar en HU 1.8]** | Daniel Mejía | HU 1.8 |
-| 3.2 | CPU en la 169 para `atlas-pdn` | 🔶 | Manual de operación (12/10/2026): presión de CPU del 30 %, 7,3 de 10,5 CPU asignables ya pedidas, CPU de un hilo 2,2 veces más lenta que la 177. Atlas en pdn necesita cuota propia y una medición nueva antes de F4 | Daniel Mejía | F4 |
+| 3.2 | CPU para `atlas-pdn` (la 145 desde el 28/10/2026) | 🔶 | pdn pasó a la 145 (28/10/2026), que tiene casi toda la CPU reservada (sobre todo `flit-apps`): `atlas-pdn` va con requests mínimos y sin límite. Falta medir el consumo real con uso. Antes (169, 12/10/2026): presión de CPU del 30 % | Daniel Mejía | F4 |
 | 3.3 | Latencia desde Colombia a la 169 (~190 ms) | 🔶 | Afecta el LCP < 2,5 s en 4G de la PWA (§11). Mitigación en el diseño: shell precargado y caché offline. La decisión estructural (Cloudflare o VPS en América) sigue abierta en `flit-gitops` | Jorman Copete | F4 (Lighthouse en pdn) |
 | 3.4 | Sondas con tiempos holgados | 📋 | Copiar el patrón del 16/10/2026: liveness `timeoutSeconds: 5`, `failureThreshold: 6` y `startupProbe` de 5 min | Jorman Copete | HU 1.8 |
 
@@ -88,7 +88,7 @@ Lo que bloquea una HU concreta de F1 se marca en la columna «Bloquea».
 | # | Ítem | Estado | Evidencia o acción | Responsable | Bloquea |
 |---|---|---|---|---|---|
 | 8.1 | `qa.atlas.flitsas.com` → 177 (ATLAS-ADR-0019) | 📋 | Registro `A`, certificado con certbot en el nginx del host y sitio hacia la ClusterIP fija de `atlas-web` (`/`) y de `atlas-api` (rutas de F0.3 §3). Si `flitsas.com` tiene CAA, debe permitir `letsencrypt.org` | Daniel Mejía | HU 1.8 |
-| 8.2 | `atlas.flitsas.com` → 169 | 📋 | Agregar al mapa SNI del borde de la 169, como los dominios de FLIT 2.0 (11/10/2026). Depende de confirmar el dominio (N-01) | Daniel Mejía | F4 |
+| 8.2 | `atlas.flitsas.com` → 145 | ✅ | El DNS ya apuntaba a la 145; línea en el mapa SNI del borde de la 145 hacia el nginx del host con PROXY protocol y certificado de certbot (28/10/2026) | Daniel Mejía | F4 |
 | 8.3 | Reglas de borde equivalentes a las de FLIT 2.0 (WAF, ModSecurity, límites) | ⏳ | ATLAS-ADR-0008: Atlas no pasa por `Flit.Gateway`. Listar qué aplica hoy el borde y replicarlo en el Ingress de Atlas | Daniel Mejía | HU 1.8 |
 
 ## 9. Fuera de F1 (se verifican al llegar a su fase)
