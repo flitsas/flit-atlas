@@ -616,6 +616,55 @@ public partial class CuentasExternasTests(EntornoApi entorno)
         }
     }
 
+    /// <summary>
+    /// F4-SEC-15 (ATLAS-ADR-0049): un administrador de organización no distingue un correo de empleado, una cuenta de
+    /// otra organización, una invitación viva de otra organización ni una de la suya: el mismo 409 con el mismo cuerpo.
+    /// FLIT sigue viendo el motivo.
+    /// </summary>
+    [Fact]
+    public async Task Un_admin_de_organizacion_no_enumera_correos_de_Atlas_con_el_409_de_invitar()
+    {
+        await using var api = entorno.Api();
+        using var adminAtlas = await AdministradorAsync(api);
+        var vence = DateTimeOffset.UtcNow.AddDays(20);
+        var adminA = await entorno.ExternoAsync(api, RolesAtlas.AdminOrganizacion, vence);
+        var deOtra = await entorno.ExternoAsync(api, RolesAtlas.Integrador, vence);
+        var correoEmpleado = CorreoNuevo("empleado");
+        using (var empleado = Publico(api))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, (await empleado.EntrarSimuladoAsync(correoEmpleado, "Empleado Demo")).StatusCode);
+        }
+        string correoDeOtra;
+        await using (var plataforma = entorno.Plataforma())
+        {
+            correoDeOtra = await plataforma.Personas.Where(p => p.Id == deOtra.PersonaId).Select(p => p.Correo).SingleAsync(Ct);
+        }
+        var invitadoEnB = CorreoNuevo();
+        await InvitarAsync(adminAtlas, await OrganizacionAsync(admin: true), invitadoEnB);
+        using var navegador = Publico(api);
+        Assert.Equal(HttpStatusCode.NoContent, (await navegador.EntrarComoAsync(adminA.UsuarioId)).StatusCode);
+        var invitadoEnA = CorreoNuevo();
+        await InvitarAsync(navegador, adminA.OrganizacionId, invitadoEnA, vence: vence.AddDays(-1));
+
+        Task<HttpResponseMessage> Invitar(Navegador actor, string correo) => actor.EnviarAsync(HttpMethod.Post, "/api/v1/plataforma/invitaciones",
+            JsonContent.Create(new { correo, organizacionId = adminA.OrganizacionId, rol = RolesAtlas.Integrador, accesoVenceEn = vence.AddDays(-1) }));
+
+        var cuerpos = new List<string>();
+        foreach (var correo in new[] { correoEmpleado, correoDeOtra, invitadoEnB, invitadoEnA })
+        {
+            var respuesta = await Invitar(navegador, correo);
+            Assert.Equal(HttpStatusCode.Conflict, respuesta.StatusCode);
+            cuerpos.Add(await respuesta.Content.ReadAsStringAsync(Ct));
+        }
+        Assert.Single(cuerpos.Distinct(StringComparer.Ordinal));
+        Assert.Contains("correo_no_disponible", cuerpos[0], StringComparison.Ordinal);
+
+        // Un empleado con el permiso sí ve el motivo para resolverlo.
+        var paraFlit = await Invitar(adminAtlas, invitadoEnA);
+        Assert.Equal(HttpStatusCode.Conflict, paraFlit.StatusCode);
+        Assert.Equal("invitacion_existente", (await paraFlit.Content.ReadFromJsonAsync<ErrorExternos>(Ct))!.Error);
+    }
+
     [Fact]
     public async Task Recuperar_la_cuenta_por_correo_cambia_el_factor_cierra_las_sesiones_y_el_enlace_sirve_una_vez()
     {

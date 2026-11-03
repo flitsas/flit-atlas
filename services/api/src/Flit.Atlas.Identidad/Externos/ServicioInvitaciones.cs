@@ -56,6 +56,13 @@ public sealed partial class ServicioInvitaciones(
 
     public const int MaximoAlcances = 50;
 
+    /// <summary>
+    /// El único 409 que ve un administrador de organización cuando el correo ya existe en Atlas, sea una cuenta (de
+    /// cualquier organización o de un empleado) o una invitación viva (F4-SEC-15): mismo código y mismo mensaje.
+    /// </summary>
+    private static readonly ErrorAdministracion CorreoNoDisponibleParaExterno = new(TipoError.Conflicto, "correo_no_disponible",
+        "Ese correo no está disponible para una invitación nueva. Si es de un colega de tu organización, búscalo en la lista de invitaciones y reenvía o renueva la suya.");
+
     private OpcionesExternos Opciones => opciones.Value;
 
     public IReadOnlyList<string> TiposAlcanceInvitables => [.. catalogo.TiposAlcance.Except(AlcancesNoInvitables, StringComparer.Ordinal)];
@@ -152,18 +159,20 @@ public sealed partial class ServicioInvitaciones(
         }
 
         // El correo no puede ser de otra persona de Atlas ni tener otra invitación viva. Se revisa con el alcance del
-        // sistema: un administrador de organización no ve las demás, pero el correo tampoco puede chocar con ellas.
+        // sistema: un administrador de organización no ve las demás, pero el correo tampoco puede chocar con ellas. A él
+        // se le responde siempre lo mismo (F4-SEC-15, ATLAS-ADR-0025 §2): si no, sabría qué correos tienen cuenta en Atlas
+        // (empleados incluidos) o una invitación en otra organización.
         await using (var sistema = new PlataformaDbContext(opcionesContexto))
         {
             if (await sistema.Personas.AnyAsync(p => p.Correo == correo, ct))
             {
-                return new ErrorAdministracion(TipoError.Conflicto, "correo_no_disponible",
+                return actor.Externo ? CorreoNoDisponibleParaExterno : new ErrorAdministracion(TipoError.Conflicto, "correo_no_disponible",
                     "Ese correo ya tiene una cuenta en Atlas: renueva su invitación en lugar de crear otra.");
             }
             if (await sistema.Invitaciones.AnyAsync(i => i.Correo == correo
                     && (i.Estado == EstadoInvitacion.Pendiente || i.Estado == EstadoInvitacion.Suspendida || i.Estado == EstadoInvitacion.Aceptada), ct))
             {
-                return new ErrorAdministracion(TipoError.Conflicto, "invitacion_existente",
+                return actor.Externo ? CorreoNoDisponibleParaExterno : new ErrorAdministracion(TipoError.Conflicto, "invitacion_existente",
                     "Ese correo ya tiene una invitación vigente: reenvíala, renuévala o revócala.");
             }
         }
@@ -234,7 +243,8 @@ public sealed partial class ServicioInvitaciones(
     /// </summary>
     public async Task<Resultado<InvitacionVista>> SuspenderAsync(Guid id, ActorInvitaciones actor, CancellationToken ct)
     {
-        var (invitacion, error) = await BuscarParaActuarAsync(id, actor, ct);
+        await using var transaccion = await plataforma.Database.BeginTransactionAsync(ct);
+        var (invitacion, error) = await BuscarParaActuarAsync(id, actor, ct, bloquear: true);
         if (error is not null)
         {
             return error;
@@ -254,6 +264,7 @@ public sealed partial class ServicioInvitaciones(
             persona.Estado = EstadoPersona.Suspendida;
         }
         await plataforma.SaveChangesAsync(ct);
+        await transaccion.CommitAsync(ct);
         await RegistrarAsync(TiposEventoSeguridad.InvitacionSuspendida, invitacion, actor.PersonaId, new { invitacion_id = invitacion.Id, aceptada }, ct);
         if (aceptada && invitacion.PersonaId is { } suspendida)
         {
@@ -270,7 +281,8 @@ public sealed partial class ServicioInvitaciones(
         Guid id, SolicitudRenovacion solicitud, ActorInvitaciones actor, HttpContext? http, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(solicitud);
-        var (invitacion, error) = await BuscarParaActuarAsync(id, actor, ct);
+        await using var transaccion = await plataforma.Database.BeginTransactionAsync(ct);
+        var (invitacion, error) = await BuscarParaActuarAsync(id, actor, ct, bloquear: true);
         if (error is not null)
         {
             return error;
@@ -327,6 +339,7 @@ public sealed partial class ServicioInvitaciones(
             token = NuevoEnlace(invitacion, ahora);
         }
         await plataforma.SaveChangesAsync(ct);
+        await transaccion.CommitAsync(ct);
         await RegistrarAsync(TiposEventoSeguridad.InvitacionRenovada, invitacion, actor.PersonaId,
             new { invitacion_id = invitacion.Id, acceso_vence_en = vence, asignaciones = asignacionesRenovadas, enlace_nuevo = token is not null }, ct);
         var enviado = token is not null && await EnviarAsync(invitacion, token, null, null, actor.PersonaId, http, ct);
@@ -353,19 +366,26 @@ public sealed partial class ServicioInvitaciones(
     /// <summary>Definitivo. Si se había aceptado, retira las asignaciones de la invitación (eso cierra las sesiones).</summary>
     public async Task<Resultado<InvitacionVista>> RevocarAsync(Guid id, ActorInvitaciones actor, CancellationToken ct)
     {
-        var (invitacion, error) = await BuscarParaActuarAsync(id, actor, ct);
-        if (error is not null)
+        Invitacion invitacion;
+        await using (var transaccion = await plataforma.Database.BeginTransactionAsync(ct))
         {
-            return error;
+            var (encontrada, error) = await BuscarParaActuarAsync(id, actor, ct, bloquear: true);
+            if (error is not null)
+            {
+                return error;
+            }
+            invitacion = encontrada!;
+            if (invitacion.Estado == EstadoInvitacion.Revocada)
+            {
+                return new Resultado<InvitacionVista>((await VistasAsync([invitacion], ct))[0], null);
+            }
+            invitacion.Estado = EstadoInvitacion.Revocada;
+            invitacion.EstadoCambiadoEn = reloj.GetUtcNow();
+            invitacion.EstadoCambiadoPor = actor.PersonaId;
+            await plataforma.SaveChangesAsync(ct);
+            await transaccion.CommitAsync(ct);
         }
-        if (invitacion!.Estado == EstadoInvitacion.Revocada)
-        {
-            return new Resultado<InvitacionVista>((await VistasAsync([invitacion], ct))[0], null);
-        }
-        invitacion.Estado = EstadoInvitacion.Revocada;
-        invitacion.EstadoCambiadoEn = reloj.GetUtcNow();
-        invitacion.EstadoCambiadoPor = actor.PersonaId;
-        await plataforma.SaveChangesAsync(ct);
+        // Ya confirmada: una aceptación que llegó antes ya dejó aquí su persona (la fila se leyó con el candado).
         var retiradas = 0;
         if (invitacion.PersonaId is { } personaId)
         {
@@ -388,9 +408,20 @@ public sealed partial class ServicioInvitaciones(
         return new Resultado<InvitacionVista>((await VistasAsync([invitacion], ct))[0], null);
     }
 
-    /// <summary>La invitación (visible para la sesión) y si el actor puede tocarla.</summary>
-    private async Task<(Invitacion? Invitacion, ErrorAdministracion? Error)> BuscarParaActuarAsync(Guid id, ActorInvitaciones actor, CancellationToken ct)
+    /// <summary>
+    /// La invitación (visible para la sesión) y si el actor puede tocarla. Con <paramref name="bloquear"/>, dentro de la
+    /// transacción en curso, la fila queda con <c>FOR UPDATE</c> hasta el final y se lee después de tomar el candado
+    /// (F4-SEC-16): suspender, renovar y revocar esperan a una aceptación en curso, como la aceptación espera a ellas
+    /// (<c>CuentasExternas.AceptarAsync</c>), y deciden con su estado y su persona ya confirmados.
+    /// </summary>
+    private async Task<(Invitacion? Invitacion, ErrorAdministracion? Error)> BuscarParaActuarAsync(
+        Guid id, ActorInvitaciones actor, CancellationToken ct, bool bloquear = false)
     {
+        if (bloquear)
+        {
+            // RLS también aplica aquí: una fila que la sesión no ve no se bloquea y la consulta de abajo responde 404.
+            await plataforma.Database.ExecuteSqlAsync($"SELECT 1 FROM atlas.plataforma_invitacion WHERE id = {id} FOR UPDATE", ct);
+        }
         var invitacion = await plataforma.Invitaciones.FirstOrDefaultAsync(i => i.Id == id, ct);
         if (invitacion is null)
         {
