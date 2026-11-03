@@ -45,9 +45,12 @@ public sealed class GitHubActionsSimulado : HttpMessageHandler
         _llaves.Add(($"kid-{Guid.NewGuid():N}", RSA.Create(2048)));
     }
 
-    /// <summary>Claims de un push a <paramref name="rama"/> de <paramref name="repositorio"/> con el workflow oficial.</summary>
+    /// <summary>
+    /// Claims de un push a <paramref name="rama"/> de <paramref name="repositorio"/> con el workflow oficial; con
+    /// <paramref name="repositorioId"/> y <paramref name="propietarioId"/>, los ids numéricos que GitHub también envía.
+    /// </summary>
     public static Dictionary<string, object> Claims(string repositorio = "flitsas-demo/api-demo", string rama = "develop", string evento = "push",
-        string workflow = ".github/workflows/ci.yml", string? jobWorkflow = WorkflowOficial)
+        string workflow = ".github/workflows/ci.yml", string? jobWorkflow = WorkflowOficial, string? repositorioId = null, string? propietarioId = null)
     {
         var dueno = repositorio.Split('/')[0];
         var claims = new Dictionary<string, object>
@@ -66,6 +69,14 @@ public sealed class GitHubActionsSimulado : HttpMessageHandler
         if (jobWorkflow is not null)
         {
             claims["job_workflow_ref"] = jobWorkflow;
+        }
+        if (repositorioId is not null)
+        {
+            claims["repository_id"] = repositorioId;
+        }
+        if (propietarioId is not null)
+        {
+            claims["repository_owner_id"] = propietarioId;
         }
         return claims;
     }

@@ -58,7 +58,9 @@ on:
         required: false
         default: ""
       audiencia:
-        description: Audiencia del token OIDC. Vacía, la URL de Atlas (lo que Atlas espera por defecto).
+        description: >-
+          Obsoleta (F4-SEC-27): el token OIDC siempre se pide para atlas_url, la URL a la que se envía, para que no sirva
+          en otro Atlas. Se conserva para no romper a quien ya la pase; debe ir vacía o igual a atlas_url.
         type: string
         required: false
         default: ""
@@ -180,6 +182,12 @@ jobs:
           if [ -n "$ATLAS_URL" ] && [[ ! "$ATLAS_URL" =~ ^https://[^/]+$ ]]; then
             echo "::error::atlas_url debe ser https://<host>, sin ruta ni barra final"; fallo=1
           fi
+          # >>> audiencia
+          # F4-SEC-27: la audiencia del token es la URL a la que se envía; una distinta haría que el token valga en otro Atlas.
+          if [ -n "$AUDIENCIA" ] && [ "$AUDIENCIA" != "$ATLAS_URL" ]; then
+            echo "::error::audiencia (obsoleta) debe ir vacía o igual a atlas_url: el token OIDC solo se pide para la URL a la que se envía"; fallo=1
+          fi
+          # <<< audiencia
           if [ "$PUEDE_PUBLICAR" != "true" ]; then
             echo "::notice::Solo valida (evento ${GITHUB_EVENT_NAME}, publicar=${{ inputs.publicar }}, atlas_url ${ATLAS_URL:-vacía})."
           fi
@@ -541,8 +549,9 @@ jobs:
           script: |
             const fs = require('node:fs');
             const path = require('node:path');
-            const { ATLAS_URL, AUDIENCIA, APLICATIVO, CONTRATO, RUNNER_TEMP } = process.env;
-            const token = await core.getIDToken(AUDIENCIA || ATLAS_URL);
+            const { ATLAS_URL, APLICATIVO, CONTRATO, RUNNER_TEMP } = process.env;
+            // La audiencia es la misma URL a la que va el token (F4-SEC-27).
+            const token = await core.getIDToken(ATLAS_URL);
             const url = `${ATLAS_URL}/api/v1/contratos/publicaciones/base?aplicativo=${encodeURIComponent(APLICATIVO)}&contrato=${encodeURIComponent(CONTRATO)}`;
             const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
             if (respuesta.status === 404) {
@@ -699,11 +708,11 @@ jobs:
         with:
           script: |
             const fs = require('node:fs');
-            const { ATLAS_URL, AUDIENCIA, APLICATIVO, CONTRATO, TIPO, RUTA, VERSION, PRERELEASE, BASE_VERSION, AMBIENTE } = process.env;
+            const { ATLAS_URL, APLICATIVO, CONTRATO, TIPO, RUTA, VERSION, PRERELEASE, BASE_VERSION, AMBIENTE } = process.env;
             const api = `${ATLAS_URL}/api/v1/contratos`;
             const pedir = async (metodo, ruta, cuerpo) => {
-              // Un token por llamada: vive minutos y nunca sale de este paso.
-              const token = await core.getIDToken(AUDIENCIA || ATLAS_URL);
+              // Un token por llamada: vive minutos, nunca sale de este paso y su audiencia es la URL a la que va (F4-SEC-27).
+              const token = await core.getIDToken(ATLAS_URL);
               const respuesta = await fetch(`${api}${ruta}`, {
                 method: metodo,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },

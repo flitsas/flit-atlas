@@ -30,9 +30,9 @@ dev = [
 
 [tool.uv]
 # Dependencias transitivas de WeasyPrint cuya última versión tenía menos de dos semanas de publicada al fijarlas
-# (24/10/2026): se topan a la estable anterior (prompt maestro §5.2). Se quitan cuando la nueva cumpla el plazo.
+# (24/10/2026): se topan a la estable anterior (prompt maestro §5.2). Se quitan cuando la nueva cumpla el plazo
+# (pillow 13.0.0, del 16/10/2026, se liberó el 03/11/2026: F4-SEC-32).
 constraint-dependencies = [
-    "pillow<13",
     "fonttools<4.67",
     "pydyf<0.13",
     "brotli<1.2.1",

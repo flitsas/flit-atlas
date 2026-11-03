@@ -161,6 +161,7 @@ public static class EndpointsIdentidad
         // Servidor de tokens (HU 1.3c): /connect/* fuera del contrato y GET /api/v1/identidad/token/yo con Bearer.
         rutas.MapServidorTokens(identidad);
         identidad.MapCuentasExternas();
+        identidad.MapSeguridadCuenta();
         identidad.MapEmergencia();
 
         rutas.MapGet("/api/v1/plataforma/yo", async (ClaimsPrincipal usuario, IPermisosDeSesion permisosDeSesion, PlataformaDbContext plataforma,

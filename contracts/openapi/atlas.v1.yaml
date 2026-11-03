@@ -912,6 +912,170 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.identidad.administrar
+  /api/v1/identidad/cuenta/seguridad:
+    get:
+      tags:
+        - Identidad
+      summary: Factores de mi cuenta
+      description: 'Contraseña, aplicación de autenticación, passkeys y cuántos códigos de recuperación quedan, de la propia cuenta local. 409 cuenta_microsoft si la sesión es de un empleado (sus factores se administran en Microsoft).'
+      operationId: VerSeguridadDeMiCuenta
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeguridadCuenta'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
+      security:
+        - sesionAtlas: [ ]
+  /api/v1/identidad/cuenta/contrasena:
+    post:
+      tags:
+        - Identidad
+      summary: Cambiar mi contraseña
+      description: 'Exige la contraseña actual y un ingreso de hace menos de 10 minutos (401 reautenticacion_requerida). La nueva debe tener 12 o más caracteres, ser distinta de la actual y no estar entre las contraseñas filtradas. Una contraseña actual errada suma al bloqueo progresivo. Cierra las demás sesiones y los tokens de las aplicaciones conectadas, renueva la de esta petición y avisa al titular por correo. 409 sin_contrasena si la cuenta solo tiene passkeys.'
+      operationId: CambiarMiContrasena
+      requestBody:
+        description: Contraseña actual y nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCambioContrasena'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/identidad/cuenta/codigos-recuperacion:
+    post:
+      tags:
+        - Identidad
+      summary: Generar códigos de recuperación nuevos
+      description: Diez códigos nuevos de un solo uso que reemplazan a los anteriores (se muestran esta única vez). Exige un ingreso de hace menos de 10 minutos y avisa al titular por correo.
+      operationId: RegenerarMisCodigosDeRecuperacion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodigosRecuperacionNuevos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/identidad/cuenta/passkeys/opciones:
+    post:
+      tags:
+        - Identidad
+      summary: Opciones para agregar una passkey
+      description: 'Desafío de WebAuthn (navigator.credentials.create) para una passkey más de la propia cuenta, sin repetir las ya registradas. Vence en 5 minutos y sirve una sola vez. Exige un ingreso de hace menos de 10 minutos. 409 demasiadas_passkeys con 10.'
+      operationId: OpcionesPasskeyDeMiCuenta
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpcionesPasskey'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/identidad/cuenta/passkeys:
+    post:
+      tags:
+        - Identidad
+      summary: Agregar una passkey
+      description: Registra la passkey creada con las opciones anteriores (verificación de usuario obligatoria). Exige un ingreso de hace menos de 10 minutos y avisa al titular por correo.
+      operationId: AgregarPasskeyAMiCuenta
+      requestBody:
+        description: Paso de las opciones y respuesta del autenticador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPasskeyNueva'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExternos'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticionesIdentidad'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
   /api/v1/identidad/emergencia/consultar:
     post:
       tags:
@@ -10066,6 +10230,16 @@ components:
             $ref: '#/components/schemas/PersonaEquipoDto'
           description: Responsables sin usuario de GitHub.
       description: 'CODEOWNERS sugerido por repo y carpeta, desde el catálogo y el reparto.'
+    CodigosRecuperacionNuevos:
+      required:
+        - codigosRecuperacion
+      type: object
+      properties:
+        codigosRecuperacion:
+          type: array
+          items:
+            type: string
+      description: 'Códigos de recuperación nuevos: reemplazan a los anteriores y se muestran esta única vez.'
     ComparacionDto:
       required:
         - desde
@@ -13899,6 +14073,21 @@ components:
           type: string
           description: Id del paso; vence en 5 minutos.
       description: Siguiente paso del ingreso.
+    PasskeyCuenta:
+      required:
+        - nombre
+        - creadaEn
+      type: object
+      properties:
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: 'Nombre que dio el autenticador, si lo dio.'
+        creadaEn:
+          type: string
+          format: date-time
+      description: Passkey registrada en la cuenta.
     PendienteDto:
       required:
         - tipo
@@ -15582,6 +15771,32 @@ components:
           type: string
           description: 'Ejemplo con curl; la llave va en la variable $LLAVE_SANDBOX, nunca en claro.'
       description: 'Un sandbox nivel 1 de la organización (sin la llave: solo se muestra al activarlo).'
+    SeguridadCuenta:
+      required:
+        - contrasena
+        - totp
+        - passkeys
+        - codigosRecuperacionRestantes
+      type: object
+      properties:
+        contrasena:
+          type: boolean
+          description: true si la cuenta tiene contraseña (con TOTP).
+        totp:
+          type: boolean
+          description: true si la aplicación de autenticación (TOTP) está activa.
+        passkeys:
+          type: array
+          items:
+            $ref: '#/components/schemas/PasskeyCuenta'
+        codigosRecuperacionRestantes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Códigos de recuperación que aún no se usan.
+          format: int32
+      description: 'Factores de la cuenta local. Nunca trae secretos: ni la clave TOTP ni los códigos.'
     SesionDispositivo:
       required:
         - id
@@ -15831,6 +16046,17 @@ components:
           description: Vacío = sin vencimiento (obligatorio con un proveedor).
           format: date-time
       description: 'Cambiar una compartición: reemplaza la revisión fijada, los permisos y la vigencia.'
+    SolicitudCambioContrasena:
+      required:
+        - contrasenaActual
+        - contrasenaNueva
+      type: object
+      properties:
+        contrasenaActual:
+          type: string
+        contrasenaNueva:
+          type: string
+      description: Contraseña actual y la nueva (mínimo 12 caracteres; se revisa contra contraseñas filtradas).
     SolicitudCambioDto:
       required:
         - id
@@ -16490,6 +16716,19 @@ components:
           type: string
           description: 'PublicKeyCredential.toJSON() de navigator.credentials.get(), como texto JSON.'
       description: Respuesta del autenticador para entrar con passkey.
+    SolicitudPasskeyNueva:
+      required:
+        - estado
+        - credencial
+      type: object
+      properties:
+        estado:
+          type: string
+          description: Id del paso de las opciones.
+        credencial:
+          type: string
+          description: 'PublicKeyCredential.toJSON() de navigator.credentials.create(), como texto JSON.'
+      description: Respuesta del autenticador a las opciones de POST /api/v1/identidad/cuenta/passkeys/opciones.
     SolicitudPublicacion:
       required:
         - aplicativo

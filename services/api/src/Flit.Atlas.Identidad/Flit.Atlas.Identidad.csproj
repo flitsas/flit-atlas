@@ -20,8 +20,9 @@
     <PackageReference Include="QRCoder" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Lista local de contraseñas comunes y textos legales (HU 1.5, ATLAS-ADR-0025). -->
+    <!-- Listas locales de contraseñas comunes y filtradas (HU 1.5, ATLAS-ADR-0025; F4-SEC-31, ATLAS-ADR-0049) y textos legales. -->
     <EmbeddedResource Include="Externos\contrasenas-comunes.txt" />
+    <EmbeddedResource Include="Externos\contrasenas-filtradas.txt" />
     <EmbeddedResource Include="Externos\Legal\*.md" />
   </ItemGroup>
   <ItemGroup>

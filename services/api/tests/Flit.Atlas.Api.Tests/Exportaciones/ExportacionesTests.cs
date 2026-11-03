@@ -371,6 +371,74 @@ public sealed class ExportacionesTests(EntornoApi entorno, ContenedoresExportaci
         Assert.Equal(4, respuestas.Count(r => r.StatusCode == HttpStatusCode.TooManyRequests));
         await using var contratos = Contratos();
         Assert.Equal(2, await contratos.Exportaciones.CountAsync(e => e.SolicitadaPor == persona, Ct));
+        // F4-SEC-28: las que el tope cortó dentro de la transacción ya habían subido su entrada; se borra, no queda huérfana.
+        Assert.Empty(await PrefijosSinFilaAsync(contratos));
+    }
+
+    /// <summary>Exportaciones con algo en el S3 (<c>exportaciones/&lt;id&gt;/…</c>) y sin fila en la base.</summary>
+    private async Task<List<Guid>> PrefijosSinFilaAsync(ContratosDbContext contratos)
+    {
+        using var s3 = S3();
+        var ids = new HashSet<Guid>();
+        var pedido = new ListObjectsV2Request { BucketName = ContenedoresExportaciones.Bucket, Prefix = "exportaciones/" };
+        ListObjectsV2Response pagina;
+        do
+        {
+            pagina = await s3.ListObjectsV2Async(pedido, Ct);
+            foreach (var objeto in pagina.S3Objects ?? [])
+            {
+                if (Guid.TryParse(objeto.Key.Split('/')[1], out var id))
+                {
+                    ids.Add(id);
+                }
+            }
+            pedido.ContinuationToken = pagina.NextContinuationToken;
+        }
+        while (pagina.IsTruncated == true);
+        var conFila = await contratos.Exportaciones.Where(e => ids.Contains(e.Id)).Select(e => e.Id).ToListAsync(Ct);
+        return [.. ids.Except(conFila)];
+    }
+
+    [Fact]
+    public async Task Si_la_transaccion_falla_despues_de_subir_la_entrada_esta_se_borra_del_S3()
+    {
+        // F4-SEC-28: la entrada (para una versión interna, el spec completo) se sube antes de la transacción; si la
+        // transacción falla (aquí, el tope en curso revisado con el candado), se borra en lugar de quedar huérfana.
+        await using var api = Api();
+        var paquete = await ContratosDePrueba.SembrarAsync(entorno.Postgres.GetConnectionString(), ct: Ct);
+        await using var alcance = api.Services.CreateAsyncScope();
+        var servicios = alcance.ServiceProvider;
+        var id = Guid.CreateVersion7();
+        var persona = Guid.NewGuid();
+        var borrador = new ExportacionContratos
+        {
+            Id = id,
+            SolicitadaPor = persona,
+            Origen = OrigenExportacion.Version,
+            VersionId = paquete.VersionId,
+            ContratoId = paquete.ContratoId,
+            Nombre = "Exportación de prueba",
+            Formatos = ["openapi", "zip"],
+            EntradaClave = ServicioExportaciones.ClaveEntrada(id),
+            EntradaSha256 = string.Empty,
+            SolicitadaEn = DateTimeOffset.UtcNow,
+        };
+        var entrada = new EntradaExportacion(
+            new MetadatosEntrada("Exportación de prueba", 1, ArmadorEntrada.OrganizacionInterna, DateOnly.FromDateTime(DateTime.UtcNow), []),
+            [new SpecEntrada(paquete.Codigo, paquete.Version, "openapi", "openapi: 3.1.0")], []);
+        await using var contratos = Contratos();
+        var plataforma = servicios.GetRequiredService<Flit.Atlas.Plataforma.Datos.PlataformaDbContext>();
+        var actor = new ServicioExportaciones.ActorAuditoria(Flit.Atlas.Plataforma.Entidades.TipoActor.Persona, persona.ToString(), null, null, null);
+
+        await Assert.ThrowsAsync<ExportacionesEnCursoException>(() => ServicioExportaciones.CrearAsync(
+            contratos, plataforma, servicios.GetRequiredService<Flit.Atlas.Plataforma.Almacenamiento.IAlmacenObjetos>(), borrador, entrada,
+            actor, DateTimeOffset.UtcNow, Ct, new ServicioExportaciones.TopeEnCurso(persona, null, MaximoPersona: 0, MaximoOrganizacion: 0)));
+
+        await using var otra = Contratos();
+        Assert.False(await otra.Exportaciones.AnyAsync(e => e.Id == id, Ct));
+        using var s3 = S3();
+        var quedan = await s3.ListObjectsV2Async(new ListObjectsV2Request { BucketName = ContenedoresExportaciones.Bucket, Prefix = ServicioExportaciones.Prefijo(id) }, Ct);
+        Assert.Empty(quedan.S3Objects ?? []);
     }
 
     [Fact]

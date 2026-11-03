@@ -94,6 +94,13 @@ public class AutorizacionTests(EntornoApi entorno)
         "GET /api/v1/identidad/sesiones/",
         "DELETE /api/v1/identidad/sesiones/{id:guid}",
         "POST /api/v1/identidad/sesiones/cerrar-otras",
+        // F4-SEC-31 (ATLAS-ADR-0049 §10): seguridad de la propia cuenta local; los cambios exigen reautenticación y, la
+        // contraseña, la actual. Una sesión de empleado recibe 409 cuenta_microsoft.
+        "GET /api/v1/identidad/cuenta/seguridad",
+        "POST /api/v1/identidad/cuenta/contrasena",
+        "POST /api/v1/identidad/cuenta/codigos-recuperacion",
+        "POST /api/v1/identidad/cuenta/passkeys/opciones",
+        "POST /api/v1/identidad/cuenta/passkeys",
         "GET /api/v1/plataforma/banderas",
         "GET /api/v1/plataforma/notificaciones/",
         "POST /api/v1/plataforma/notificaciones/{id:guid}/leida",

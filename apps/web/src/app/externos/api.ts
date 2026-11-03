@@ -1,4 +1,4 @@
-import { enviarJson } from '../api';
+import { enviarJson, pedir } from '../api';
 
 /**
  * Cuentas locales de externos (HU 1.5, ATLAS-ADR-0025): aceptar invitación, ingreso con passkey o contraseña + TOTP y
@@ -120,3 +120,29 @@ export const claveTotpEmergencia = async (enlace: string) =>
 
 export const activarEmergencia = async (enlace: string, factor: Factor) =>
   json<CuentaLista>(await post('/api/v1/identidad/emergencia/activar', { enlace, factor }));
+
+// Seguridad de la propia cuenta local (F4-SEC-31, ATLAS-ADR-0049 §10): con sesión y, para cambiar, reautenticación.
+
+export interface PasskeyCuenta {
+  nombre: string | null;
+  creadaEn: string;
+}
+
+export interface SeguridadCuenta {
+  contrasena: boolean;
+  totp: boolean;
+  passkeys: PasskeyCuenta[];
+  codigosRecuperacionRestantes: number;
+}
+
+export const obtenerSeguridadCuenta = async () => json<SeguridadCuenta>(await pedir('/api/v1/identidad/cuenta/seguridad'));
+
+export const cambiarContrasena = (contrasenaActual: string, contrasenaNueva: string) =>
+  post('/api/v1/identidad/cuenta/contrasena', { contrasenaActual, contrasenaNueva });
+
+export const regenerarCodigos = async () =>
+  json<{ codigosRecuperacion: string[] }>(await post('/api/v1/identidad/cuenta/codigos-recuperacion', {}));
+
+export const opcionesPasskeyCuenta = async () => json<OpcionesPasskey>(await post('/api/v1/identidad/cuenta/passkeys/opciones', {}));
+
+export const agregarPasskey = (estado: string, credencial: string) => post('/api/v1/identidad/cuenta/passkeys', { estado, credencial });
