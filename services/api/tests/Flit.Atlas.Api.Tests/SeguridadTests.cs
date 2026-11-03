@@ -320,9 +320,10 @@ public class SeguridadTests(EntornoApi entorno)
         var tipos = typeof(TiposEventoSeguridad).GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(f => f.IsLiteral && f.Name is not (nameof(TiposEventoSeguridad.PrefijoAuditoria) or nameof(TiposEventoSeguridad.PrefijoAltaSeveridad)))
             .Select(f => (string)f.GetRawConstantValue()!)
-            // Los de las cuentas externas (HU 1.5) y los de la cuenta de emergencia (ATLAS-ADR-0027) se prueban de punta a
-            // punta, con su auditoría, en CuentasExternasTests y EmergenciaTests.
+            // Los de las cuentas externas (HU 1.5 y F4-SEC-31) y los de la cuenta de emergencia (ATLAS-ADR-0027) se prueban de
+            // punta a punta, con su auditoría, en CuentasExternasTests y EmergenciaTests.
             .Except(CuentasExternasTests.TiposDeEventoProbados)
+            .Except(CuentasExternasTests.TiposDeEventoSeguridadCuenta)
             .Except(EmergenciaTests.TiposDeEventoProbados)
             .Except(PentestSesionesTests.TiposDeEventoProbados)
             .ToHashSet();

@@ -29,6 +29,21 @@ public sealed class OpcionesPublicacion
     public List<string> Propietarios { get; set; } = [];
 
     /// <summary>
+    /// Id numérico de cada dueño (<c>repository_owner_id</c>), como <c>nombre=id</c> (F4-SEC-27): un dueño de la lista con id
+    /// solo vale si el token trae ese id, así una organización o usuario borrado cuyo nombre registra otro no publica. Vacía:
+    /// <c>flitsas=284087596</c> (dato público de la API de GitHub).
+    /// </summary>
+    public List<string> IdsPropietarios { get; set; } = [];
+
+    /// <summary>
+    /// Id numérico de repos fijados (<c>repository_id</c>), como <c>dueño/nombre=id</c> (F4-SEC-27): un repo fijado solo vale
+    /// si el token trae ese id, así un repo borrado y vuelto a crear con el mismo nombre (o uno renombrado que libera el
+    /// nombre) no publica. Los repos sin id fijado se revisan por nombre y por el id del dueño. Vacía: <c>flitsas/flit</c> y
+    /// <c>flitsas/flit-atlas</c>, los que hoy publican.
+    /// </summary>
+    public List<string> IdsRepositorios { get; set; } = [];
+
+    /// <summary>
     /// Eventos de GitHub que pueden publicar (<c>event_name</c>). Nunca <c>pull_request</c>: el código de un PR (incluso de
     /// un fork) aún no está revisado. Vacía: <c>push</c> y <c>workflow_dispatch</c>.
     /// </summary>
@@ -89,9 +104,47 @@ public sealed class OpcionesPublicacion
     public void Normalizar()
     {
         if (Propietarios.Count == 0) Propietarios.Add("flitsas");
+        if (IdsPropietarios.Count == 0) IdsPropietarios.Add("flitsas=284087596");
+        if (IdsRepositorios.Count == 0) IdsRepositorios.AddRange(["flitsas/flit=1244856694", "flitsas/flit-atlas=1428322754"]);
         if (Eventos.Count == 0) Eventos.AddRange(["push", "workflow_dispatch"]);
         if (WorkflowsReutilizables.Count == 0) WorkflowsReutilizables.Add(WorkflowOficial);
         if (RamasEstables.Count == 0) RamasEstables.Add("release");
+    }
+
+    /// <summary>El id fijado para <paramref name="nombre"/> en una lista <c>nombre=id</c>, o <c>null</c> si no hay.</summary>
+    public static string? IdFijado(IEnumerable<string> lista, string nombre)
+    {
+        ArgumentNullException.ThrowIfNull(lista);
+        foreach (var entrada in lista)
+        {
+            var igual = entrada.LastIndexOf('=');
+            if (igual > 0 && string.Equals(entrada[..igual].Trim(), nombre, StringComparison.OrdinalIgnoreCase))
+            {
+                return entrada[(igual + 1)..].Trim();
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Ambientes desplegados donde la audiencia debe ser la URL pública (F4-SEC-27).</summary>
+    public static readonly string[] AmbientesConAudienciaFija = ["qa", "pdn"];
+
+    /// <summary>
+    /// En qa y pdn la audiencia es la URL pública del ambiente, la misma a la que el workflow envía el token (F4-SEC-27): un
+    /// <c>Plataforma__Publicacion__Audiencia</c> distinto haría que un token pedido para otra URL valga aquí. Devuelve por
+    /// qué la configuración no sirve, o <c>null</c>. En local y dev (pruebas, AppHost) se admite otra audiencia.
+    /// </summary>
+    public string? MotivoAudienciaIncoherente(string? urlPublica, string? ambiente)
+    {
+        if (!AmbientesConAudienciaFija.Contains(ambiente, StringComparer.Ordinal) || string.IsNullOrWhiteSpace(Audiencia))
+        {
+            return null;
+        }
+        var url = string.IsNullOrWhiteSpace(urlPublica) ? null : urlPublica.Trim().TrimEnd('/');
+        return string.Equals(Audiencia.Trim().TrimEnd('/'), url, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : $"Plataforma__Publicacion__Audiencia debe ir vacía o igual a Atlas__UrlPublica en {ambiente}: el workflow pide el token " +
+              "para la URL a la que lo envía (F4-SEC-27).";
     }
 
     /// <summary>La audiencia efectiva: la configurada o la URL pública del ambiente.</summary>

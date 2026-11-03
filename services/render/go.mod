@@ -2,6 +2,8 @@ module github.com/flitsas/flit-atlas/services/render
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/oasdiff/oasdiff v1.33.0

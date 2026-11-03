@@ -185,8 +185,9 @@ internal sealed partial class SincronizadorClientes(
         descriptor.ClientType = cliente.Tipo == TipoCliente.Publico ? ClientTypes.Public : ClientTypes.Confidential;
         // Los públicos son apps nativas (CLI, MCP): OpenIddict acepta su redirect de loopback en cualquier puerto.
         descriptor.ApplicationType = cliente.Tipo == TipoCliente.Publico ? ApplicationTypes.Native : ApplicationTypes.Web;
-        // Clientes propios de FLIT: no hay pantalla de consentimiento (ATLAS-ADR-0004 §7; los de terceros, si llegan, sí).
-        descriptor.ConsentType = ConsentTypes.Implicit;
+        // Sin pantalla de consentimiento solo si todas sus redirect son de loopback (el código no sale del equipo de la
+        // persona); si alguna no lo es, /connect/authorize pide confirmar para esa redirect (F4-SEC-20, ATLAS-ADR-0049).
+        descriptor.ConsentType = cliente.RedirectUris.All(EsLoopback) ? ConsentTypes.Implicit : ConsentTypes.Explicit;
         if (cliente.Tipo == TipoCliente.Publico)
         {
             descriptor.ClientSecret = null;
@@ -231,6 +232,9 @@ internal sealed partial class SincronizadorClientes(
             descriptor.Requirements.Add(Requirements.Features.ProofKeyForCodeExchange);
         }
     }
+
+    private static bool EsLoopback(string uri) =>
+        Uri.TryCreate(uri, UriKind.Absolute, out var destino) && destino.Scheme == Uri.UriSchemeHttp && destino.IsLoopback;
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudieron sincronizar los clientes de OpenIddict; se reintenta en segundo plano")]
     private static partial void NoSeSincronizo(ILogger log, Exception error);

@@ -227,7 +227,7 @@ public sealed class FactoresExternos(
         return "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(svg));
     }
 
-    private static string Mensaje(IdentityError error) => error.Code switch
+    internal static string Mensaje(IdentityError error) => error.Code switch
     {
         "PasswordTooShort" => "La contraseña debe tener al menos 12 caracteres.",
         "PasswordRequiresUniqueChars" => "La contraseña repite demasiado los mismos caracteres.",

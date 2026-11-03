@@ -7,7 +7,7 @@ namespace Flit.Atlas.Modulos.Equipo.Endpoints;
 
 [Description("Error del módulo de equipo con un código estable.")]
 public sealed record ErrorEquipo(
-    [property: Description("Código: no_encontrado, version_no_valida, hay_pendientes, vista_previa_cambio, sin_reparto, checklist_incompleto, no_es_secundario, ya_habilitado, version_repetida.")] string Codigo,
+    [property: Description("Código: no_encontrado, version_no_valida, hay_pendientes, vista_previa_cambio, sin_reparto, checklist_incompleto, no_es_secundario, ya_habilitado, version_repetida, persona_no_empleada.")] string Codigo,
     [property: Description("Qué pasó, en español.")] string Mensaje);
 
 [Description("Aplicativo del catálogo, para enlazar su ficha.")]
