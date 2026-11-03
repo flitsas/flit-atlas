@@ -9,7 +9,7 @@ elementos: []
 reemplaza: []
 reemplazado_por: []
 alias: []
-fuentes: [prompt maestro §6 y §12, docs/seguridad/revision-f4.md (F4-SEC-01 a 08, 13, 14, 15, 16, 18, 19, 20, 21 y 24), ATLAS-ADR-0022, ATLAS-ADR-0025, ATLAS-ADR-0027, ATLAS-ADR-0030, ATLAS-ADR-0048]
+fuentes: [prompt maestro §6 y §12, docs/seguridad/revision-f4.md (F4-SEC-01 a 08, 13, 14, 15, 16, 17, 18, 19, 20, 21 y 24), ATLAS-ADR-0022, ATLAS-ADR-0025, ATLAS-ADR-0027, ATLAS-ADR-0030, ATLAS-ADR-0048]
 ---
 
 # ATLAS-ADR-0049 · Endurecimiento de la identidad en F4
@@ -230,6 +230,12 @@ En local y dev basta el loopback. Documentado en `deploy/runbook-atlas.md` §4.
   reparto revalida lo que exige cambiar un responsable: si alguna persona de la versión ya no es empleada (o no
   existe), responde 409 `persona_no_empleada` con sus nombres. Una persona inactiva sí se restaura: el historial la
   nombra y, sin estar activa, no tiene permisos.
+- **F4-SEC-17** (03/11/2026). El segundo factor del ingreso con contraseña y la aceptación de términos nuevos leían el
+  paso y lo borraban en dos operaciones: dos peticiones paralelas abrían dos sesiones. Ahora, al terminar con éxito, el
+  paso se **toma** (`PasosTemporales.TomarAsync`, GETDEL) y solo continúa quien lo obtuvo; la otra responde
+  `401 paso_vencido`. Antes del éxito el paso se sigue leyendo sin borrarlo, para que un código errado (hasta 5) o unos
+  términos sin marcar se puedan corregir. Si las dos traían factores válidos, la perdedora pudo gastar su código de
+  recuperación: se acepta (quien lo hace es el mismo titular con dos pestañas o un atacante que ya tenía el factor).
 
 ## Consecuencias
 
@@ -279,8 +285,8 @@ En local y dev basta el loopback. Documentado en `deploy/runbook-atlas.md` §4.
   `CuentasExternasTests.Un_admin_de_organizacion_no_enumera_correos…` (15),
   `CuentasExternasTests.Pentest_revocar_suspender_o_renovar_durante_una_aceptacion…` (16),
   `TokensTests.Pentest_un_enlace_ajeno_no_obtiene_un_codigo…` y `…se_vuelve_por_el_rebote` (20),
-  `ModuloEquipoTests.El_rol_implicito_de_responsable_exige_ser_empleado…` (24).
-- Sin hacer aquí (otros hallazgos bajos de identidad): F4-SEC-17 (`TomarAsync` en los pasos) y la agrupación de IPv6
-  por /64.
+  `ModuloEquipoTests.El_rol_implicito_de_responsable_exige_ser_empleado…` (24),
+  `PentestCuentasExternasTests` de pasos en paralelo (17).
+- Sin hacer aquí (otros hallazgos bajos de identidad): la agrupación de IPv6 por /64.
 - ATLAS-ADR-0022 (bloqueo y límites), ATLAS-ADR-0025 (cuentas externas y recuperación), ATLAS-ADR-0027 (emergencia),
   ATLAS-ADR-0030 (sincronización con Graph), ATLAS-ADR-0048 (endurecimiento de F4).
