@@ -103,7 +103,6 @@ los [por verificar] de pdn: llaves de Contabo, región, ciclo de vida y reenvío
 más en pdn (respaldo del `hostPath` incluido); para exportaciones con 7 días de retención el riesgo de perder datos es
 bajo.
 
-
 ### Positivas
 
 - Sin MinIO, host público, certificado ni ClusterIP nuevos en QA; menos piezas que operar.

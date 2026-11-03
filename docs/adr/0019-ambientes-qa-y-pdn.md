@@ -64,7 +64,6 @@ apuntaba a la 145 y la 169 va justa de CPU (F0.4 ítem 3.2). Lo demás de la tab
   suyo. Separarlo queda como mejora; mientras tanto, rotar su secreto afecta a los dos ambientes.
 - Abierto solo a empleados hasta invitar al cliente piloto (revisión de seguridad de F4, §8).
 
-
 ### Positivas
 
 - Menos manifiestos, secretos y capacidad que mantener.
