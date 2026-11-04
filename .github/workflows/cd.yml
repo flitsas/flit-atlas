@@ -1,7 +1,7 @@
 name: cd
 
 # HU 1.8 · ATLAS-ADR-0006 y ATLAS-ADR-0019: `staging` despliega en qa (atlas-qa, VPS 177) y `release` en pdn
-# (atlas-pdn, VPS 169). `develop` no despliega. Las imágenes van a GHCR y se fijan por digest en flit-gitops, que
+# (atlas-pdn, VPS 145). `develop` no despliega. Las imágenes van a GHCR y se fijan por digest en flit-gitops, que
 # Argo CD sincroniza.
 
 on:
@@ -168,3 +168,29 @@ jobs:
       excepciones: ${{ matrix.excepciones }}
       atlas_url: ${{ vars.ATLAS_URL }}
       ambiente: ${{ needs.ambiente.outputs.nombre }}
+
+  contratos-qa:
+    # ATLAS-ADR-0052: ATLAS_URL es el Atlas central (pdn), donde se marcan todos los canales. Desde staging, además, se
+    # publica en el Atlas de QA (ATLAS_URL_QA) para probar la versión de Atlas que acaba de llegar a qa. No corre sin la
+    # variable ni desde release.
+    needs: [ambiente, gitops]
+    if: github.ref_name == 'staging' && vars.ATLAS_URL_QA != ''
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { contrato: atlas, tipo: openapi, ruta: contracts/openapi/atlas.v1.yaml, ruleset: contracts/vacuum/openapi.yaml, excepciones: contracts/vacuum/openapi-excepciones.yaml }
+          - { contrato: atlas-eventos, tipo: asyncapi, ruta: contracts/asyncapi/atlas-events.v1.yaml, ruleset: contracts/vacuum/asyncapi.yaml, excepciones: "" }
+    uses: ./.github/workflows/atlas-publicar.yml
+    with:
+      aplicativo: atlas-api
+      contrato: ${{ matrix.contrato }}
+      tipo: ${{ matrix.tipo }}
+      ruta: ${{ matrix.ruta }}
+      ruleset: ${{ matrix.ruleset }}
+      excepciones: ${{ matrix.excepciones }}
+      atlas_url: ${{ vars.ATLAS_URL_QA }}
+      ambiente: qa
