@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0003
 titulo: Stack base — PWA React + Vite, API .NET 10, servicios Go y Python
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

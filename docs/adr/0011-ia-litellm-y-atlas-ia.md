@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0011
 titulo: IA a través del gateway LiteLLM y orquestador en atlas-ia (Python)
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

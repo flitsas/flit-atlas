@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Flit.Atlas.Identidad</RootNamespace>
+    <!-- Las migraciones generadas por EF no siguen todas las reglas de análisis. -->
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Identity.Web" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="OpenIddict.AspNetCore" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" />
+    <PackageReference Include="QRCoder" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Listas locales de contraseñas comunes y filtradas (HU 1.5, ATLAS-ADR-0025; F4-SEC-31, ATLAS-ADR-0049) y textos legales. -->
+    <EmbeddedResource Include="Externos\contrasenas-comunes.txt" />
+    <EmbeddedResource Include="Externos\contrasenas-filtradas.txt" />
+    <EmbeddedResource Include="Externos\Legal\*.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
+    <ProjectReference Include="..\Flit.Atlas.ServiceDefaults\Flit.Atlas.ServiceDefaults.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Atlas.Api.Tests" />
+  </ItemGroup>
+</Project>

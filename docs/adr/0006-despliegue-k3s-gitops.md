@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0006
 titulo: Despliegue en k3s con flit-gitops y Argo CD
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

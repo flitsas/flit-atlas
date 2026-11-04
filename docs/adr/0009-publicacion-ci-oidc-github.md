@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0009
 titulo: Publicación desde CI con el token OIDC de GitHub Actions y lista blanca
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

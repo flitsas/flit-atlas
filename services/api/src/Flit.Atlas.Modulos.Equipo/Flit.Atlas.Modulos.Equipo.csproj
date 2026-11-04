@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Flit.Atlas.Modulos.Equipo</RootNamespace>
+    <!-- Las migraciones generadas por EF no siguen todas las reglas de análisis. -->
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!-- Firma del JWT de la GitHub App (RS256) con la librería de Microsoft, nunca a mano (ATLAS-ADR-0031). Es la misma
+         versión que ya trae Microsoft.Identity.Web a la solución. -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Un módulo solo depende del núcleo (ATLAS-ADR-0016): nunca de otro módulo ni de Identidad. Lo verifica
+         ArquitecturaModulosTests. El catálogo y el soporte se leen con ILectorAplicativos e ISoporteDeTurno. -->
+    <ProjectReference Include="..\Flit.Atlas.Plataforma\Flit.Atlas.Plataforma.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Atlas.Modulos.Equipo.Tests" />
+    <InternalsVisibleTo Include="Flit.Atlas.Api.Tests" />
+  </ItemGroup>
+</Project>

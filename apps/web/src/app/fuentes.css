@@ -1,0 +1,29 @@
+/*
+ * Poppins (OFL-1.1) servida desde el propio origen (CSP font-src 'self'), solo el subconjunto latino, que cubre el
+ * español. Los archivos son los de @fontsource/poppins; las reglas son propias para usar font-display: optional: en una
+ * red lenta la primera visita se queda con la fuente del sistema en lugar de saltar al llegar Poppins (CLS), y desde la
+ * segunda la fuente ya está en la caché del service worker.
+ */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: optional;
+  src: url('../../node_modules/@fontsource/poppins/files/poppins-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: optional;
+  src: url('../../node_modules/@fontsource/poppins/files/poppins-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: optional;
+  src: url('../../node_modules/@fontsource/poppins/files/poppins-latin-600-normal.woff2') format('woff2');
+}

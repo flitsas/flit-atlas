@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0002
 titulo: Repo privado propio flitsas/flit-atlas
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

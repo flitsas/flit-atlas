@@ -1,0 +1,91 @@
+# atlas-web (HU 1.8): sirve la PWA y reenvía a atlas-api las rutas del BFF, para que la PWA y la API compartan host
+# (cookie SameSite=Strict, ATLAS-ADR-0008 y F0.3 §3). El nginx del host termina TLS y apunta solo aquí.
+# Las variables ${ATLAS_*} las sustituye la imagen de nginx al arrancar (envsubst sobre /etc/nginx/templates).
+
+map $http_upgrade $atlas_connection {
+    default upgrade;
+    ''      '';
+}
+
+# HSTS de atlas-web (HU 4.10): ATLAS_HSTS en qa y pdn (la imagen trae un año); vacío en local, y entonces nginx no envía
+# la cabecera. Detrás del nginx del host, que termina TLS, el navegador la recibe por HTTPS.
+map $host $atlas_hsts {
+    default "${ATLAS_HSTS}";
+}
+
+# Origen público del S3 que firma las URL de descarga (HU 4.6 y 4.10): va en connect-src de la PWA. Vacío = solo 'self'.
+map $host $atlas_s3_publico {
+    default "${ATLAS_S3_PUBLICO}";
+}
+
+server {
+    listen ${ATLAS_WEB_PORT};
+    listen [::]:${ATLAS_WEB_PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    server_tokens off;
+    client_max_body_size 25m;
+
+    # Compresión de la PWA (HU 1.6: el bundle inicial se mide en gzip, Lighthouse móvil ≥ 90).
+    gzip on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_types text/css application/javascript text/javascript application/json application/manifest+json image/svg+xml;
+
+    # Sonda propia de atlas-web; /health/ es de atlas-api.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    # Rutas del BFF: las mismas que el proxy de Vite en local (apps/web/vite.config.ts). La redirect URI de Entra ID
+    # (/api/auth/callback/azure-ad) entra por /api/.
+    location ~ ^/(api|hubs|connect|\.well-known|health)/ {
+        proxy_pass ${ATLAS_API_URL};
+        include /etc/nginx/atlas-proxy.conf;
+    }
+
+    # Archivos con hash en el nombre: caché de un año.
+    location /assets/ {
+        include /etc/nginx/atlas-seguridad.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # Visor de contratos con Scalar (HU 3.6, ATLAS-ADR-0039): otra página, cargada solo en un iframe con
+    # sandbox="allow-scripts" desde /contratos. Su CSP es la del shell más estilos en línea (Scalar los inyecta),
+    # el sandbox también por cabecera (aunque se abra suelto, su origen es opaco: sin cookie del BFF ni acceso a la API),
+    # solo se deja enmarcar por Atlas y solo conecta a los hosts de QA y sandbox (ATLAS_VISOR_CONEXIONES), adonde
+    # apunta la consola «Probar». Sin unsafe-eval.
+    location ^~ /visor/ {
+        include /etc/nginx/atlas-seguridad-visor.conf;
+        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${ATLAS_VISOR_CONEXIONES}; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; sandbox allow-scripts; report-uri /api/v1/plataforma/csp-reportes; report-to csp" always;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location ^~ /visor/assets/ {
+        include /etc/nginx/atlas-seguridad-visor.conf;
+        add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'self'; sandbox allow-scripts" always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # Manifiesto con su tipo (la lista de tipos de la imagen no siempre trae .webmanifest).
+    location = /manifest.webmanifest {
+        include /etc/nginx/atlas-seguridad.conf;
+        add_header Cache-Control "no-cache" always;
+        default_type application/manifest+json;
+        try_files $uri =404;
+    }
+
+    # La PWA: index.html, sw.js y tema.js nunca se cachean en el navegador; el service worker revisa la versión nueva
+    # en cada visita y la PWA ofrece «Hay una nueva versión» (HU 1.6).
+    location / {
+        include /etc/nginx/atlas-seguridad.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri $uri/ /index.html;
+    }
+}

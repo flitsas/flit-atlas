@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0008
 titulo: BFF en atlas-api y entrada HTTP propia (sin Flit.Gateway)
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas

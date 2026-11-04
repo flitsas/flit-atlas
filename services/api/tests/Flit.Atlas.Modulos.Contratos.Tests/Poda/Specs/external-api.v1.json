@@ -1,0 +1,1704 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "FLIT — API externa de sincronización de trámites",
+    "version": "3.2.0",
+    "description": "Contrato para clientes de integración externos (primer consumidor: Flito), Épicas #12737 y #12741. Lectura por pull: el consumidor recorre el feed por cursor al recibir un aviso de FLIT 2 (webhook firmado, §8 de la guía y AsyncAPI flito-webhook/tramite.cambio), periódicamente como respaldo y a demanda. Escritura: el consumidor adjunta al trámite el comprobante de pago del impuesto departamental (v3.2). Todos los ejemplos usan datos ficticios. La guía de consumo (orden de llamadas, arranque sin histórico, reintentos, envío de adjuntos) está en docs/integraciones/external-api-tramites-sync.md §5 y §7.",
+    "contact": {
+      "name": "Equipo FLIT"
+    },
+    "license": {
+      "name": "Uso restringido a clientes de integración autorizados por FLIT"
+    }
+  },
+  "externalDocs": {
+    "description": "Contrato v3.1 y guía de consumo",
+    "url": "https://github.com/flitsas/flit/blob/develop/docs/integraciones/external-api-tramites-sync.md"
+  },
+  "servers": [
+    {
+      "url": "https://{host}",
+      "description": "Un host y un cliente por ambiente (DEV, QA, PDN).",
+      "variables": {
+        "host": {
+          "default": "api.flitsas.com",
+          "description": "Host de la API del ambiente."
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "Autenticación",
+      "description": "Canje de credenciales por un pase de acceso."
+    },
+    {
+      "name": "Sincronización",
+      "description": "Feed de trámites por cursor y descarga de la factura."
+    },
+    {
+      "name": "Adjuntos",
+      "description": "Envío de documentos del consumidor al trámite (v3.2)."
+    }
+  ],
+  "security": [
+    {
+      "externalClient": []
+    }
+  ],
+  "paths": {
+    "/api/v1/external/auth/token": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "operationId": "obtenerPase",
+        "summary": "Obtener un pase de acceso",
+        "description": "Limitado a 10 solicitudes por minuto por IP. Tras 5 fallos seguidos el cliente queda bloqueado 15 minutos.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              },
+              "example": {
+                "clientId": "flito-qa",
+                "clientSecret": "secreto-de-ejemplo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pase emitido. Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                },
+                "example": {
+                  "accessToken": "<pase JWT de ejemplo>",
+                  "tokenType": "Bearer",
+                  "expiresIn": 1800,
+                  "scope": [
+                    "external.tramites.read",
+                    "external.tramites.pii.read"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credenciales inválidas o cliente inactivo (no se revela cuál).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_client": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_client",
+                      "status": 401,
+                      "detail": "Credenciales de cliente inválidas.",
+                      "code": "invalid_client"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El cliente debe rotar su secreto.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "secret_rotation_required": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "secret_rotation_required",
+                      "status": 403,
+                      "detail": "El cliente debe rotar su secreto antes de obtener un pase.",
+                      "code": "secret_rotation_required"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "Cliente bloqueado por intentos fallidos.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "client_locked": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "client_locked",
+                      "status": 423,
+                      "detail": "Cliente bloqueado temporalmente por intentos fallidos.",
+                      "code": "client_locked"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 10 solicitudes de pase por minuto desde la misma IP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "rate_limited",
+                      "status": 429,
+                      "detail": "Demasiadas solicitudes. Reintente después de Retry-After.",
+                      "code": "rate_limited"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          },
+          "503": {
+            "description": "El ambiente no tiene llave de emisión.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "external_auth_unavailable": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "external_auth_unavailable",
+                      "status": 503,
+                      "detail": "La emisión de pases externos no está disponible.",
+                      "code": "external_auth_unavailable"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/external/tramites/sync": {
+      "get": {
+        "tags": [
+          "Sincronización"
+        ],
+        "operationId": "sincronizarTramites",
+        "summary": "Recorrer el feed de trámites",
+        "description": "Entrega los trámites radicados al menos una vez (nunca los migrados desde FLIT 1), en el orden del cursor, con una ventana de estabilidad de 5 segundos. Upsert por id descartando syncVersion ≤ la guardada. Exige external.tramites.read; sin external.tramites.pii.read los campos x-pii llegan enmascarados.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "nextCursor de la página anterior. Excluyente con since.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "ISO-8601 con zona (Z o ±hh:mm). Arranca desde la fecha de último cambio. Excluyente con cursor.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2026-09-21T10:15:00-05:00"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "description": "Entre 1 y 1000.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 200,
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página. Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncPage"
+                },
+                "examples": {
+                  "conPermisoDeDatosPersonales": {
+                    "summary": "Un trámite aprobado y un tombstone",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f",
+                          "radicado": "FT1-0001234",
+                          "consecutivo": 1234,
+                          "syncVersion": 48213,
+                          "fechaUltimoCambio": "2026-09-21T10:14:55-05:00",
+                          "eliminado": false,
+                          "estado": "aprobado",
+                          "tramite": {
+                            "codigo": "MATRICULA_NUEVA",
+                            "nombre": "Matrícula inicial",
+                            "familia": "MATRICULAS"
+                          },
+                          "fechaCreacion": "2026-09-01T08:00:00-05:00",
+                          "fechaRadicacion": "2026-09-01T09:30:00-05:00",
+                          "fechaAprobacion": "2026-09-20T16:02:10-05:00",
+                          "vehiculo": {
+                            "vin": "1HGBH41JXMN109186",
+                            "placa": "ABC123",
+                            "clase": "CAMIONETA",
+                            "marca": "MARCA EJEMPLO",
+                            "linea": "LINEA EJEMPLO",
+                            "modeloAno": 2026,
+                            "carroceria": "SUV",
+                            "cilindraje": 2000,
+                            "cilindrajeTexto": null,
+                            "capacidad": 5,
+                            "numeroMotor": "MTR000000",
+                            "numeroSerie": "SER000000",
+                            "tipoServicio": {
+                              "codigo": "PARTICULAR",
+                              "nombre": "Particular"
+                            }
+                          },
+                          "organismo": {
+                            "codigoTransito": "76520000",
+                            "nombre": "SECRETARIA DE TRANSITO EJEMPLO",
+                            "codigoSecretaria": "76520",
+                            "ciudad": "PALMIRA",
+                            "departamento": "VALLE DEL CAUCA"
+                          },
+                          "compradores": [
+                            {
+                              "ordinal": 1,
+                              "porcentajeParticipacion": 60.0,
+                              "rolActor": "comprador",
+                              "tipoPersona": "juridical",
+                              "tipoDocumento": "NIT",
+                              "numeroDocumento": "900000000",
+                              "nombreCompleto": "EMPRESA EJEMPLO SAS",
+                              "direccion": "CALLE 1 # 2-3",
+                              "ciudad": "PALMIRA",
+                              "celular": "3000000000",
+                              "correo": "contacto@ejemplo.test"
+                            },
+                            {
+                              "ordinal": 2,
+                              "porcentajeParticipacion": 40.0,
+                              "rolActor": "comprador",
+                              "tipoPersona": "natural",
+                              "tipoDocumento": "CC",
+                              "numeroDocumento": "1000000000",
+                              "nombreCompleto": "PERSONA EJEMPLO",
+                              "direccion": "CARRERA 4 # 5-6",
+                              "ciudad": "PALMIRA",
+                              "celular": "3100000000",
+                              "correo": "persona@ejemplo.test"
+                            }
+                          ],
+                          "factura": {
+                            "adjuntoId": "0192b7c4-9a1b-7c2d-8e3f-4a5b6c7d8e9f",
+                            "nombreArchivo": "factura.pdf",
+                            "cargadaEn": "2026-09-02T10:00:00-05:00"
+                          },
+                          "companiaGestora": {
+                            "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
+                            "nit": "901000000",
+                            "nombre": "TRAMITADORA EJEMPLO SAS"
+                          }
+                        },
+                        {
+                          "id": "0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e90",
+                          "radicado": "FT1-0001235",
+                          "consecutivo": 1235,
+                          "syncVersion": 48214,
+                          "fechaUltimoCambio": "2026-09-21T10:14:55-05:00",
+                          "eliminado": true,
+                          "estado": "anulado",
+                          "tramite": {
+                            "codigo": "MATRICULA_NUEVA",
+                            "nombre": "Matrícula inicial",
+                            "familia": "MATRICULAS"
+                          },
+                          "fechaCreacion": "2026-09-01T08:00:00-05:00",
+                          "fechaRadicacion": "2026-09-01T09:30:00-05:00",
+                          "fechaAprobacion": null,
+                          "vehiculo": null,
+                          "organismo": null,
+                          "compradores": [],
+                          "factura": null,
+                          "companiaGestora": {
+                            "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
+                            "nit": "901000000",
+                            "nombre": "TRAMITADORA EJEMPLO SAS"
+                          }
+                        }
+                      ],
+                      "nextCursor": "eyJ2IjoxLCJ4IjoiOTAwIiwic3YiOjQ4MjE0fQ",
+                      "hasMore": false,
+                      "pageSize": 200,
+                      "serverTime": "2026-09-21T10:15:03-05:00"
+                    }
+                  },
+                  "enmascarado": {
+                    "summary": "Sin external.tramites.pii.read",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f",
+                          "radicado": "FT1-0001234",
+                          "consecutivo": 1234,
+                          "syncVersion": 48213,
+                          "fechaUltimoCambio": "2026-09-21T10:14:55-05:00",
+                          "eliminado": false,
+                          "estado": "aprobado",
+                          "tramite": {
+                            "codigo": "MATRICULA_NUEVA",
+                            "nombre": "Matrícula inicial",
+                            "familia": "MATRICULAS"
+                          },
+                          "fechaCreacion": "2026-09-01T08:00:00-05:00",
+                          "fechaRadicacion": "2026-09-01T09:30:00-05:00",
+                          "fechaAprobacion": "2026-09-20T16:02:10-05:00",
+                          "vehiculo": {
+                            "vin": "1HGBH41JXMN109186",
+                            "placa": "ABC123",
+                            "clase": "CAMIONETA",
+                            "marca": "MARCA EJEMPLO",
+                            "linea": "LINEA EJEMPLO",
+                            "modeloAno": 2026,
+                            "carroceria": "SUV",
+                            "cilindraje": 2000,
+                            "cilindrajeTexto": null,
+                            "capacidad": 5,
+                            "numeroMotor": "MTR000000",
+                            "numeroSerie": "SER000000",
+                            "tipoServicio": {
+                              "codigo": "PARTICULAR",
+                              "nombre": "Particular"
+                            }
+                          },
+                          "organismo": {
+                            "codigoTransito": "76520000",
+                            "nombre": "SECRETARIA DE TRANSITO EJEMPLO",
+                            "codigoSecretaria": "76520",
+                            "ciudad": "PALMIRA",
+                            "departamento": "VALLE DEL CAUCA"
+                          },
+                          "compradores": [
+                            {
+                              "ordinal": 1,
+                              "porcentajeParticipacion": 60.0,
+                              "rolActor": "comprador",
+                              "tipoPersona": "juridical",
+                              "tipoDocumento": "NIT",
+                              "numeroDocumento": "9****0000",
+                              "nombreCompleto": "E*** E*** S***",
+                              "direccion": "***",
+                              "ciudad": "PALMIRA",
+                              "celular": "******0000",
+                              "correo": "c***@ejemplo.test"
+                            }
+                          ],
+                          "factura": {
+                            "adjuntoId": "0192b7c4-9a1b-7c2d-8e3f-4a5b6c7d8e9f",
+                            "nombreArchivo": "factura.pdf",
+                            "cargadaEn": "2026-09-02T10:00:00-05:00"
+                          },
+                          "companiaGestora": {
+                            "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
+                            "nit": "901000000",
+                            "nombre": "TRAMITADORA EJEMPLO SAS"
+                          }
+                        }
+                      ],
+                      "nextCursor": "eyJ2IjoxLCJ4IjoiOTAwIiwic3YiOjQ4MjEzfQ",
+                      "hasMore": true,
+                      "pageSize": 1,
+                      "serverTime": "2026-09-21T10:15:03-05:00"
+                    }
+                  },
+                  "sinCambios": {
+                    "summary": "Sin cambios desde el cursor",
+                    "value": {
+                      "items": [],
+                      "nextCursor": "eyJ2IjoxLCJ4IjoiOTAwIiwic3YiOjQ4MjE0fQ",
+                      "hasMore": false,
+                      "pageSize": 200,
+                      "serverTime": "2026-09-21T10:20:03-05:00"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_cursor": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_cursor",
+                      "status": 400,
+                      "detail": "El cursor no es válido.",
+                      "code": "invalid_cursor"
+                    }
+                  },
+                  "invalid_page_size": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_page_size",
+                      "status": 400,
+                      "detail": "pageSize debe estar entre 1 y 1000.",
+                      "code": "invalid_page_size"
+                    }
+                  },
+                  "invalid_since": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_since",
+                      "status": 400,
+                      "detail": "since debe ser ISO-8601 con zona (Z o ±hh:mm).",
+                      "code": "invalid_since"
+                    }
+                  },
+                  "cursor_and_since_exclusive": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "cursor_and_since_exclusive",
+                      "status": 400,
+                      "detail": "cursor y since no pueden ir juntos.",
+                      "code": "cursor_and_since_exclusive"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin pase, pase caducado o de otro emisor. Incluye WWW-Authenticate: Bearer.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_token": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_token",
+                      "status": 401,
+                      "detail": "Falta el pase o no es válido para este recurso.",
+                      "code": "invalid_token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El pase no tiene el permiso que exige el recurso.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "insufficient_scope": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "insufficient_scope",
+                      "status": 403,
+                      "detail": "El pase no tiene el permiso que exige este recurso.",
+                      "code": "insufficient_scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Cuota superada (120 solicitudes por minuto por cliente). Reintentar tras Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "rate_limited",
+                      "status": 429,
+                      "detail": "Demasiadas solicitudes. Reintente después de Retry-After.",
+                      "code": "rate_limited"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/external/tramites/{id}/adjuntos/{adjuntoId}/url": {
+      "get": {
+        "tags": [
+          "Sincronización"
+        ],
+        "operationId": "urlFactura",
+        "summary": "URL firmada de la factura",
+        "description": "Solo facturas. Exige external.tramites.read. Pedirla justo antes de descargar; ante un fallo, pedir otra.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "id del trámite.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "adjuntoId",
+            "in": "path",
+            "required": true,
+            "description": "factura.adjuntoId del ítem.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "URL firmada. Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjuntoUrl"
+                },
+                "example": {
+                  "url": "https://almacen.ejemplo.test/facturas/0192b7c4?firma=ejemplo",
+                  "expiraEn": "2026-09-21T10:30:00-05:00",
+                  "nombreArchivo": "factura.pdf",
+                  "contentType": "application/pdf"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin pase, pase caducado o de otro emisor. Incluye WWW-Authenticate: Bearer.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_token": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_token",
+                      "status": 401,
+                      "detail": "Falta el pase o no es válido para este recurso.",
+                      "code": "invalid_token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El pase no tiene el permiso que exige el recurso.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "insufficient_scope": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "insufficient_scope",
+                      "status": 403,
+                      "detail": "El pase no tiene el permiso que exige este recurso.",
+                      "code": "insufficient_scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El trámite o la factura no existen, no se corresponden, no es una factura, el trámite está fuera de alcance o el archivo ya no está. Nunca 410.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "attachment_not_found": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "attachment_not_found",
+                      "status": 404,
+                      "detail": "El adjunto no está disponible.",
+                      "code": "attachment_not_found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Cuota superada (120 solicitudes por minuto por cliente). Reintentar tras Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "rate_limited",
+                      "status": 429,
+                      "detail": "Demasiadas solicitudes. Reintente después de Retry-After.",
+                      "code": "rate_limited"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          },
+          "503": {
+            "description": "El almacenamiento no responde. Transitorio: reintentar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "storage_unavailable": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "storage_unavailable",
+                      "status": 503,
+                      "detail": "El almacenamiento de archivos no está disponible; reintentar más tarde.",
+                      "code": "storage_unavailable"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/external/tramites/{id}/adjuntos": {
+      "post": {
+        "tags": [
+          "Adjuntos"
+        ],
+        "operationId": "enviarAdjunto",
+        "summary": "Adjuntar un documento al trámite",
+        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si en FLIT ya se cargó ese tipo (gestor o portal) responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe el adjunto (si el estado marca y la marca falta, la pone); (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "id del trámite (el mismo id de los ítems del feed).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjuntoEnvio"
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/pdf, image/jpeg, image/png, image/webp"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Adjunto recibido y archivado. Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjuntoRecibido"
+                },
+                "example": {
+                  "adjuntoId": "0192b7c4-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+                  "tipo": "liquidacion_impuesto",
+                  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+                  "reemplazoDe": null,
+                  "enMatriz": true,
+                  "pagadoMarcado": true
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Reenvío idempotente: el adjunto vigente del consumidor ya tiene ese mismo contenido. No se escribe el adjunto; si el trámite está en un estado que marca el pago y la marca faltaba, se pone (pagadoMarcado true). Mismo cuerpo que el 201 con reemplazoDe null.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjuntoRecibido"
+                },
+                "example": {
+                  "adjuntoId": "0192b7c4-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+                  "tipo": "liquidacion_impuesto",
+                  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+                  "reemplazoDe": null,
+                  "enMatriz": true,
+                  "pagadoMarcado": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "El envío no es válido. No reintentar sin corregirlo.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "missing_file": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "missing_file",
+                      "status": 400,
+                      "detail": "Falta el archivo o está vacío.",
+                      "code": "missing_file"
+                    }
+                  },
+                  "invalid_tipo": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_tipo",
+                      "status": 400,
+                      "detail": "El tipo documental no es aceptado por este endpoint.",
+                      "code": "invalid_tipo"
+                    }
+                  },
+                  "invalid_mime": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_mime",
+                      "status": 400,
+                      "detail": "El archivo debe ser PDF, JPEG, PNG o WebP.",
+                      "code": "invalid_mime"
+                    }
+                  },
+                  "file_too_large": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "file_too_large",
+                      "status": 400,
+                      "detail": "El archivo supera el tamaño máximo de 20 MB.",
+                      "code": "file_too_large"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin pase, pase caducado o de otro emisor. Incluye WWW-Authenticate: Bearer.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_token": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_token",
+                      "status": 401,
+                      "detail": "Falta el pase o no es válido para este recurso.",
+                      "code": "invalid_token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El pase no tiene external.tramites.attachments.write.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "insufficient_scope": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "insufficient_scope",
+                      "status": 403,
+                      "detail": "El pase no tiene el permiso que exige este recurso.",
+                      "code": "insufficient_scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El trámite no existe o está fuera de alcance (nunca radicado, migrado desde FLIT 1 o eliminado). Definitivo.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "procedure_not_found": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "procedure_not_found",
+                      "status": 404,
+                      "detail": "El trámite no está disponible.",
+                      "code": "procedure_not_found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El trámite no admite el envío. not_allowed_in_state: decidir por terminal (true: definitivo; false: reintentar con espera). attachment_exists: ese tipo ya lo cargó alguien en FLIT (gestor o portal); definitivo, no reintentar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_allowed_in_state": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "not_allowed_in_state",
+                      "status": 409,
+                      "detail": "El trámite está en un estado que no admite este envío.",
+                      "code": "not_allowed_in_state",
+                      "estado": "aprobado",
+                      "terminal": true
+                    }
+                  },
+                  "not_allowed_in_state_transitorio": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "not_allowed_in_state",
+                      "status": 409,
+                      "detail": "El trámite está en un estado que no admite este envío.",
+                      "code": "not_allowed_in_state",
+                      "estado": "rechazado",
+                      "terminal": false
+                    }
+                  },
+                  "attachment_exists": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "attachment_exists",
+                      "status": 409,
+                      "detail": "El trámite ya tiene este documento cargado en FLIT (gestor o portal); su archivo se conserva.",
+                      "code": "attachment_exists"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Cuota superada (120 solicitudes por minuto por cliente, compartida con el feed y la URL de factura). Reintentar tras Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "rate_limited",
+                      "status": 429,
+                      "detail": "Demasiadas solicitudes. Reintente después de Retry-After.",
+                      "code": "rate_limited"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          },
+          "503": {
+            "description": "El almacenamiento no responde. Transitorio: reintentar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "storage_unavailable": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "storage_unavailable",
+                      "status": 503,
+                      "detail": "El almacenamiento de archivos no está disponible; reintentar más tarde.",
+                      "code": "storage_unavailable"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "externalClient": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Pase de acceso externo: JWT RS256 con emisor flit-core-external y audiencia flit-external, obtenido en POST /api/v1/external/auth/token. No sirve el pase de un usuario de la plataforma. Permisos: external.tramites.read (feed y factura), external.tramites.pii.read (datos personales en claro) y external.tramites.attachments.write (envío de adjuntos)."
+      }
+    },
+    "headers": {
+      "RetryAfter": {
+        "description": "Segundos a esperar antes de reintentar.",
+        "schema": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1
+        }
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "Error RFC 7807 (application/problem+json) con el código estable en la extensión code.",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Siempre about:blank."
+          },
+          "title": {
+            "type": "string",
+            "description": "Igual a code."
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Código HTTP."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Explicación legible. No usar para decidir: usar code."
+          },
+          "code": {
+            "type": "string",
+            "description": "Código estable del error.",
+            "enum": [
+              "invalid_client",
+              "client_locked",
+              "secret_rotation_required",
+              "external_auth_unavailable",
+              "invalid_token",
+              "insufficient_scope",
+              "invalid_cursor",
+              "invalid_page_size",
+              "invalid_since",
+              "cursor_and_since_exclusive",
+              "attachment_not_found",
+              "storage_unavailable",
+              "rate_limited",
+              "missing_file",
+              "invalid_tipo",
+              "invalid_mime",
+              "file_too_large",
+              "procedure_not_found",
+              "not_allowed_in_state",
+              "attachment_exists"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "description": "Solo en 409 not_allowed_in_state: estado actual del trámite (§4 de la guía). Informativo; para decidir usar terminal."
+          },
+          "terminal": {
+            "type": "boolean",
+            "description": "Solo en 409 not_allowed_in_state. true: el trámite ya no volverá a un estado que acepte el envío (aprobado, anulado, revocado); no reintentar. false: puede volver (p. ej. rechazado sin subsanación); reintentar con espera."
+          }
+        }
+      },
+      "TokenRequest": {
+        "type": "object",
+        "description": "Canje de credenciales por un pase de acceso.",
+        "required": [
+          "clientId",
+          "clientSecret"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Identificador del cliente de integración (p. ej. flito-qa)."
+          },
+          "clientSecret": {
+            "type": "string",
+            "format": "password",
+            "description": "Secreto entregado fuera de banda al dar de alta el cliente."
+          }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "description": "Pase de acceso externo.",
+        "required": [
+          "accessToken",
+          "tokenType",
+          "expiresIn",
+          "scope"
+        ],
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "Pase JWT RS256 de este emisor (no es un pase de la plataforma)."
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "Siempre Bearer.",
+            "enum": [
+              "Bearer"
+            ]
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Vigencia en segundos (1800). Renovar antes de que venza o ante un 401."
+          },
+          "scope": {
+            "type": "array",
+            "description": "Permisos del pase.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "external.tramites.read",
+                "external.tramites.pii.read",
+                "external.tramites.attachments.write"
+              ]
+            }
+          }
+        }
+      },
+      "SyncPage": {
+        "type": "object",
+        "description": "Página del feed de sincronización (contrato v3.1 §3).",
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore",
+          "pageSize",
+          "serverTime"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "Ítems en el orden del cursor. Vacío si no hubo cambios (nunca 404).",
+            "items": {
+              "$ref": "#/components/schemas/TramiteItem"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "description": "Cursor opaco. Siempre presente: persistirlo tras aplicar la página y continuar desde ahí."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "true si hay otra página disponible ya."
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Tamaño de página aplicado."
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Hora del servidor. Fecha y hora con desfase de Colombia (-05:00)."
+          }
+        }
+      },
+      "TramiteItem": {
+        "type": "object",
+        "description": "Trámite del feed (contrato v3.1 §4). Todas las claves van siempre presentes; el dato ausente es null.",
+        "required": [
+          "id",
+          "radicado",
+          "consecutivo",
+          "syncVersion",
+          "fechaUltimoCambio",
+          "eliminado",
+          "estado",
+          "tramite",
+          "fechaCreacion",
+          "fechaRadicacion",
+          "fechaAprobacion",
+          "vehiculo",
+          "organismo",
+          "compradores",
+          "factura",
+          "companiaGestora"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identificador estable del trámite. Clave de upsert."
+          },
+          "radicado": {
+            "type": "string",
+            "description": "Radicado FLIT, formato FTn-NNNNNNN. Único e inmutable."
+          },
+          "consecutivo": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Consecutivo numérico global."
+          },
+          "syncVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Versión de sincronización, creciente por trámite. Descartar si es ≤ a la guardada."
+          },
+          "fechaUltimoCambio": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Último cambio del trámite o de sus datos relacionados. Fecha y hora con desfase de Colombia (-05:00)."
+          },
+          "eliminado": {
+            "type": "boolean",
+            "description": "true = tombstone: vehiculo, organismo y factura en null y compradores en []."
+          },
+          "estado": {
+            "type": "string",
+            "description": "Código interno en minúscula.",
+            "enum": [
+              "borrador",
+              "preparado",
+              "preasignacion",
+              "asignado",
+              "entregado",
+              "aprobado",
+              "rechazado",
+              "anulado",
+              "revocado"
+            ]
+          },
+          "tramite": {
+            "$ref": "#/components/schemas/TipoTramite"
+          },
+          "fechaCreacion": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fecha y hora con desfase de Colombia (-05:00)."
+          },
+          "fechaRadicacion": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Fecha y hora con desfase de Colombia (-05:00)."
+          },
+          "fechaAprobacion": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Última transición a aprobado. Fecha y hora con desfase de Colombia (-05:00)."
+          },
+          "vehiculo": {
+            "$ref": "#/components/schemas/Vehiculo"
+          },
+          "organismo": {
+            "$ref": "#/components/schemas/Organismo"
+          },
+          "compradores": {
+            "type": "array",
+            "maxItems": 4,
+            "description": "Compradores (o, si no hay, propietarios) por ordinal. Nunca null; puede venir vacío.",
+            "items": {
+              "$ref": "#/components/schemas/Comprador"
+            }
+          },
+          "factura": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Factura"
+              }
+            ],
+            "description": "Factura más reciente. Descarga vía la URL firmada."
+          },
+          "companiaGestora": {
+            "$ref": "#/components/schemas/CompaniaGestora"
+          }
+        }
+      },
+      "TipoTramite": {
+        "type": "object",
+        "description": "Tipo de trámite.",
+        "required": [
+          "codigo",
+          "nombre",
+          "familia"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "familia": {
+            "type": "string",
+            "nullable": true,
+            "description": "MATRICULAS | TRASPASO | OTROS."
+          }
+        }
+      },
+      "Vehiculo": {
+        "type": "object",
+        "description": "Datos del vehículo. Puede ser null.",
+        "required": [
+          "vin",
+          "placa",
+          "clase",
+          "marca",
+          "linea",
+          "modeloAno",
+          "carroceria",
+          "cilindraje",
+          "cilindrajeTexto",
+          "capacidad",
+          "numeroMotor",
+          "numeroSerie",
+          "tipoServicio"
+        ],
+        "properties": {
+          "vin": {
+            "type": "string",
+            "nullable": true
+          },
+          "placa": {
+            "type": "string",
+            "nullable": true
+          },
+          "clase": {
+            "type": "string",
+            "nullable": true
+          },
+          "marca": {
+            "type": "string",
+            "nullable": true
+          },
+          "linea": {
+            "type": "string",
+            "nullable": true,
+            "description": "Equivale al «modelo» comercial."
+          },
+          "modeloAno": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "description": "Año modelo."
+          },
+          "carroceria": {
+            "type": "string",
+            "nullable": true
+          },
+          "cilindraje": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "description": "null si el origen no es numérico (el texto va en cilindrajeTexto)."
+          },
+          "cilindrajeTexto": {
+            "type": "string",
+            "nullable": true
+          },
+          "capacidad": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "description": "Pasajeros."
+          },
+          "numeroMotor": {
+            "type": "string",
+            "nullable": true
+          },
+          "numeroSerie": {
+            "type": "string",
+            "nullable": true
+          },
+          "tipoServicio": {
+            "$ref": "#/components/schemas/TipoServicio"
+          }
+        },
+        "nullable": true
+      },
+      "TipoServicio": {
+        "type": "object",
+        "description": "Tipo de servicio normalizado. Puede ser null.",
+        "required": [
+          "codigo",
+          "nombre"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "description": "PARTICULAR, PUBLICO, …"
+          },
+          "nombre": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "nullable": true
+      },
+      "Organismo": {
+        "type": "object",
+        "description": "Organismo de tránsito. Puede ser null.",
+        "required": [
+          "codigoTransito",
+          "nombre",
+          "codigoSecretaria",
+          "ciudad",
+          "departamento"
+        ],
+        "properties": {
+          "codigoTransito": {
+            "type": "string",
+            "nullable": true,
+            "description": "Código RUNT del organismo (8 dígitos)."
+          },
+          "nombre": {
+            "type": "string",
+            "nullable": true
+          },
+          "codigoSecretaria": {
+            "type": "string",
+            "nullable": true,
+            "description": "Código DIVIPOLA del municipio."
+          },
+          "ciudad": {
+            "type": "string",
+            "nullable": true
+          },
+          "departamento": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "nullable": true
+      },
+      "Comprador": {
+        "type": "object",
+        "description": "Comprador o propietario. Un null sigue siendo null al enmascarar.",
+        "required": [
+          "ordinal",
+          "porcentajeParticipacion",
+          "rolActor",
+          "tipoPersona",
+          "tipoDocumento",
+          "numeroDocumento",
+          "nombreCompleto",
+          "direccion",
+          "ciudad",
+          "celular",
+          "correo"
+        ],
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 = principal; 2..4 = copropietarios."
+          },
+          "porcentajeParticipacion": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "Porcentaje de propiedad (2 decimales). null con un solo comprador."
+          },
+          "rolActor": {
+            "type": "string",
+            "enum": [
+              "comprador",
+              "propietario"
+            ]
+          },
+          "tipoPersona": {
+            "type": "string",
+            "nullable": true,
+            "description": "natural | juridical."
+          },
+          "tipoDocumento": {
+            "type": "string",
+            "nullable": true,
+            "description": "CC, NIT, CE, PAS, TI, …"
+          },
+          "numeroDocumento": {
+            "type": "string",
+            "nullable": true,
+            "x-pii": "alta",
+            "description": "Dato personal (alta). Sin external.tramites.pii.read llega enmascarado: primer carácter y últimos 4 (9****0000)."
+          },
+          "nombreCompleto": {
+            "type": "string",
+            "nullable": true,
+            "description": "En persona jurídica, la razón social. Dato personal (media). Sin external.tramites.pii.read llega enmascarado: inicial de cada palabra (P*** E***).",
+            "x-pii": "media"
+          },
+          "direccion": {
+            "type": "string",
+            "nullable": true,
+            "x-pii": "alta",
+            "description": "Dato personal (alta). Sin external.tramites.pii.read llega enmascarado: oculta (***)."
+          },
+          "ciudad": {
+            "type": "string",
+            "nullable": true
+          },
+          "celular": {
+            "type": "string",
+            "nullable": true,
+            "x-pii": "media",
+            "description": "Dato personal (media). Sin external.tramites.pii.read llega enmascarado: últimos 4 (******0000)."
+          },
+          "correo": {
+            "type": "string",
+            "nullable": true,
+            "x-pii": "alta",
+            "description": "Dato personal (alta). Sin external.tramites.pii.read llega enmascarado: primera letra y dominio (c***@ejemplo.test)."
+          }
+        }
+      },
+      "Factura": {
+        "type": "object",
+        "description": "Factura del trámite. Puede ser null.",
+        "required": [
+          "adjuntoId",
+          "nombreArchivo",
+          "cargadaEn"
+        ],
+        "properties": {
+          "adjuntoId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Usar en GET /api/v1/external/tramites/{id}/adjuntos/{adjuntoId}/url."
+          },
+          "nombreArchivo": {
+            "type": "string",
+            "nullable": true
+          },
+          "cargadaEn": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fecha y hora con desfase de Colombia (-05:00)."
+          }
+        },
+        "nullable": true
+      },
+      "CompaniaGestora": {
+        "type": "object",
+        "description": "Compañía que radicó el trámite.",
+        "required": [
+          "tenantId",
+          "nit",
+          "nombre"
+        ],
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nit": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AdjuntoUrl": {
+        "type": "object",
+        "description": "URL firmada de descarga de la factura.",
+        "required": [
+          "url",
+          "expiraEn",
+          "nombreArchivo",
+          "contentType"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL firmada de un solo uso inmediato (10 minutos). Descargar sin cabeceras de autorización."
+          },
+          "expiraEn": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Informativo. Fecha y hora con desfase de Colombia (-05:00)."
+          },
+          "nombreArchivo": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          }
+        }
+      },
+      "AdjuntoEnvio": {
+        "type": "object",
+        "description": "Cuerpo multipart/form-data del envío de un adjunto.",
+        "required": [
+          "tipo",
+          "file"
+        ],
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "description": "Código del tipo documental (slug del catálogo). La v3.2 solo acepta liquidacion_impuesto (liquidación o pago del impuesto vehicular departamental: recibo de impuesto o recibo de caja). Ampliar la lista no cambia el endpoint.",
+            "enum": [
+              "liquidacion_impuesto"
+            ]
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "El archivo: application/pdf, image/jpeg, image/png o image/webp, de hasta 20 MB (20 971 520 bytes). El Content-Type de la parte decide el tipo."
+          }
+        }
+      },
+      "AdjuntoRecibido": {
+        "type": "object",
+        "description": "Resultado del envío. El cuerpo es el mismo en 201 (adjunto nuevo) y en 200 (reenvío idempotente).",
+        "required": [
+          "adjuntoId",
+          "tipo",
+          "sha256",
+          "reemplazoDe",
+          "enMatriz",
+          "pagadoMarcado"
+        ],
+        "properties": {
+          "adjuntoId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "id del adjunto en FLIT. Guardarlo: identifica el envío."
+          },
+          "tipo": {
+            "type": "string",
+            "description": "Tipo documental recibido.",
+            "enum": [
+              "liquidacion_impuesto"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "description": "SHA-256 en hexadecimal (64 caracteres, minúsculas) de los bytes recibidos."
+          },
+          "reemplazoDe": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "id del adjunto anterior del consumidor que este envío retiró. null si no había otro o si la respuesta es el 200 idempotente."
+          },
+          "enMatriz": {
+            "type": "boolean",
+            "description": "true si el tipo está en la matriz documental del gestor para ese trámite, es decir, si el adjunto completa una casilla de su checklist. false: queda archivado en el trámite sin casilla asociada."
+          },
+          "pagadoMarcado": {
+            "type": "boolean",
+            "description": "true si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en entregado no marca, pero si la marca ya existía devuelve true."
+          }
+        }
+      }
+    }
+  }
+}

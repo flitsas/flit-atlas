@@ -49,3 +49,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 ~$*
+
+# Playwright
+/blob-report/
+/playwright/.cache/

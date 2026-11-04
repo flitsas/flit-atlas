@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0001
 titulo: Registro de decisiones con MADR y serie propia ATLAS-ADR
-estado: propuesto
+estado: aceptado
 fecha: 2026-10-21
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas
@@ -63,4 +63,4 @@ Opción elegida: **1, la serie propia `ATLAS-ADR-NNNN`**, decidida por el líder
 ## Más información
 
 - Plan 01 §13.2 (formato MADR 4 y front-matter).
-- Los ADR de F0 (0001 a 0016) quedan en estado `propuesto` hasta que el líder técnico los apruebe.
+- Los ADR de F0 (0001 a 0016) los aceptó el líder técnico el 21/10/2026. Desde ahí, todo cambio a ellos va en un ADR nuevo.
