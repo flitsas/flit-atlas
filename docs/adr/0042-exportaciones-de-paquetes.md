@@ -208,7 +208,12 @@ usuario responde 202 sin esperar la generación.
 1. **Solicitar** (atlas-api). Valida, revisa permisos, arma el «paquete a exportar» y lo sube a
    `exportaciones/<id>/entrada.json`; después guarda en **una sola transacción** la fila `pendiente`, el evento
    `atlas.contratos.exportacion_solicitada` en la outbox y la auditoría. Responde **202** con la exportación y
-   `Location`. Si la base falla después de subir, la entrada queda huérfana en el S3 (sin nadie que la lea).
+   `Location`. Si algo falla después de subir y antes de confirmar (el tope en curso revisado con el candado, la base, una
+   cancelación), se **borra** lo subido bajo `exportaciones/<id>/` (F4-SEC-28, 03/11/2026): la entrada (para una versión
+   interna, el spec completo) no queda huérfana. Si falla el propio `COMMIT`, no se borra (su resultado es incierto y la
+   fila pudo quedar); eso, y una caída del proceso entre subir y confirmar, lo cubre la regla de ciclo de vida del bucket.
+   No se barren prefijos sin fila en `VencedorExportaciones`: exigiría listar el bucket (una operación nueva en
+   `IAlmacenObjetos`) para un caso que la regla del bucket ya limpia.
    - **Paquete:** la revisión pedida o, sin ella, la vigente (o la última si nunca se publicó). Por cada contrato con
      operaciones, el spec de la versión fijada **podado** a su selección con `Podadores` (ATLAS-ADR-0038) al ambiente
      `Contratos:Exportaciones:Ambiente` (`qa` por defecto) con las URL públicas configuradas
@@ -421,7 +426,8 @@ enlace interno, el PDF llega a la hoja como `File`, axe sin errores críticos y 
   `ATLAS_DOCS_AUTH_*`), las de atlas-api (`Plataforma__Almacenamiento__*` y `EndpointPublico`), los usuarios de RabbitMQ
   y la `NetworkPolicy`.
 - [por verificar] El host público del S3 para firmar (`EndpointPublico`): en pdn el de Contabo; en qa, MinIO o RustFS
-  necesita un ingress propio. Y una regla de ciclo de vida del bucket para entradas huérfanas.
+  necesita un ingress propio. Y una regla de ciclo de vida del bucket para las entradas que aún pueden quedar huérfanas
+  (un `COMMIT` incierto o una caída entre subir y confirmar; las de una transacción fallida ya se borran, F4-SEC-28).
 - [por verificar] Con el líder: `ext.integrador` no tiene `atlas.exportaciones.solicitar` en la matriz (§7.3 dice que
   exporta si la compartición lo permite); hoy exporta solo con el extra `exportar` de su invitación (ATLAS-ADR-0043). No
   se cambió la matriz.

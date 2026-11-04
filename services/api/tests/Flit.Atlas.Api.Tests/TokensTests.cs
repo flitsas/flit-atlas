@@ -38,6 +38,10 @@ public partial class TokensTests(EntornoApi entorno)
     private const string ServicioOtraAudiencia = "svc-render-prueba";
     private const string RedirectCli = "http://127.0.0.1:53682/callback";
 
+    /// <summary>Cliente con redirect fuera del equipo de la persona (https): pide confirmación (F4-SEC-20).</summary>
+    private const string Web = "web-prueba";
+    private const string RedirectWeb = "https://app.ejemplo.com/callback";
+
     /// <summary>Secreto aleatorio de cada corrida: nunca un valor fijo en el repo.</summary>
     private static readonly string Secreto = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
@@ -83,6 +87,11 @@ public partial class TokensTests(EntornoApi entorno)
             [$"{OpcionesTokens.Seccion}:Clientes:{ServicioOtraAudiencia}:Flujos:0"] = "client_credentials",
             [$"{OpcionesTokens.Seccion}:Clientes:{ServicioOtraAudiencia}:Scopes:0"] = ScopesAtlas.Publicar,
             [$"{OpcionesTokens.Seccion}:Clientes:{ServicioOtraAudiencia}:Audiencias:0"] = "atlas-render",
+            [$"{OpcionesTokens.Seccion}:Clientes:{Web}:Nombre"] = "Aplicación web de prueba",
+            [$"{OpcionesTokens.Seccion}:Clientes:{Web}:Flujos:0"] = "authorization_code",
+            [$"{OpcionesTokens.Seccion}:Clientes:{Web}:RedirectUris:0"] = RedirectWeb,
+            [$"{OpcionesTokens.Seccion}:Clientes:{Web}:Scopes:0"] = "openid",
+            [$"{OpcionesTokens.Seccion}:Clientes:{Web}:Scopes:1"] = ScopesAtlas.Publicar,
         };
         foreach (var (clave, valor) in extra ?? [])
         {
@@ -710,13 +719,13 @@ public partial class TokensTests(EntornoApi entorno)
         // Al volver no se vuelve a pedir el ingreso: el rebote quita prompt.
         Assert.DoesNotContain("prompt=", propiedades.RedirectUri, StringComparison.Ordinal);
 
-        // El rebote es una página de Atlas que navega a /connect/authorize con la misma consulta (ahí sí viaja la
-        // cookie SameSite=Strict).
+        // El rebote es una página de Atlas con un enlace a /connect/authorize con la misma consulta (ahí sí viaja la
+        // cookie SameSite=Strict). La persona hace clic: sin meta refresh (F4-SEC-20).
         var rebote = await navegador.GetAsync(propiedades.RedirectUri!);
         var html = await rebote.Content.ReadAsStringAsync(Ct);
         Assert.Equal(HttpStatusCode.OK, rebote.StatusCode);
-        Assert.Contains("http-equiv=\"refresh\"", html, StringComparison.Ordinal);
-        Assert.Contains("url=/connect/authorize?", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("http-equiv", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("href=\"/connect/authorize?", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -921,8 +930,13 @@ public partial class TokensTests(EntornoApi entorno)
                 clientes.Add(lector.GetString(0));
             }
         }
-        Assert.Equal(new[] { Cli, "atlas-mcp", Servicio, ServicioOtraAudiencia, ServicioSinScopes }.Order(StringComparer.Ordinal),
+        Assert.Equal(new[] { Cli, "atlas-mcp", Servicio, ServicioOtraAudiencia, ServicioSinScopes, Web }.Order(StringComparer.Ordinal),
             clientes.Order(StringComparer.Ordinal));
+        // Sin pantalla de consentimiento solo los que redirigen al loopback (F4-SEC-20).
+        comando.CommandText = $"SELECT consent_type FROM atlas.identidad_oidc_aplicacion WHERE client_id = '{Cli}'";
+        Assert.Equal("implicit", (string?)await comando.ExecuteScalarAsync(Ct));
+        comando.CommandText = $"SELECT consent_type FROM atlas.identidad_oidc_aplicacion WHERE client_id = '{Web}'";
+        Assert.Equal("explicit", (string?)await comando.ExecuteScalarAsync(Ct));
         comando.CommandText = "SELECT count(*) FROM atlas.identidad_oidc_scope WHERE name IN ('atlas.mcp', 'atlas.publicar', 'atlas.widget')";
         Assert.Equal(3L, await comando.ExecuteScalarAsync(Ct));
         // El secreto no queda en claro.

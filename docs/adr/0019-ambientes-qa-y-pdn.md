@@ -37,7 +37,7 @@ Opción elegida: **1**.
 |---|---|---|---|---|---|
 | local | cualquiera | .NET Aspire | — | `https://localhost:4032` | `40xx` |
 | qa | `staging` | k3s 177 | `atlas-qa` | `qa.atlas.flitsas.com` | `50xx` |
-| pdn | `release` | k3s 169 | `atlas-pdn` | `atlas.flitsas.com` | `60xx` |
+| pdn | `release` | k3s **145** (ver «Actualización del 28/10/2026») | `atlas-pdn` | `atlas.flitsas.com` | `60xx` |
 
 - `develop` solo corre el CI: integra las HU, pero no despliega.
 - Namespaces propios de Atlas, como recomienda F0.3 §4. Cierra el **[por verificar]** de ATLAS-ADR-0006.
@@ -47,7 +47,22 @@ Opción elegida: **1**.
 - Los manifiestos viven completos en `flit-gitops` (`services/atlas-qa/`), como los de FLIT 2.0 y los satélites, en vez de una base en `deploy/` de este repo (ATLAS-ADR-0006): así Argo CD no necesita credenciales para leer `flit-atlas`, que es privado.
 - En la 177 no hay Ingress: el nginx del host termina TLS y entra a `atlas-web` por una ClusterIP fija; `atlas-web` reenvía el BFF a `atlas-api` (mismo origen, F0.3 §3).
 
-## Consecuencias
+### Actualización del 28/10/2026: pdn en la 145
+
+Decisión del líder para la HU 4.11: pdn corre en el k3s de la **145**, no en la 169. El DNS de `atlas.flitsas.com` ya
+apuntaba a la 145 y la 169 va justa de CPU (F0.4 ítem 3.2). Lo demás de la tabla no cambia: rama `release`, namespace
+`atlas-pdn`, host `atlas.flitsas.com`.
+
+- Argo de la 145 lee `clusters/vps-145/` (raíz `root-vps-145`); `atlas-pdn` nunca va en `apps/`, que comparten la 169 y
+  la 145. Manifiestos en `services/atlas-pdn/` de `flit-gitops`.
+- Entrada: el borde SNI de la 145 entrega `atlas.flitsas.com` al nginx del host con PROXY protocol (IP real del cliente),
+  que reenvía a `atlas-web` por ClusterIP fija, como en QA.
+- Postgres: base `atlas` propia en el Postgres de la 145, por PgBouncer en `pool_mode=session`, con los mismos roles
+  separados que en QA (`flit_atlas_migrador` dueño, `flit_atlas` sin privilegios).
+- S3: MinIO propio en `atlas-pdn` (ATLAS-ADR-0051, actualización del 28/10/2026).
+- Entra ID: por decisión del líder, pdn **reusa el registro de QA** (con el redirect de pdn agregado) en lugar de tener el
+  suyo. Separarlo queda como mejora; mientras tanto, rotar su secreto afecta a los dos ambientes.
+- Abierto solo a empleados hasta invitar al cliente piloto (revisión de seguridad de F4, §8).
 
 ### Positivas
 

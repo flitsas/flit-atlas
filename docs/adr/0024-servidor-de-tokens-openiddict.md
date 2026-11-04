@@ -50,13 +50,13 @@ Opción elegida: **1**.
 |---|---|---|
 | `/.well-known/openid-configuration`, `/.well-known/jwks` | OpenIddict | Descubrimiento (RFC 8414 / OIDC Discovery) y JWKS: solo llaves públicas de firma |
 | `/connect/authorize` (GET y POST) | OpenIddict + Atlas (passthrough) | Código con **PKCE obligatorio, solo S256** (`plain` se retira del descubrimiento). El usuario que autoriza es el de la **sesión del BFF**: sin sesión (o con `prompt=login` o `max_age` vencido) se va a «Iniciar sesión con Microsoft» y se vuelve; con `prompt=none` responde `login_required` |
-| `/connect/continuar` | Atlas | Rebote tras el ingreso: página sin scripts que navega a `/connect/authorize` con la misma consulta. Hace falta porque la cookie `SameSite=Strict` no viaja en la redirección que viene de Microsoft (la cadena empezó en otro sitio); la navegación que inicia una página de Atlas sí la lleva. Destino fijo: no es una redirección abierta |
+| `/connect/continuar` | Atlas | Rebote tras el ingreso: página sin scripts con un enlace «Continuar» a `/connect/authorize` con la misma consulta (la persona hace clic; sin `meta refresh` desde F4-SEC-20, ATLAS-ADR-0049). Hace falta porque la cookie `SameSite=Strict` no viaja en la redirección que viene de Microsoft (la cadena empezó en otro sitio); la navegación que inicia una página de Atlas sí la lleva. Destino fijo: no es una redirección abierta |
 | `/connect/token` | OpenIddict + Atlas (passthrough) | `authorization_code`, `refresh_token` y `client_credentials` |
 | `/connect/revoke`, `/connect/introspect` | OpenIddict | Revocación (todos los clientes) e introspección (solo confidenciales) |
 | `/connect/userinfo` | OpenIddict + Atlas | Mínimo: `sub`; `name` con `profile`; `email` con `email` |
 | `GET /api/v1/identidad/token/yo` | Atlas (Minimal API) | Endpoint protegido por scope: a quién representa el token, con qué scopes y audiencias. Es el que prueba el CA |
 
-Sin flujo implícito, híbrido ni de contraseña. Sin pantalla de consentimiento: los clientes son propios de FLIT (`consent_type = implicit`); uno de terceros, si llega, la necesitará (ATLAS-ADR-0004 §7).
+Sin flujo implícito, híbrido ni de contraseña. Sin pantalla de consentimiento para los clientes propios con redirect de loopback (`consent_type = implicit`). *Actualización F4-SEC-20 (ATLAS-ADR-0049 §9):* si la redirect de la solicitud no es de loopback o el cliente pide `prompt=consent`, `/connect/authorize` muestra una pantalla de confirmación (`consent_type = explicit` en los clientes con alguna redirect así) y solo emite el código con «Permitir».
 
 ### 3. Tokens
 
@@ -121,7 +121,7 @@ La suite de la OpenID Foundation (perfiles *Basic OP* y *Config OP*) necesita al
 - Cada petición con Bearer consulta la base (token y autorización). Aceptable con los volúmenes de Atlas; si pesa, se cachea con vida corta.
 - Borrar un cliente de la configuración revoca sus tokens al siguiente despliegue: un error de configuración corta a ese cliente (se corrige con otro despliegue).
 - Las llaves efímeras de local invalidan los tokens de la CLI al reiniciar la API.
-- El rebote `/connect/continuar` depende de que el navegador trate como mismo sitio la navegación por `meta refresh` **[por verificar en qa con Chrome, Edge, Firefox y Safari]**.
+- El rebote `/connect/continuar` depende de que el navegador trate como mismo sitio la navegación que inicia el clic en su enlace (antes, el `meta refresh`) **[por verificar en qa con Chrome, Edge, Firefox y Safari]**.
 
 ## Opciones descartadas y por qué
 

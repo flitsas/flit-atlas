@@ -50,7 +50,7 @@ internal static class EndpointsHistorial
             .RequierePermiso(PermisosEquipo.Gestionar)
             .WithName("RestaurarVersionReparto")
             .WithSummary("Restaurar una versión del reparto")
-            .WithDescription("Deja el reparto como en esa versión y crea una versión nueva igual a ella (misma huella), con la nota. Un secundario que cambia empieza en acompañamiento. Queda en la auditoría. Requiere atlas.equipo.gestionar.")
+            .WithDescription("Deja el reparto como en esa versión y crea una versión nueva igual a ella (misma huella), con la nota. Un secundario que cambia empieza en acompañamiento. Si alguna persona de esa versión ya no es empleada de FLIT, responde 409 persona_no_empleada. Queda en la auditoría. Requiere atlas.equipo.gestionar.")
             .Produces<VersionResumenDto>(StatusCodes.Status201Created)
             .Produces<ErrorEquipo>(StatusCodes.Status404NotFound)
             .Produces<ErrorEquipo>(StatusCodes.Status409Conflict)
@@ -188,8 +188,21 @@ internal static class EndpointsHistorial
         {
             return NoEncontrado("La versión no existe.");
         }
+        var foto = FotoReparto.DesdeJson(origen.Contenido);
+        // Se revalida lo que cambiar un responsable exige hoy (F4-SEC-24): cada persona de la foto sigue siendo un empleado.
+        // La que está inactiva se restaura igual (el historial la nombra y sin estar activa no tiene permisos); la que ya
+        // no es empleada o no existe, no.
+        var personas = foto.Responsabilidades.Select(r => r.PersonaId).Distinct().ToList();
+        var empleados = await plataforma.Personas.AsNoTracking()
+            .Where(p => personas.Contains(p.Id) && p.Tipo == TipoPersona.Empleado).Select(p => p.Id).ToListAsync(ct);
+        var ajenas = foto.Responsabilidades.Where(r => !empleados.Contains(r.PersonaId)).Select(r => r.Persona).Distinct(StringComparer.Ordinal).ToList();
+        if (ajenas.Count > 0)
+        {
+            return Conflicto("persona_no_empleada",
+                $"La versión {numero} no se puede restaurar: {string.Join(", ", ajenas)} ya no es empleado de FLIT. Cambia ese responsable en el reparto vigente.");
+        }
         var siguiente = await SiguienteAsync(equipo, ct);
-        var version = await AplicadorReparto.AplicarAsync(equipo, FotoReparto.DesdeJson(origen.Contenido),
+        var version = await AplicadorReparto.AplicarAsync(equipo, foto,
             new AplicadorReparto.DatosVersion(siguiente, OrigenVersion.Restauracion, origen.Numero, origen.FechaDocumento, null,
                 PersonaDeSesion(http.User), nota, origen.Definiciones),
             AplicadorReparto.EstadoPorDefecto, ct);

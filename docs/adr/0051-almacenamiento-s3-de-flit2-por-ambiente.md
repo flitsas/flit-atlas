@@ -1,7 +1,7 @@
 ---
 id: ATLAS-ADR-0051
-titulo: Almacenamiento de objetos — Atlas usa el S3 de FLIT 2 de cada ambiente (MinIO del file-manager en qa, Contabo en pdn) con bucket y usuarios propios, y firma las descargas contra su propio dominio
-estado: aceptado (decisión del líder, 26/10/2026; los puntos de pdn siguen [por verificar])
+titulo: Almacenamiento de objetos — en qa Atlas usa el MinIO del file-manager de FLIT 2 y en pdn un MinIO propio, con bucket y usuarios propios, y firma las descargas contra su propio dominio
+estado: aceptado (decisión del líder, 26/10/2026; pdn actualizado el 28/10/2026)
 fecha: 2026-10-26
 decisores: [Jorman Copete (líder técnico)]
 ambito: atlas
@@ -81,7 +81,27 @@ Reglas:
 Este ADR completa el [por verificar] del host público del S3 en ATLAS-ADR-0042 y reemplaza el MinIO propio del borrador
 del PR #76.
 
-## Consecuencias
+### Actualización del 28/10/2026: pdn con MinIO propio
+
+Decisión del líder para la HU 4.11: en pdn Atlas **no** usa Contabo. Sus llaves son de toda la cuenta y alcanzarían los
+adjuntos de FLIT 2 (el [por verificar] de abajo). pdn corre en la 145 (ATLAS-ADR-0019, actualización del 28/10/2026)
+con un MinIO propio en `atlas-pdn`. Reemplaza la columna de pdn de la tabla anterior:
+
+| | pdn (145) |
+|---|---|
+| Servidor | MinIO propio en `atlas-pdn` (misma imagen espejada que flito-pdn), datos en un `hostPath` de la 145 |
+| Endpoint interno | `http://minio:9000` (mismo namespace) |
+| Bucket | `atlas-pdn` |
+| Credenciales | Usuarios propios de atlas-api y atlas-docs con una política que solo alcanza `atlas-pdn` (`gen-atlas-pdn-s3.sh` de flit-gitops, sin guardar la raíz) |
+| Región | `us-east-1` explícita (`Plataforma:Almacenamiento:Region`) |
+| Host que firma | `https://atlas.flitsas.com` |
+| Reenvío | nginx de la 145: `/atlas-pdn/` → MinIO por ClusterIP fija, conservando el Host, solo `GET` y `HEAD` |
+| Ciclo de vida | Regla de 7 días en `exportaciones/`, además de `VencedorExportaciones` |
+
+Las reglas de arriba (prefijo `atlas-`, mismo origen, Atlas no administra el servidor) siguen igual. Con esto se cierran
+los [por verificar] de pdn: llaves de Contabo, región, ciclo de vida y reenvío en la 169. A cambio, Atlas opera un MinIO
+más en pdn (respaldo del `hostPath` incluido); para exportaciones con 7 días de retención el riesgo de perder datos es
+bajo.
 
 ### Positivas
 

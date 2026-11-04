@@ -395,8 +395,14 @@ public static class EndpointsCuentasExternas
             }
             return Error(StatusCodes.Status401Unauthorized, "codigo_invalido", "El código no es válido. Escribe el código actual de tu aplicación.");
         }
-        await pasos.BorrarAsync(TipoPasoContrasena, solicitud.Estado);
+        // El paso se toma (GETDEL) al terminar con éxito: de dos peticiones paralelas con factores válidos solo una abre
+        // sesión; la otra recibe paso_vencido (F4-SEC-17). Se lee sin borrar antes para admitir reintentos del código.
+        var tomado = await pasos.TomarAsync<PasoContrasena>(TipoPasoContrasena, solicitud.Estado);
         await redis.GetDatabase().KeyDeleteAsync(claveFallos);
+        if (tomado is null || tomado.Sello != paso.Sello)
+        {
+            return PasoVencido();
+        }
         await verificador.IngresoCompletadoAsync(usuario, ct);
         await registro.RegistrarAsync(TiposEventoSeguridad.MfaVerificado, datos with { Detalle = new { metodo } }, ct);
         if (metodo == "codigo_recuperacion")
@@ -465,9 +471,14 @@ public static class EndpointsCuentasExternas
         }
         if (!DocumentosLegales.AceptaTodo(solicitud.Documentos))
         {
+            // Sin aceptar, el paso sigue sirviendo para corregir la solicitud.
             return Error(StatusCodes.Status400BadRequest, "terminos_no_aceptados", "Para entrar debes aceptar la versión vigente de los documentos.");
         }
-        await pasos.BorrarAsync(TipoPasoTerminos, solicitud.Estado);
+        // Se toma (GETDEL): dos peticiones paralelas con el mismo paso no abren dos sesiones (F4-SEC-17).
+        if (await pasos.TomarAsync<PasoTerminos>(TipoPasoTerminos, solicitud.Estado) is null)
+        {
+            return PasoVencido();
+        }
         await legales.RegistrarAsync(usuario.PersonaId, null, http, ct);
         await plataforma.SaveChangesAsync(ct);
         await registro.RegistrarAsync(TiposEventoSeguridad.TerminosAceptados, new DatosEventoSeguridad

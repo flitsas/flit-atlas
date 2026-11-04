@@ -9,7 +9,7 @@ elementos: []
 reemplaza: []
 reemplazado_por: []
 alias: []
-fuentes: [prompt maestro §6 y §12, docs/seguridad/revision-f4.md (F4-SEC-01 a 08, 13, 14, 18, 19 y 21), ATLAS-ADR-0022, ATLAS-ADR-0025, ATLAS-ADR-0027, ATLAS-ADR-0030, ATLAS-ADR-0048]
+fuentes: [prompt maestro §6 y §12, docs/seguridad/revision-f4.md (F4-SEC-01 a 08, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24 y 31), ATLAS-ADR-0022, ATLAS-ADR-0025, ATLAS-ADR-0027, ATLAS-ADR-0030, ATLAS-ADR-0048]
 ---
 
 # ATLAS-ADR-0049 · Endurecimiento de la identidad en F4
@@ -201,6 +201,88 @@ En local y dev basta el loopback. Documentado en `deploy/runbook-atlas.md` §4.
   colector y de ahí a Loki) filtrado a las advertencias de `RegistroSeguridad`, que son los eventos
   `identidad.emergencia.*` con su tipo y su id, y vacía el exportador al terminar. La consola sigue mostrando solo la
   salida del comando (el enlace).
+- **F4-SEC-15** (03/11/2026). Al crear una invitación, un administrador de organización recibe **un único 409**
+  `correo_no_disponible` con el mismo mensaje sea el correo de un empleado, de una cuenta de otra organización o de una
+  invitación viva (de otra organización o de la suya), como pide ATLAS-ADR-0025 §2: no enumera correos de Atlas. Quien
+  administra desde FLIT sigue viendo el motivo (`correo_no_disponible` o `invitacion_existente`) para resolverlo.
+- **F4-SEC-16** (03/11/2026). Suspender, renovar y revocar abren una transacción, toman la fila de la invitación con
+  `FOR UPDATE` (RLS sigue aplicando: lo que la sesión no ve no se bloquea y responde 404) y la leen **después** del
+  candado, igual que la aceptación. Una aceptación en curso termina primero y la acción decide con la persona ya
+  confirmada: revocar retira sus roles y cierra sus sesiones, suspender la suspende y renovar no devuelve a pendiente
+  una invitación aceptada. Si la acción llega primero, la aceptación ve el estado nuevo y responde 410. Se prefirió el
+  candado a `xmin` como token de concurrencia: es el mismo mecanismo de la aceptación y no convierte la carrera en un
+  error que haya que reintentar. La invitación se confirma antes de retirar roles e invalidar sesiones (que tienen sus
+  propias escrituras), como antes.
+- **F4-SEC-20** (03/11/2026). El rebote `/connect/continuar` ya no tiene `meta refresh`: muestra un enlace «Continuar»
+  que la persona pulsa. Si la `redirect_uri` de la solicitud **no es de loopback** (RFC 8252 §7.3) o el cliente pide
+  `prompt=consent`, `/connect/authorize` muestra una pantalla de confirmación (aplicación, a nombre de quién, a qué
+  origen va el acceso y con qué scopes) y solo emite el código con «Permitir». La decisión viaja en el parámetro
+  `atlas_consentimiento`, protegido con Data Protection, de 10 minutos y ligado a la sesión (`sid`), el cliente, la
+  redirect, los scopes y el reto PKCE: no sirve inventado, en otra sesión ni para otra solicitud, y no se salta
+  aunque el enlace ajeno lo traiga ni cruce el ingreso con Microsoft. «Cancelar» devuelve `access_denied` y con
+  `prompt=none` se responde `consent_required`. Son enlaces y no un formulario: la CSP de estas páginas sigue con
+  `default-src 'none'` y `form-action 'none'` (sin scripts ni estilos en línea), y Chrome aplica `form-action` también
+  a la redirección que sigue al envío, la que lleva el código al cliente. Los clientes con alguna redirect fuera del
+  loopback quedan con `consent_type = explicit`; `atlas-cli` y `atlas-mcp` (solo loopback) siguen sin pantalla
+  (ATLAS-ADR-0024).
+- **F4-SEC-24** (03/11/2026). La calculadora de permisos solo suma los roles implícitos por propiedad (responsable de
+  un aplicativo) a un **empleado**: un externo que figure en el reparto no edita nada. Restaurar una versión del
+  reparto revalida lo que exige cambiar un responsable: si alguna persona de la versión ya no es empleada (o no
+  existe), responde 409 `persona_no_empleada` con sus nombres. Una persona inactiva sí se restaura: el historial la
+  nombra y, sin estar activa, no tiene permisos.
+- **F4-SEC-17** (03/11/2026). El segundo factor del ingreso con contraseña y la aceptación de términos nuevos leían el
+  paso y lo borraban en dos operaciones: dos peticiones paralelas abrían dos sesiones. Ahora, al terminar con éxito, el
+  paso se **toma** (`PasosTemporales.TomarAsync`, GETDEL) y solo continúa quien lo obtuvo; la otra responde
+  `401 paso_vencido`. Antes del éxito el paso se sigue leyendo sin borrarlo, para que un código errado (hasta 5) o unos
+  términos sin marcar se puedan corregir. Si las dos traían factores válidos, la perdedora pudo gastar su código de
+  recuperación: se acepta (quien lo hace es el mismo titular con dos pestañas o un atacante que ya tenía el factor).
+
+### 10. Contraseñas filtradas y seguridad de la propia cuenta (F4-SEC-31, 03/11/2026)
+
+La revisión encontró que la revisión de contraseñas filtradas fallaba abierto con una lista local de 74 entradas (ASVS
+5.0 V6.2.4 pide al menos las 3000 más comunes que cumplan la política), que no había cambio de contraseña ni gestión de
+factores con la sesión (V6.2.2, V6.2.3, V6.5) y que no se avisaba al titular de esos cambios.
+
+- **Lista local de 10.000.** `Externos/contrasenas-filtradas.txt` (recurso del ensamblado) trae las 10.000 contraseñas
+  más frecuentes de 12 a 64 caracteres de `xato-net-10-million-passwords-1000000.txt` de **SecLists** (licencia MIT,
+  derivada del conjunto de diez millones de contraseñas que Mark Burnett publicó en 2015 para investigación), en
+  minúsculas, ASCII imprimible, sin repetir y con al menos 4 caracteres distintos (las demás ya las rechaza la regla). El
+  encabezado del archivo cita la fuente, la licencia y el SHA-256 del archivo de origen; para regenerarla se repite el
+  mismo filtro. Se suma a `contrasenas-comunes.txt` (español y patrones de teclado). Las listas se revisan siempre,
+  antes de HIBP. Se descartó la lista de 100.000 del NCSC (solo 1.274 entradas de 12 o más caracteres) y una lista
+  propia (no habría fuente verificable).
+- **HIBP caído: falla abierto contra las listas locales** (decisión). Si Have I Been Pwned no responde en 3 s, la
+  contraseña ya pasó las 10.000 filtradas más frecuentes de su largo y las reglas, y se acepta con una advertencia en
+  el log. Fallar cerrado ataría la aceptación de invitaciones, la recuperación y el cambio de contraseña a la
+  disponibilidad de un tercero, y reintentar solo agrega espera. *Riesgo residual:* durante una caída de HIBP puede pasar
+  una contraseña filtrada fuera de esas 10.000; lo acota que la contraseña nunca basta sola (siempre va con TOTP) y el
+  bloqueo progresivo. Una alerta sobre la advertencia del log queda **[por decidir con el líder]**.
+- **Seguridad de la propia cuenta**, bajo `/api/v1/identidad/cuenta` (`EndpointsSeguridadCuenta`), solo para cuentas
+  locales (externos y la cuenta de emergencia; una sesión de empleado recibe `409 cuenta_microsoft`):
+  - `GET /seguridad`: contraseña, TOTP, passkeys (nombre y fecha) y códigos sin usar; nunca secretos.
+  - `POST /contrasena`: exige reautenticación (ingreso de menos de 10 minutos, ATLAS-ADR-0022) **y** la contraseña
+    actual (V6.2.3), verificada con el mismo contador y bloqueo progresivo del ingreso (§1); la nueva pasa los mismos
+    validadores (12+, listas, HIBP) y debe ser distinta. Cierra las **demás** sesiones y revoca los tokens y
+    autorizaciones de OpenIddict (`IInvalidadorSesiones.InvalidarOtrasSesionesAsync`, nuevo: el sello cambia y se
+    conserva solo la sesión de la petición, que se vuelve a firmar con el sello nuevo, con el mismo id y el mismo
+    `auth_time`, así que no se gana tiempo de reautenticación).
+  - `POST /codigos-recuperacion`: diez códigos nuevos que reemplazan a los anteriores; exige reautenticación y que la
+    cuenta tenga MFA.
+  - `POST /passkeys/opciones` y `POST /passkeys`: agrega una passkey con el `PasskeyHandler` de Identity; el paso es de
+    ámbito `cuenta:<usuario>` (uno de una invitación, una recuperación u otra cuenta no sirve), de un solo uso, y hay un
+    tope de 10 passkeys. Exigen reautenticación.
+  - Si un cambio de códigos o de passkey mueve el sello de seguridad, la sesión de la petición se vuelve a firmar igual
+    que en el cambio de contraseña; si no, las demás sesiones siguen abiertas.
+  - La PWA tiene la pantalla «Seguridad de la cuenta» (`/ajustes/seguridad`, enlazada desde Ajustes solo para cuentas
+    locales), móvil primero; con `reautenticacion_requerida` ofrece «Salir y volver a entrar», como el resto de
+    acciones sensibles de las cuentas locales.
+- **Aviso al titular** de cada cambio (`CorreosExternos.AvisoCambioSeguridad`): qué cambió, cuándo y qué hacer si no fue
+  él, **sin botón ni enlaces** (como el aviso de recuperación, §5), por la misma cola en memoria; si la cola está llena
+  queda `identidad.correo_no_enviado`. Eventos: `identidad.contrasena_cambiada` (nuevo), `identidad.factor_registrado`
+  con `motivo` (`cuenta` o `regenerados`) y `identidad.sesiones_invalidadas`.
+- Sin hacer aquí **[por decidir con el líder]**: quitar una passkey, desactivar o cambiar la aplicación de autenticación
+  y pasar de solo passkey a contraseña (hoy se hace con la recuperación); y una reautenticación dentro de la página para
+  las cuentas locales (pedir el factor sin salir).
 
 ## Consecuencias
 
@@ -224,6 +306,8 @@ En local y dev basta el loopback. Documentado en `deploy/runbook-atlas.md` §4.
 - Un usuario legítimo que pasa el límite por cuenta (20 en 15 min) o cuyo correo ataca alguien espera la ventana; es
   el mismo efecto que ya tenía el bloqueo.
 - `CodigosTotp.Paso` recalcula el HOTP con la BCL (ver §4): excepción acotada a A-03 que el líder debe aceptar.
+- La lista local de contraseñas filtradas pesa unos 140 KB en el ensamblado y se carga en memoria al primer uso; con HIBP
+  caído, una contraseña filtrada fuera de las 10.000 más frecuentes puede pasar (§10).
 
 ## Opciones descartadas y por qué
 
@@ -246,9 +330,13 @@ En local y dev basta el loopback. Documentado en `deploy/runbook-atlas.md` §4.
 - Pruebas: `services/api/tests/Flit.Atlas.Api.Tests/Seguridad/PentestCuentasExternasTests.cs` (F4-SEC-01 a 06),
   `PentestSesionesTests.cs` (07 y 18), `SincronizacionPersonasTests.Recalcula_los_roles_de_los_grupos…` (08 y 07 en la
   sincronización), `ProxyTests` (13), `CuentasExternasTests.Un_admin_de_organizacion_no_reactiva…` (14),
-  `TokensTests.El_refresh_de_un_externo…` (19), `EmergenciaTests.Los_logs_del_comando…` (21), `SeguridadTests`.
-- Sin hacer aquí (otros hallazgos bajos de identidad): F4-SEC-15 (409 distinguibles para el admin de organización),
-  F4-SEC-16 (`FOR UPDATE` al revocar), F4-SEC-17 (`TomarAsync` en los pasos), F4-SEC-20 (consentimiento implícito) y la
-  agrupación de IPv6 por /64.
+  `TokensTests.El_refresh_de_un_externo…` (19), `EmergenciaTests.Los_logs_del_comando…` (21), `SeguridadTests`,
+  `CuentasExternasTests.Un_admin_de_organizacion_no_enumera_correos…` (15),
+  `CuentasExternasTests.Pentest_revocar_suspender_o_renovar_durante_una_aceptacion…` (16),
+  `TokensTests.Pentest_un_enlace_ajeno_no_obtiene_un_codigo…` y `…se_vuelve_por_el_rebote` (20),
+  `ModuloEquipoTests.El_rol_implicito_de_responsable_exige_ser_empleado…` (24),
+  `PentestCuentasExternasTests` de pasos en paralelo (17),
+  `SeguridadCuentaTests.cs` (31) y, en la PWA, `SeguridadCuenta.test.tsx` y `tests/e2e/seguridad-cuenta.spec.ts` (31).
+- Sin hacer aquí (otros hallazgos bajos de identidad): la agrupación de IPv6 por /64.
 - ATLAS-ADR-0022 (bloqueo y límites), ATLAS-ADR-0025 (cuentas externas y recuperación), ATLAS-ADR-0027 (emergencia),
   ATLAS-ADR-0030 (sincronización con Graph), ATLAS-ADR-0048 (endurecimiento de F4).

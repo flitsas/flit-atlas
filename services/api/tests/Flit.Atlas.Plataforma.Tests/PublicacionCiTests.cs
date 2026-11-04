@@ -250,6 +250,73 @@ public sealed class PublicacionCiTests : IDisposable
         Assert.Equal(coincide, ListaBlancaPublicacion.Coincide(patron, valor, distinguir));
     }
 
+    /// <summary>
+    /// F4-SEC-27: además del nombre, el id numérico del dueño y, si está fijado, el del repo. Un nombre liberado y vuelto a
+    /// registrar (una organización borrada, un repo borrado o renombrado) trae otro id y no publica.
+    /// </summary>
+    [Fact]
+    public void El_id_del_dueno_y_el_del_repo_fijado_se_revisan_ademas_del_nombre()
+    {
+        var opciones = new OpcionesPublicacion
+        {
+            Propietarios = ["flitsas-demo"],
+            IdsPropietarios = ["flitsas-demo=111"],
+            IdsRepositorios = ["flitsas-demo/api-demo=222"],
+            WorkflowsReutilizables = [GitHubActionsSimulado.PatronWorkflowOficial],
+        };
+        opciones.Normalizar();
+        string? Motivo(string repositorio = "flitsas-demo/api-demo", string? repositorioId = "222", string? propietarioId = "111") =>
+            ListaBlancaPublicacion.MotivoRechazoGlobal(
+                Publicador(GitHubActionsSimulado.Claims(repositorio, repositorioId: repositorioId, propietarioId: propietarioId)), opciones);
+
+        Assert.Null(Motivo());
+        Assert.Equal("propietario_id_no_coincide", Motivo(propietarioId: null));
+        Assert.Equal("propietario_id_no_coincide", Motivo(propietarioId: "999"));
+        Assert.Equal("repositorio_id_no_coincide", Motivo(repositorioId: null));
+        Assert.Equal("repositorio_id_no_coincide", Motivo(repositorioId: "333"));
+        // Un repo sin id fijado se revisa por nombre y por el id del dueño.
+        Assert.Null(Motivo("flitsas-demo/otro", repositorioId: "444"));
+        Assert.Equal("propietario_id_no_coincide", Motivo("flitsas-demo/otro", repositorioId: "444", propietarioId: "999"));
+        // El valor del token se lee del claim (GitHub los manda como texto).
+        Assert.Equal(("222", "111"), (Publicador(GitHubActionsSimulado.Claims(repositorioId: "222", propietarioId: "111")).RepositorioId,
+            Publicador(GitHubActionsSimulado.Claims(repositorioId: "222", propietarioId: "111")).PropietarioId));
+
+        // Por defecto se fijan la organización flitsas y los repos que hoy publican.
+        var porDefecto = new OpcionesPublicacion();
+        porDefecto.Normalizar();
+        Assert.Equal("284087596", OpcionesPublicacion.IdFijado(porDefecto.IdsPropietarios, "FLITSAS"));
+        Assert.Equal("1244856694", OpcionesPublicacion.IdFijado(porDefecto.IdsRepositorios, "flitsas/flit"));
+        Assert.Equal("1428322754", OpcionesPublicacion.IdFijado(porDefecto.IdsRepositorios, "flitsas/flit-atlas"));
+        Assert.Null(OpcionesPublicacion.IdFijado(porDefecto.IdsRepositorios, "flitsas/otro"));
+    }
+
+    /// <summary>
+    /// F4-SEC-27: en qa y pdn la audiencia es la URL pública, la misma a la que el workflow envía el token; una audiencia
+    /// configurada distinta no arranca. En local y dev (pruebas, AppHost) se admite.
+    /// </summary>
+    [Fact]
+    public void En_qa_y_pdn_la_audiencia_es_la_url_publica_o_atlas_api_no_arranca()
+    {
+        var distinta = new OpcionesPublicacion { Audiencia = "https://otra.ejemplo.com" };
+        Assert.NotNull(distinta.MotivoAudienciaIncoherente("https://atlas.ejemplo.com", "qa"));
+        Assert.NotNull(distinta.MotivoAudienciaIncoherente("https://atlas.ejemplo.com", "pdn"));
+        Assert.NotNull(distinta.MotivoAudienciaIncoherente(null, "pdn"));
+        Assert.Null(distinta.MotivoAudienciaIncoherente("https://atlas.ejemplo.com", "local"));
+        Assert.Null(distinta.MotivoAudienciaIncoherente("https://atlas.ejemplo.com", "dev"));
+        Assert.Null(new OpcionesPublicacion { Audiencia = "https://atlas.ejemplo.com/" }.MotivoAudienciaIncoherente("https://atlas.ejemplo.com", "pdn"));
+        Assert.Null(new OpcionesPublicacion().MotivoAudienciaIncoherente("https://atlas.ejemplo.com", "pdn"));
+
+        var configuracion = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Atlas:Ambiente"] = "pdn",
+            [OpcionesPublicacion.ClaveUrlPublica] = "https://atlas.ejemplo.com",
+            [$"{OpcionesPublicacion.Seccion}:Audiencia"] = "https://otra.ejemplo.com",
+        }).Build();
+        using var servicios = new ServiceCollection().AddSingleton<IConfiguration>(configuracion).AddLogging()
+            .AddPlataformaPublicacionDePrueba(_github).BuildServiceProvider();
+        Assert.Throws<OptionsValidationException>(() => servicios.GetRequiredService<IOptions<OpcionesPublicacion>>().Value);
+    }
+
     [Fact]
     public void Las_opciones_por_defecto_no_se_suman_a_las_configuradas()
     {

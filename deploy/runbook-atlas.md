@@ -9,7 +9,7 @@
 | Ambiente | Rama | Namespace y VPS | Host público |
 |---|---|---|---|
 | qa | `staging` | `atlas-qa` en la 177 | `qa.atlas.flitsas.com` |
-| pdn | `release` | `atlas-pdn` en la 169 **[confirmar namespace]** | `atlas.flitsas.com` |
+| pdn | `release` | `atlas-pdn` en la 145 (ATLAS-ADR-0019, actualización del 28/10/2026) | `atlas.flitsas.com` |
 
 `develop` no despliega (ATLAS-ADR-0019). Argo CD sincroniza `flit-gitops/services/atlas-<ambiente>/`; el CD de este repo
 publica las imágenes en GHCR y escribe sus **digests** en el `kustomization.yaml` del ambiente.

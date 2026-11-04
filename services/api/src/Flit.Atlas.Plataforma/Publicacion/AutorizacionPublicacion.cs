@@ -76,6 +76,18 @@ public static partial class ListaBlancaPublicacion
         {
             return "propietario_no_permitido";
         }
+        // F4-SEC-27: además del nombre, el id numérico del dueño y, si está fijado, el del repo (los nombres se liberan y se
+        // vuelven a registrar; los ids no).
+        if (OpcionesPublicacion.IdFijado(opciones.IdsPropietarios, publicador.Propietario) is { } idPropietario
+            && !string.Equals(idPropietario, publicador.PropietarioId, StringComparison.Ordinal))
+        {
+            return "propietario_id_no_coincide";
+        }
+        if (OpcionesPublicacion.IdFijado(opciones.IdsRepositorios, publicador.Repositorio) is { } idRepositorio
+            && !string.Equals(idRepositorio, publicador.RepositorioId, StringComparison.Ordinal))
+        {
+            return "repositorio_id_no_coincide";
+        }
         if (!opciones.Eventos.Contains(publicador.Evento, StringComparer.Ordinal))
         {
             return "evento_no_permitido";
@@ -222,7 +234,12 @@ public static class ExtensionesPublicacion
     /// </summary>
     internal static IServiceCollection AgregarPublicacionCi(this IServiceCollection servicios)
     {
-        servicios.AddOptions<OpcionesPublicacion>().BindConfiguration(OpcionesPublicacion.Seccion).PostConfigure(o => o.Normalizar());
+        servicios.AddOptions<OpcionesPublicacion>().BindConfiguration(OpcionesPublicacion.Seccion).PostConfigure(o => o.Normalizar())
+            // F4-SEC-27: en qa y pdn la audiencia es la URL pública; si no, atlas-api no arranca.
+            .Validate<Microsoft.Extensions.Configuration.IConfiguration>(
+                (o, c) => o.MotivoAudienciaIncoherente(c[OpcionesPublicacion.ClaveUrlPublica], c["Atlas:Ambiente"]) is null,
+                "Plataforma__Publicacion__Audiencia debe ir vacía o igual a Atlas__UrlPublica en qa y pdn (F4-SEC-27).")
+            .ValidateOnStart();
         servicios.AddHttpClient(LlavesGitHubActions.NombreCliente, c => c.Timeout = TimeSpan.FromSeconds(10));
         servicios.TryAddSingleton<LlavesGitHubActions>();
         servicios.TryAddSingleton<ValidadorTokenGitHub>();

@@ -16,10 +16,14 @@ namespace Flit.Atlas.Identidad.Externos;
 /// <item><b>Have I Been Pwned por rango</b> (k-anonimato): se envían solo los 5 primeros caracteres del SHA-1 de la
 /// contraseña y se compara el resto aquí; la contraseña nunca sale del servidor. Con <c>Add-Padding</c>, el tamaño de la
 /// respuesta no delata el rango.</item>
-/// <item><b>Lista local</b> (recurso del ensamblado) de contraseñas comunes de 12 o más caracteres, y reglas obvias
-/// (el correo o el nombre de la organización dentro, un solo carácter repetido). Es el respaldo si HIBP no responde: el
-/// registro no se bloquea por una caída de un tercero.</item>
+/// <item><b>Listas locales</b> (recursos del ensamblado): las 10.000 contraseñas filtradas más frecuentes de 12 o más
+/// caracteres (<c>contrasenas-filtradas.txt</c>, de SecLists, licencia MIT; ASVS 5.0 V6.2.4 pide al menos 3000) y las
+/// comunes en español y patrones de teclado (<c>contrasenas-comunes.txt</c>), más reglas obvias (el correo o el nombre
+/// de la organización dentro, pocos caracteres distintos). Se revisan siempre, antes de HIBP.</item>
 /// </list>
+/// Si HIBP no responde (3 s), la revisión <b>falla abierto contra las listas locales</b>: la contraseña ya pasó las
+/// 10.000 más frecuentes y las reglas, y el registro, la recuperación o el cambio de contraseña no se bloquean por la
+/// caída de un tercero; queda una advertencia en el log (ATLAS-ADR-0049 §10).
 /// </summary>
 public sealed partial class ValidadorContrasenaFiltrada(
     IHttpClientFactory clientes,
@@ -32,7 +36,17 @@ public sealed partial class ValidadorContrasenaFiltrada(
 
     private static readonly TimeSpan Tiempo = TimeSpan.FromSeconds(3);
 
+    /// <summary>Recursos con las listas locales; cada línea es una contraseña en minúsculas (# para comentarios).</summary>
+    internal static readonly string[] Listas =
+    [
+        "Flit.Atlas.Identidad.Externos.contrasenas-comunes.txt",
+        "Flit.Atlas.Identidad.Externos.contrasenas-filtradas.txt",
+    ];
+
     private static readonly Lazy<HashSet<string>> Comunes = new(CargarComunes);
+
+    /// <summary>Cuántas contraseñas tiene la lista local (sin repetir); ASVS 5.0 V6.2.4 pide al menos 3000.</summary>
+    internal static int TamanoListaLocal => Comunes.Value.Count;
 
     public async Task<IdentityResult> ValidateAsync(UserManager<UsuarioAtlas> manager, UsuarioAtlas user, string? password)
     {
@@ -70,7 +84,10 @@ public sealed partial class ValidadorContrasenaFiltrada(
             || normalizada.Contains("flitatlas", StringComparison.Ordinal);
     }
 
-    /// <summary>¿El SHA-1 aparece en el rango que devuelve HIBP? Si el servicio falla, <c>false</c> (queda la lista local).</summary>
+    /// <summary>
+    /// ¿El SHA-1 aparece en el rango que devuelve HIBP? Si el servicio falla, <c>false</c>: falla abierto, porque la
+    /// contraseña ya pasó las listas locales (ATLAS-ADR-0049 §10).
+    /// </summary>
     internal async Task<bool> EstaFiltradaAsync(string contrasena)
     {
         // SHA-1 es lo que define el protocolo de rangos de HIBP; no protege nada aquí (CA5350 no aplica).
@@ -107,21 +124,24 @@ public sealed partial class ValidadorContrasenaFiltrada(
 
     private static HashSet<string> CargarComunes()
     {
-        using var flujo = Assembly.GetExecutingAssembly().GetManifestResourceStream("Flit.Atlas.Identidad.Externos.contrasenas-comunes.txt")
-            ?? throw new InvalidOperationException("Falta el recurso contrasenas-comunes.txt.");
-        using var lector = new StreamReader(flujo, Encoding.UTF8);
         var lista = new HashSet<string>(StringComparer.Ordinal);
-        while (lector.ReadLine() is { } linea)
+        foreach (var recurso in Listas)
         {
-            var valor = linea.Trim();
-            if (valor.Length > 0 && !valor.StartsWith('#'))
+            using var flujo = Assembly.GetExecutingAssembly().GetManifestResourceStream(recurso)
+                ?? throw new InvalidOperationException($"Falta el recurso {recurso}.");
+            using var lector = new StreamReader(flujo, Encoding.UTF8);
+            while (lector.ReadLine() is { } linea)
             {
-                lista.Add(valor.ToLowerInvariant());
+                var valor = linea.Trim();
+                if (valor.Length > 0 && !valor.StartsWith('#'))
+                {
+                    lista.Add(valor.ToLowerInvariant());
+                }
             }
         }
         return lista;
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Have I Been Pwned no respondió ({Error}); la contraseña se revisó solo contra la lista local")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Have I Been Pwned no respondió ({Error}); la contraseña se revisó solo contra las listas locales")]
     private static partial void NoRespondio(ILogger log, string error);
 }
