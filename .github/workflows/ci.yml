@@ -97,6 +97,9 @@ jobs:
       - name: Prueba del workflow reutilizable atlas-publicar (decisión de breaking y MAJOR, rulesets embebidos)
         # HU 3.3 (ATLAS-ADR-0035 §7): corre el bloque de decisión del workflow tal cual sobre specs ficticias.
         run: bash scripts/atlas-publicar/probar.sh
+      - name: Prueba del workflow reutilizable atlas-publicar-docs (validación de documentos)
+        # HU 5.2 (ATLAS-ADR-0053 §4): corre el bloque de validación del workflow tal cual sobre archivos ficticios.
+        run: bash scripts/atlas-publicar/probar-docs.sh
 
   atlas-publicar:
     # HU 3.3: flit-atlas valida (en PR) y publica (en push a develop) sus propios contratos con el workflow reutilizable,
