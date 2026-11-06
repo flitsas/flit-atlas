@@ -1,13 +1,18 @@
-import { ArrowLeft, GitCompare, Pencil } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, GitCompare, Pencil, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../../../app/api';
-import { formatearFecha } from '../../../app/ui/formato';
+import { tienePermiso } from '../../../app/modulos/resolver';
+import { useSesionOpcional } from '../../../app/sesion';
+import { formatearFecha, formatearFechaHora } from '../../../app/ui/formato';
+import { useDatosGuardados } from '../../../pwa/sinConexion';
 import { Boton, cn, Insignia } from '../../../app/ui/Tarjeta';
 import {
   type AccionEstado,
   cambiarEstado,
+  CLAVE_DOCUMENTOS,
   mensajeDeError,
   TEXTO_ESTADO,
   TEXTO_TIPO,
@@ -17,6 +22,10 @@ import {
   useVersiones,
 } from '../api';
 import { Aviso, Cargando, VistaDocumento } from '../componentes';
+import { ExportarDocumentos } from '../ExportarDocumentos';
+import { BotonFavorito } from '../favoritos/componentes';
+import { recurso, rutaDocumento } from '../favoritos/sinConexion';
+import { useTiempoReal } from '../tiempoReal';
 
 const AMBIENTES: Record<string, string> = { dev: 'Desarrollo', qa: 'QA', pdn: 'Producción' };
 
@@ -30,6 +39,17 @@ export default function Lector() {
   const consulta = useDocumento(id, version);
   const versiones = useVersiones(id);
   const [aviso, setAviso] = useState<{ tono: 'error' | 'exito'; texto: string } | null>(null);
+  const sesion = useSesionOpcional();
+  const cliente = useQueryClient();
+  const guardados = useDatosGuardados(recurso(rutaDocumento(id)).clave);
+  const [versionNueva, setVersionNueva] = useState<number | null>(null);
+  const viendo = useTiempoReal(id, (numero) => {
+    // Otra versión o un canal que se movió: se refresca lo vigente; si se está leyendo una versión elegida, no se toca.
+    void cliente.invalidateQueries({ queryKey: [...CLAVE_DOCUMENTOS, 'versiones', id] });
+    void cliente.invalidateQueries({ queryKey: [...CLAVE_DOCUMENTOS, 'detalle', id, 'vigente'] });
+    if (!versiones.data?.some((v) => v.numero === numero)) setVersionNueva(numero);
+  });
+  const otros = viendo.filter((p) => p.id !== sesion?.yo.personaId);
   const estado = useCambioDocumento(({ accion, revision }: { accion: AccionEstado; revision: number }) => cambiarEstado(id, accion, revision));
 
   if (consulta.isPending) return <Cargando etiqueta="Cargando el documento" alto="h-64" />;
@@ -75,7 +95,25 @@ export default function Lector() {
         </div>
       </header>
 
+      {guardados && <p role="status" className="text-sm text-atlas-texto-suave">Sin conexión: documento guardado el {formatearFechaHora(guardados)}.</p>}
+      {otros.length > 0 && (
+        <p className="flex items-center gap-2 text-sm text-atlas-texto-suave" aria-live="polite">
+          <Users className="size-4 shrink-0" aria-hidden="true" /> También lo está viendo: {otros.map((p) => p.nombre).join(', ')}
+        </p>
+      )}
+      {versionNueva !== null && (
+        <div aria-live="polite">
+          <Aviso tono="exito">Se publicó la versión {versionNueva} de este documento.</Aviso>
+        </div>
+      )}
       {aviso && <Aviso tono={aviso.tono}>{aviso.texto}</Aviso>}
+
+      <div className="flex flex-wrap items-start gap-3">
+        <BotonFavorito documentoId={d.id} />
+        {actual && (parametros.has('exportacion') || (sesion && tienePermiso('atlas.docs.exportar', sesion.acceso.permisos))) && (
+          <ExportarDocumentos documentos={[{ documentoId: d.id, version: actual.version.numero }]} exportacionInicial={parametros.get('exportacion')} />
+        )}
+      </div>
 
       {(puedeEditar || puedeAprobar) && (
         <div role="group" aria-label="Acciones del documento" className="flex flex-wrap gap-2">

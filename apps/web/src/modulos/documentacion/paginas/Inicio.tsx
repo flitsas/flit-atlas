@@ -7,9 +7,13 @@ import { useSesion } from '../../../app/sesion';
 import { cn } from '../../../app/ui/Tarjeta';
 import { type DocumentoResumen, TEXTO_TIPO, type TipoDocumento, useAplicativos, useDocumentos } from '../api';
 import { Cargando, claseCampo, TarjetaDocumento } from '../componentes';
+import { ExportarDocumentos } from '../ExportarDocumentos';
+import { ListaFavoritos } from '../favoritos/componentes';
 
 const TIPOS = Object.keys(TEXTO_TIPO) as TipoDocumento[];
 const claseFiltro = 'inline-flex min-h-toque cursor-pointer items-center rounded-xl border px-3 text-sm';
+/** El tope de una colección en la API. */
+const MAXIMO_COLECCION = 50;
 
 /** Lista de documentos por aplicativo con búsqueda full-text (HU 5.4 y 5.5, ATLAS-ADR-0053). */
 export default function InicioDocumentacion() {
@@ -29,6 +33,10 @@ export default function InicioDocumentacion() {
       .map(([id, documentos]) => ({ id, nombre: nombres.get(id) ?? 'Otros documentos', documentos }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [lista.data, nombres]);
+
+  const exportables = (lista.data?.elementos ?? []).filter((d) => d.versionVigente !== null);
+  const puedeExportar = tienePermiso('atlas.docs.exportar', acceso.permisos);
+  const exportacion = parametros.get('exportacion');
 
   const cambiar = (clave: string, valor: string) =>
     setParametros(
@@ -80,10 +88,27 @@ export default function InicioDocumentacion() {
         </div>
       </fieldset>
 
+      <ListaFavoritos />
+
       {lista.isPending && <Cargando etiqueta="Cargando los documentos" alto="h-40" />}
       {lista.isError && <p role="alert">No pudimos cargar los documentos. Revisa tu conexión.</p>}
       {lista.isSuccess && grupos.length === 0 && (
         <p className="text-sm text-atlas-texto-suave">{buscado || tipo ? 'Ningún documento coincide con la búsqueda.' : 'Todavía no hay documentos que puedas ver.'}</p>
+      )}
+      {puedeExportar && (exportacion || (exportables.length > 0 && exportables.length <= MAXIMO_COLECCION)) && (
+        <div className="self-start">
+          <ExportarDocumentos
+            documentos={exportables.map((d) => ({ documentoId: d.id }))}
+            nombre={buscado || tipo ? 'Documentos seleccionados' : 'Documentación'}
+            etiqueta={`Exportar lo listado (${exportables.length})`}
+            exportacionInicial={exportacion}
+          />
+        </div>
+      )}
+      {puedeExportar && exportables.length > MAXIMO_COLECCION && (
+        <p role="note" className="text-sm text-atlas-texto-suave">
+          Para exportar como colección, acota a {MAXIMO_COLECCION} documentos o menos con la búsqueda o el tipo.
+        </p>
       )}
       {grupos.map((g) => (
         <section key={g.id} aria-label={g.nombre} className="flex flex-col gap-2">

@@ -91,6 +91,21 @@ const revision = (numero: number) => ({
   huella: `r${numero}`,
 });
 
+const EXPORTACION = (estado: string) => ({
+  id: 'e1',
+  estado,
+  nombre: 'Trámites en línea',
+  documentoId: 'd1',
+  formatos: ['pdf', 'zip'],
+  solicitadaEn: '2026-11-06T12:00:00Z',
+  iniciadaEn: null,
+  listaEn: null,
+  venceEn: estado === 'lista' ? '2026-11-13T12:00:00Z' : null,
+  hashContenido: null,
+  archivos: estado === 'lista' ? [{ ruta: 'tramites.pdf', nombre: 'tramites.pdf', formato: 'pdf', bytes: 2048 }, { ruta: 'tramites.zip', nombre: 'tramites.zip', formato: 'zip', bytes: 4096 }] : [],
+  error: null,
+});
+
 async function simular(page: Page, permisos: string[]) {
   await simularApi(page, { permisos: ['atlas.lector', 'atlas.docs.ver', ...permisos], banderas: { 'modulo.documentacion': true } });
   const detalle = () => ({
@@ -101,8 +116,24 @@ async function simular(page: Page, permisos: string[]) {
     puedeAprobar: false,
   });
   const json = (cuerpo: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(cuerpo) });
+  let favorito = false;
+  let exportada = false;
   await page.route('**/api/v1/documentacion/**', (route) => {
     const url = new URL(route.request().url());
+    const metodo = route.request().method();
+    // El hub no responde: el lector sigue igual, sin mostrar a nadie.
+    if (url.pathname.includes('/tiempo-real')) return route.fulfill({ status: 404 });
+    if (url.pathname === '/api/v1/documentacion/favoritos')
+      return route.fulfill(json(favorito ? [{ id: 'f1', documentoId: 'd1', titulo: 'Trámites en línea', tipo: 'guia_funcional', versionVigente: 2, ruta: '/documentacion/d1', marcadoEn: '2026-11-06T12:00:00Z' }] : []));
+    if (url.pathname === '/api/v1/documentacion/favoritos/d1') {
+      favorito = metodo === 'PUT';
+      return route.fulfill(metodo === 'PUT' ? json({ id: 'f1' }) : { status: 204 });
+    }
+    if (url.pathname === '/api/v1/documentacion/exportaciones' && metodo === 'POST') {
+      exportada = true;
+      return route.fulfill(json(EXPORTACION('pendiente'), 202));
+    }
+    if (url.pathname === '/api/v1/documentacion/exportaciones/e1') return route.fulfill(json(EXPORTACION(exportada ? 'lista' : 'pendiente')));
     const resto = url.pathname.replace('/api/v1/documentacion/documentos', '');
     if (resto === '') return route.fulfill(json({ total: 1, elementos: [DOCUMENTO] }));
     if (resto === '/d1') return route.fulfill(json(detalle()));
@@ -213,4 +244,36 @@ test('editor: vista previa con el mismo renderizador, y restaurar pide nota', as
 
   // En WebKit, la captura de Playwright inyecta un <style> en línea que la CSP bloquea: con capturas no se mide.
   if (!process.env.ATLAS_CAPTURAS) expect(violaciones).toEqual([]);
+});
+
+test('exportar desde el lector y marcar como favorito', async ({ page }, info) => {
+  const violaciones = await vigilarCsp(page);
+  await simular(page, ['atlas.docs.exportar']);
+  await page.goto('/documentacion/d1');
+
+  // Favorito.
+  const favorito = page.getByRole('button', { name: 'Guardar en favoritos' });
+  await expect(favorito).toBeEnabled();
+  await favorito.click();
+  await expect(page.getByRole('button', { name: 'Quitar de favoritos' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Exportar: elegir, solicitar y ver los archivos.
+  await page.getByRole('button', { name: 'Exportar' }).click();
+  const hoja = page.getByRole('dialog', { name: 'Exportar' });
+  await expect(hoja.getByRole('checkbox', { name: 'PDF' })).toBeChecked();
+  await hoja.getByRole('checkbox', { name: 'Markdown' }).check();
+  await revisar(page);
+  await foto(page, info, 'documentacion-exportar');
+  await hoja.getByRole('button', { name: 'Solicitar exportación' }).click();
+  await expect(hoja.getByText('Tu exportación está lista')).toBeVisible({ timeout: 15_000 });
+  await expect(hoja.getByRole('list', { name: 'Archivos de la exportación' }).getByRole('button')).toHaveCount(2);
+
+  if (!process.env.ATLAS_CAPTURAS) expect(violaciones).toEqual([]);
+});
+
+test('sin el permiso de exportar no se ofrece', async ({ page }) => {
+  await simular(page, []);
+  await page.goto('/documentacion/d1');
+  await expect(page.getByRole('button', { name: 'Guardar en favoritos' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exportar' })).toHaveCount(0);
 });

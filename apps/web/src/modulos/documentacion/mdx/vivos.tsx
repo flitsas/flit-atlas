@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 
 import { ErrorApi, pedir } from '../../../app/api';
+import { useEnLinea } from '../../../pwa/conexion';
 
 /**
  * Componentes vivos del MDX (ATLAS-ADR-0053 §5). Cada uno pide sus datos con la sesión de quien lee, por la API: incrustar
@@ -19,9 +20,10 @@ function Caja({ etiqueta, children }: { etiqueta: string; children: React.ReactN
 }
 
 function SinAcceso({ etiqueta }: { etiqueta: string }) {
+  const enLinea = useEnLinea();
   return (
     <Caja etiqueta={etiqueta}>
-      <p className="text-atlas-texto-suave">No tienes acceso a este contenido.</p>
+      <p className="text-atlas-texto-suave">{enLinea ? 'No tienes acceso a este contenido.' : 'Este dato se muestra cuando vuelva la conexión.'}</p>
     </Caja>
   );
 }
@@ -44,6 +46,8 @@ function useVivo<T>(clave: unknown[], ruta: string, activo = true) {
     enabled: activo,
     retry: reintentar,
     staleTime: 60_000,
+    // Sin red debe fallar y no quedarse «cargando»: el documento guardado sigue siendo legible.
+    networkMode: 'always',
   });
 }
 

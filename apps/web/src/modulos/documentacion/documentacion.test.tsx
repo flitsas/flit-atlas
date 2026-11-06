@@ -32,6 +32,9 @@ function api(rutas: Record<string, [number, unknown]>) {
   return llamadas;
 }
 
+// El hub tiene sus propias pruebas (tiempoReal.test.ts): aquí no hay servidor al que conectarse.
+vi.mock('./tiempoReal', () => ({ useTiempoReal: () => [] }));
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('enlaces del MDX', () => {

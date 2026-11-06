@@ -30,6 +30,8 @@ export const moduloDocumentacion: ModuloAtlas = {
   ],
   pestanasFicha: [{ id: 'documentos', titulo: 'Documentos', orden: 30, permiso: 'atlas.docs.ver', cargar: () => import('./pestanas/Documentos') }],
   busqueda: { proveedor: 'documentacion', tipos: ['documento'] },
+  // HU 5.4 (ATLAS-ADR-0034): los favoritos se guardan sin conexión; su sincronizador va en su propio chunk.
+  offline: { recursos: [], ttlHoras: 72, cargarSincronizador: () => import('./favoritos/sinConexion') },
   bandera: 'modulo.documentacion',
   banderaPorDefecto: true,
 };

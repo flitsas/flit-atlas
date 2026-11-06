@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { enviarJson, ErrorApi, pedir } from '../../app/api';
+import { conRespaldoGuardado } from '../../pwa/sinConexion';
+import { recurso, rutaDocumento, rutaVersiones, TOPE_RECURSO_BYTES } from './favoritos/sinConexion';
 
 /** Documentación viva (HU 5.1 y 5.4, ATLAS-ADR-0053): `/api/v1/documentacion` (contracts/openapi/atlas.v1.yaml). */
 export type VisibilidadDocumento = 'publico_clientes' | 'interno_negocio' | 'interno_ti' | 'restringido';
@@ -133,13 +135,22 @@ export const useDocumentos = (filtros: FiltrosDocumentos = {}) =>
 export function useDocumento(id: string, version?: number) {
   return useQuery({
     queryKey: [...CLAVE_DOCUMENTOS, 'detalle', id, version ?? 'vigente'],
-    queryFn: () => leer<DocumentoDetalle>(`${de(id)}${version ? `?version=${version}` : ''}`),
+    // La versión vigente se puede leer sin conexión si el documento es un favorito (HU 5.4).
+    queryFn: () =>
+      version
+        ? leer<DocumentoDetalle>(`${de(id)}?version=${version}`)
+        : conRespaldoGuardado(recurso(rutaDocumento(id)), () => leer<DocumentoDetalle>(de(id)), TOPE_RECURSO_BYTES),
     retry: (veces, error) => !(error instanceof ErrorApi && error.estado === 404) && veces < 2,
+    networkMode: 'always',
   });
 }
 
 export const useVersiones = (id: string) =>
-  useQuery({ queryKey: [...CLAVE_DOCUMENTOS, 'versiones', id], queryFn: () => leer<ResumenVersion[]>(`${de(id)}/versiones`) });
+  useQuery({
+    queryKey: [...CLAVE_DOCUMENTOS, 'versiones', id],
+    queryFn: () => conRespaldoGuardado(recurso(rutaVersiones(id)), () => leer<ResumenVersion[]>(`${de(id)}/versiones`), TOPE_RECURSO_BYTES),
+    networkMode: 'always',
+  });
 
 export const useVersion = (id: string, numero: number | null) =>
   useQuery({
