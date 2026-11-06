@@ -56,5 +56,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0051](0051-almacenamiento-s3-de-flit2-por-ambiente.md) | Almacenamiento: en qa el MinIO del file-manager de FLIT 2 y en pdn un MinIO propio, con bucket `atlas-*` y usuarios propios; descargas firmadas en el mismo origen de Atlas | aceptado (decisión del líder, 26/10/2026; pdn actualizado el 28/10/2026) | A-05, A-06, HU 4.5, HU 4.6 |
 | [ATLAS-ADR-0052](0052-atlas-central-y-prueba-en-qa.md) | Publicación de contratos: un Atlas central en pdn (`ATLAS_URL`) para todos los canales y una publicación de prueba en el Atlas de QA desde `staging` (`ATLAS_URL_QA`) | aceptado (decisión del líder, 04/11/2026) | ATLAS-ADR-0035 §7 y §8 |
 | [ATLAS-ADR-0053](0053-documentacion-viva.md) | Documentación viva: módulo propio, versiones inmutables desde los repos, revisiones en Atlas y MDX sin evaluar código | propuesto | §8.5 |
+| [ATLAS-ADR-0054](0054-diagramas-lienzo-y-funcionales.md) | Diagramas: lienzo propio, Mermaid y BPMN versionados, sin relajar la CSP | propuesto | §8.6 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).
