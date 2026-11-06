@@ -94,7 +94,13 @@ lo recorre con un renderizador propio:
 - Los atributos solo pueden ser **cadenas literales**. Las expresiones (`{...}`), `import` y `export` son error de validación
   al publicar y texto inerte al mostrar.
 - El HTML crudo no se pinta; los enlaces solo admiten `https`, `mailto` y rutas internas.
-- Mermaid usa `securityLevel: 'strict'`.
+- Mermaid usa `securityLevel: 'strict'` y corre en `/visor/mermaid.html`, un iframe con `sandbox="allow-scripts"` y la CSP del
+  visor (ATLAS-ADR-0039): inyecta estilos en línea, que la CSP del shell no permite, y así no se relaja. Sin conexión, con
+  una fuente inválida o de más de 20 mil caracteres se muestra el texto. Versión 12.2.0.
+- Las imágenes no se cargan: queda su descripción y, si la dirección es segura, un enlace. Una imagen ajena revelaría quién
+  lee y la CSP solo admite `img-src 'self' data:`.
+- `Pestanas` no tiene un componente hijo, porque el servidor no admite otra etiqueta: cada título abre una pestaña.
+- `Alerta` admite `tipo` (`info`, `aviso`, `peligro`, `exito`) y `titulo`. `Diagrama` muestra un aviso hasta que llegue la F6.
 - Cada componente vivo pide sus datos con la sesión de quien lee: incrustar `<Contrato/>` no da permiso para verlo; sin
   permiso se muestra «No tienes acceso a este contenido».
 
@@ -131,9 +137,12 @@ este módulo. `IDocumentacionDelPortal` deja de ser la implementación vacía cu
 
 ### 8. Editor y tiempo real
 
-- Editor: Tiptap (visual) y Monaco (MDX), cargados de forma diferida solo en la ruta del editor.
-- Antes de adoptar cada librería se verifica versión estable con ≥ 2 semanas, licencia y que funcione con la CSP. **Si
-  Monaco no funciona sin relajar la CSP, no se relaja:** se vuelve a este ADR con la alternativa.
+- Editor: un `<textarea>` de MDX con vista previa del mismo renderizador del lector, en la ruta del editor con carga diferida.
+- **Monaco se descarta:** 0.57.0 (MIT) crea elementos `<style>` en tiempo de ejecución
+  (`vs/base/browser/domStylesheets.js`), que `style-src 'self'` bloquea. No se relaja la CSP.
+- **Tiptap queda para después [por verificar con el líder]:** 3.33.0 (MIT) se publicó el 05/11, sin las dos semanas. Un editor
+  visual además debe conservar los componentes MDX al ida y vuelta, y eso necesita su propio trabajo.
+- Antes de adoptar cada librería se verifica versión estable con ≥ 2 semanas, licencia y que funcione con la CSP.
 - SignalR es el primer hub de Atlas: «quién está viendo» y «versión nueva». La edición colaborativa con Yjs queda fuera.
 
 ### 9. Asistencia con IA
@@ -164,4 +173,4 @@ aún no existe; el borrador siempre queda en `borrador` y lo aprueba una persona
   tampoco (§7.1 solo nombra a administración y gobierno de IA).
 - **[por verificar con el líder]** Los ADR de los repos no traen este front-matter: hasta decidir cómo llegan (HU 6.1), el
   workflow publica `docs/funcional` y `docs/integraciones` por defecto.
-- **[por verificar]** Versiones y licencias de `remark-mdx`, Tiptap y Monaco; Monaco con la CSP.
+- **[por verificar con el líder]** Si se quiere un editor visual para negocio (Tiptap, §8).
