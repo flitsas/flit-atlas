@@ -139,7 +139,8 @@ Se usa `plataforma_auditoria`, ya inmutable, en la misma transacción, sin texto
 ## Fuera de este ADR
 
 HU 8.4 (llaves y costos), alertas del gateway y webhook, proveedores y alias, reporte mensual, avisos de revisiones vencidas,
-y exportar a PDF. Lo que dependa de LiteLLM vuelve con F-IA.
+y exportar a PDF. Lo que dependa de LiteLLM vuelve con F-IA. De la ficha §7.1 quedan fuera las llaves virtuales, el
+presupuesto por ambiente y los «proveedores efectivos» calculados desde el alias: enviar a revisión no los pide.
 
 ## Por verificar
 
@@ -148,6 +149,8 @@ y exportar a PDF. Lo que dependa de LiteLLM vuelve con F-IA.
 - **[por verificar con el líder]** Quién asigna los roles de gobierno. Hoy es `atlas.gia.gestionar`, así que quien lo tiene puede
   darse el rol de Comité; la asignación queda auditada, pero no lo impide.
 - **[por verificar con el líder]** Si quien evalúa o redacta puede también aprobar. Es la misma pregunta abierta de ATLAS-ADR-0053.
+- **[por verificar con el líder]** Un solo voto con el rol Comité aprueba o publica: no se modela quórum ni acta. El plan 02 no
+  define cuántos miembros deciden.
 - **[por verificar con el líder]** Las personas de cada rol (plan 02 §4.1), los dueños de cada caso y el contenido sembrado.
 - **[por verificar]** La numeración `POL-SGSI-IA-*` se ajusta a la siguiente libre del SGSI (plan 02 §6).
 - **[por verificar]** Dónde vive el texto oficial de cada política: el plan pide Markdown en `flit-infra-studio` además de Atlas.
