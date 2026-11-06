@@ -1,6 +1,6 @@
 # Estado del trabajo · Flit Atlas
 
-> **Corte:** 05/11/2026 (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
+> **Corte:** 06/11/2026 (hora de Bogotá). Archivo vivo para retomar el trabajo en una sesión nueva.
 > Se actualiza al cerrar cada jornada. El prompt maestro (`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`) sigue
 > siendo la fuente que prevalece; aquí solo va **dónde quedamos** y **qué sigue**.
 
@@ -38,6 +38,13 @@ La tabla de HU y ADR de la F4 (4.1 a 4.10, ADR 0038 y 0041 a 0051) está en el h
 - Arranque de pdn: el líder activó la cuenta de emergencia (`admin.emergencia@atlas.local`) y se asignó
   `atlas.superadmin` de forma **manual** a su persona (sin acceso a Entra para el mapeo de grupo).
 
+### Verificado en QA el 05/11 (pdn queda por verificar)
+
+- NetworkPolicy de atlas-docs activa: desde atlas-web la conexión a `:5035` se rechaza (el host sí recibe 200) y atlas-docs
+  no sale a internet, pero sí llega a RabbitMQ.
+- `atlas-qa` no tiene Role ni RoleBinding, y `cluster-admin` solo lo tienen `system:masters` y las cuentas de helm. El
+  kubeconfig es solo de root: `kubectl exec` lo limita quién tiene root en el host, no un RBAC del namespace.
+
 ### Verificado el 03/11 desde fuera
 
 - Cabeceras en QA y pdn: CSP estricta (sin `unsafe-inline`), Trusted Types en Report-Only, HSTS una sola vez, COOP/CORP,
@@ -49,22 +56,35 @@ La tabla de HU y ADR de la F4 (4.1 a 4.10, ADR 0038 y 0041 a 0051) está en el h
 
 ## 2. Qué sigue (en orden)
 
-1. **Rotar el secreto del cliente de Entra** (compartido por QA y pdn): se expuso de nuevo el 05/11. Crear uno nuevo en
-   Entra, sellarlo en los Secret de `atlas-qa` y `atlas-pdn` de flit-gitops, `rollout restart` de atlas-api en los dos,
-   probar el ingreso con Microsoft y borrar el viejo.
-2. **Con acceso a Entra:** mapear el grupo de administración a `atlas.superadmin` (con la cuenta del líder, ya no hace
-   falta la de emergencia) y decidir si se quita la asignación manual; activar el claim `auth_time`.
-3. **Verificación de pdn desde la 145** (README de `services/atlas-pdn`, sección «Verificación»): Argo Synced/Healthy,
+**Decisión del líder del 06/11:** externos, Entra, seguridad y todo lo que dependa de él van al final. Lo demás se
+implementa de forma autónoma y se despliega en QA y pdn.
+
+1. **F5 · Documentación viva:** ATLAS-ADR-0053 propuesto, en la rama `f5/documentacion-integracion`.
+2. **F6 · Diagramas.**
+3. **F-IA, F7 y F8:** lo que no dependa de las llaves de los proveedores ni de P-04 y P-08.
+
+**Para el final:**
+
+4. **Verificación de pdn desde la 145** (README de `services/atlas-pdn`, sección «Verificación»): Argo Synced/Healthy,
    pods 1/1, permisos del migrador, IP real en `identidad_evento_seguridad.ip` tras un ingreso con Microsoft, una
    exportación con descarga por `/atlas-pdn/` y los eventos `identidad.emergencia.*` del arranque en la auditoría.
-4. **Pruebas de navegador en QA:** «Seguridad de la cuenta» con un externo y el clic de «Continuar» de
-   `/connect/continuar` en Chrome, Edge, Firefox y Safari (cookie `SameSite=Strict`, F4-SEC-20).
-5. **QA:** portal con una organización de prueba: crear la organización, compartir un paquete, invitar a una cuenta de
-   prueba y entrar como cliente.
-6. **Antes de abrir a externos en pdn** (`docs/seguridad/revision-f4.md` §8): suite de la OpenID Foundation contra QA,
-   RBAC de `kubectl exec` (cuenta de emergencia), NetworkPolicy de atlas-docs, alerta de Loki para
-   `identidad.emergencia.*` en pdn, proteger los tags `v*`, volver privados `flit` y `flit-atlas`.
-7. Invitar al cliente piloto (organización y paquete por definir, por ejemplo ICT).
+   Incluye comprobar en pdn la NetworkPolicy de atlas-docs y quién puede usar `kubectl exec`.
+5. **Alerta de `identidad.emergencia.*` en pdn:** hay trabajo sin commitear en la rama `fix/alerta-emergencia-correo`
+   (worktree `D:\aalerta`), con un aviso por correo. Falta decidir el mecanismo (ADR).
+6. **Prueba de navegador en QA:** el clic de «Continuar» de `/connect/continuar` en Chrome, Edge, Firefox y Safari
+   (cookie `SameSite=Strict`, F4-SEC-20).
+7. **Entra:** rotar el secreto del cliente (compartido por QA y pdn; se expuso de nuevo el 05/11): crear uno nuevo,
+   sellarlo en los Secret de `atlas-qa` y `atlas-pdn` de flit-gitops, `rollout restart` de atlas-api en los dos, probar el
+   ingreso con Microsoft y borrar el viejo. Mapear el grupo de administración a `atlas.superadmin` y decidir si se quita
+   la asignación manual; activar el claim `auth_time`.
+8. **Externos en QA:** «Seguridad de la cuenta» con un externo; portal con una organización de prueba (crear la
+   organización, compartir un paquete, invitar a una cuenta de prueba y entrar como cliente); suite de la OpenID
+   Foundation.
+9. Volver privados `flit` y `flit-atlas`.
+10. Invitar al cliente piloto (organización y paquete por definir, por ejemplo ICT).
+
+Hecho desde el corte anterior: el tag `v1` del workflow de publicación apunta a `95e537e` (merge del PR #43) y los tags
+`v*` tienen ruleset activo desde el 05/11.
 
 ## 3. Decisiones del líder registradas
 
@@ -76,6 +96,7 @@ La tabla de HU y ADR de la F4 (4.1 a 4.10, ADR 0038 y 0041 a 0051) está en el h
 - 04/11: `ATLAS_URL` de la organización = Atlas central de pdn; `ATLAS_URL_QA` para la prueba desde `staging`
   (ATLAS-ADR-0052). No se separa la publicación por ambiente: el Consolidado necesita todos los canales en un Atlas.
 - 05/11: cuenta de emergencia activada en pdn; superadmin asignado a mano al líder hasta tener el mapeo de grupo.
+- 06/11: externos, Entra, seguridad y lo que dependa del líder van al final; lo demás, autónomo hasta QA y pdn.
 - Excepción de breaking de core-ict 1.1.0 aceptada (ADR 0037); se quita cuando la 1.1.0 llegue a `release`.
 - Recomendaciones aplicadas que el líder puede cambiar: Excel exportado con el morado `#4E00EB`; Word con sello de texto
   como marca de agua; tabla de visibilidad por rol externo del ADR 0043.
