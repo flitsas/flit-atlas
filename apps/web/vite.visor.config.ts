@@ -15,7 +15,7 @@ export default defineConfig({
     sourcemap: false,
     // Scalar pesa más de lo que Vite avisa por defecto; va en un iframe que solo se carga en escritorio.
     chunkSizeWarningLimit: 6000,
-    // Mermaid (ATLAS-ADR-0053 §5) va igual porque inyecta estilos en línea, que la CSP del shell no permite.
-    rollupOptions: { input: ['visor/openapi.html', 'visor/mermaid.html'] },
+    // Mermaid (ATLAS-ADR-0053 §5) y bpmn-js (ATLAS-ADR-0054 §5) van igual porque inyectan estilos en línea, que la CSP del shell no permite.
+    rollupOptions: { input: ['visor/openapi.html', 'visor/mermaid.html', 'visor/bpmn.html'] },
   },
 });

@@ -2,6 +2,7 @@ import { moduloAdministracion } from '../../modulos/administracion/modulo';
 import { moduloAsistente } from '../../modulos/asistente/modulo';
 import { moduloCatalogo } from '../../modulos/catalogo/modulo';
 import { moduloContratos } from '../../modulos/contratos/modulo';
+import { moduloDiagramas } from '../../modulos/diagramas/modulo';
 import { moduloDocumentacion } from '../../modulos/documentacion/modulo';
 import { moduloEquipo } from '../../modulos/equipo/modulo';
 import { moduloHola } from '../../modulos/hola/modulo';
@@ -21,6 +22,7 @@ export const MODULOS_REGISTRADOS: readonly ModuloAtlas[] = [
   moduloSoporte,
   moduloContratos,
   moduloDocumentacion,
+  moduloDiagramas,
   moduloAsistente,
   moduloPermisos,
   moduloHola,

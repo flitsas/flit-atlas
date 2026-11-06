@@ -2,7 +2,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 
 import { Boton, cn } from '../../../app/ui/Tarjeta';
 import { analizarMdx, atributosLiterales, enlaceSeguro, type EntradaIndice, indiceDe, type Nodo, pestanasDe, sinFrontMatter, textoDe } from './analizar';
-import { DiagramaMermaid } from './DiagramaMermaid';
+import { DiagramaMermaid } from '../../../app/diagramas/DiagramaMermaid';
 import { VivoContrato, VivoDiagrama, VivoResponsables, VivoSoporteDeTurno } from './vivos';
 
 /**

@@ -72,6 +72,7 @@ diagramas suelen inyectar estilos. Además, el XML de BPMN y el texto de Mermaid
 - **Lienzo:** JSON estricto, con propiedades desconocidas rechazadas, topes de nodos y relaciones, ids con formato, relaciones
   con extremos existentes y aplicativos que existan en el catálogo.
 - **Mermaid:** tope de 20 mil caracteres, el mismo del visor. Corre aislado (§5), y el servidor no intenta analizarlo.
+- Los eventos `atlas.diagramas.*` no se crean todavía: nadie los consume. Llegarán con el indexador del asistente (F7).
 
 ### 5. Librerías y CSP
 
@@ -87,6 +88,9 @@ diagramas suelen inyectar estilos. Además, el XML de BPMN y el texto de Mermaid
 - **Si `@xyflow/react` o `elkjs` no pasan con la CSP real, no se relaja:** van a un visor aislado como `bpmn-js`.
 - La lectura del lienzo es un SVG propio, sin React Flow. Pesa poco, no necesita estilos en línea y `<Diagrama/>` no carga el
   editor.
+- **Comprobado con la imagen nginx y su CSP** en Chromium y WebKit: `@xyflow/react` y `elkjs` corren en el shell sin
+  violaciones, y no hizo falta el visor aislado. La marca «React Flow» del lienzo se conserva.
+- La entrada del menú es solo para empleados: un externo tiene `atlas.docs.ver`, pero no ve ningún diagrama.
 
 ### 6. `<Diagrama id="…"/>`
 
@@ -113,6 +117,8 @@ muestra «No tienes acceso a este contenido»; no revela cuál de los dos es. Lo
 ## Por verificar
 
 - **[por verificar con el líder]** Leer con `atlas.docs.ver` o crear `atlas.diagramas.ver`.
+- **[por verificar con el líder]** `restringido` sigue la regla de ATLAS-ADR-0053: solo superadmin y gobierno de IA. El líder
+  técnico no puede dejar un diagrama en ese nivel, salvo en un aplicativo del que sea responsable.
 - **[por verificar con el líder]** Licencia de `elkjs` (EPL-2.0 o GPL-3.0): es copyleft débil. Se usa sin modificar; A-04 la
   nombra, pero el aviso de licencia y su aprobación quedan a su cargo.
 - **[por verificar]** La `@xyflow/react` 12.12.1 y la `elkjs` 0.12.1 se publicaron hace menos de dos semanas: se fijan las
