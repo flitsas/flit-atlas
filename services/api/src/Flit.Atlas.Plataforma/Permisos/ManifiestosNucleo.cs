@@ -123,9 +123,9 @@ public static class ManifiestosNucleo
     ]);
 
     /// <summary>
-    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/>,
+    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/>, <see cref="GobiernoDeIa"/>,
     /// <see cref="SoporteSabados"/> ni <see cref="Contratos"/>: los registran sus módulos.
     /// </summary>
     public static IReadOnlyList<ManifiestoPermisos> Todos { get; } =
-        [PermisosPlataforma.Manifiesto, Portal, Documentacion, Diagramas, Asistente, GobiernoDeIa];
+        [PermisosPlataforma.Manifiesto, Portal, Documentacion, Diagramas, Asistente];
 }

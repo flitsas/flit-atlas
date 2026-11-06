@@ -367,6 +367,8 @@ public class NotificacionesTests(EntornoApi entorno)
                 ["modulo.diagramas"] = true,
                 // La crea el migrador para cada módulo registrado, apagada por defecto (ATLAS-ADR-0026).
                 ["modulo.hola"] = false,
+                // Apagada hasta que el líder revise lo sembrado (ATLAS-ADR-0055).
+                ["modulo.gia"] = false,
             },
             banderas);
     }

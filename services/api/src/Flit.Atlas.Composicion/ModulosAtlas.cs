@@ -4,6 +4,7 @@ using Flit.Atlas.Modulos.Contratos;
 using Flit.Atlas.Modulos.Diagramas;
 using Flit.Atlas.Modulos.Documentacion;
 using Flit.Atlas.Modulos.Equipo;
+using Flit.Atlas.Modulos.Gia;
 using Flit.Atlas.Modulos.Hola;
 using Flit.Atlas.Modulos.Soporte;
 using Flit.Atlas.Plataforma.Modulos;
@@ -25,6 +26,7 @@ public static class ModulosAtlas
         new ModuloDiagramas(),
         new ModuloDocumentacion(),
         new ModuloEquipo(),
+        new ModuloGia(),
         new ModuloHola(),
         new ModuloSoporte(),
     ];

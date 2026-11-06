@@ -67,14 +67,6 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.asistente.usar` | Preguntar al asistente, limitado a lo que la persona puede ver. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   | ✔ | ✔ | ✔ | ✔ |   |   |
 | `atlas.asistente.configurar` | Configurar el asistente, sus fuentes y sus topes. | ✔ |   |   |   |   | ✔ |   |   |   |   |   |   |   |   |
 
-## Gobierno de IA (`gia`)
-
-| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.gia.ver` | Ver el inventario de casos de IA, políticas y costos. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
-| `atlas.gia.gestionar` | Gestionar casos de uso, riesgos, políticas y llaves virtuales. | ✔ |   |   |   |   | ✔ |   |   |   |   |   |   |   |   |
-| `atlas.gia.auditar` | Revisar la evidencia de gobierno de IA. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
-
 ## Identidad (`identidad`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
@@ -104,6 +96,14 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.equipo.ver` | Ver personas, responsables y el mapa de carga. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
 | `atlas.equipo.gestionar` | Cambiar el reparto de responsables, traspasos y revisiones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.equipo.ver_contacto` | Ver el teléfono y los datos de contacto de las personas. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
+
+## Gobierno de IA (`gia`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.gia.ver` | Ver el inventario de casos de IA, políticas y costos. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
+| `atlas.gia.gestionar` | Gestionar casos de uso, riesgos, políticas y llaves virtuales. | ✔ |   |   |   |   | ✔ |   |   |   |   |   |   |   |   |
+| `atlas.gia.auditar` | Revisar la evidencia de gobierno de IA. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
 
 ## Hola (ejemplo) (`hola`)
 
