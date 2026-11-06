@@ -13,6 +13,7 @@ import pytest
 
 from atlas_docs.exportes import Formato, PaqueteExportar
 from atlas_docs.exportes import pdf as modulo_pdf
+from atlas_docs.exportes.modelo import FORMATOS_PAQUETE
 
 ORGANIZACION = "Organismo Demo"
 FECHA = "2026-10-24"
@@ -80,4 +81,4 @@ def paquete(*specs: tuple[str, str, Path], organizacion: str = ORGANIZACION) -> 
 
 
 def formatos_disponibles() -> set[Formato]:
-    return set(Formato) if PDF_DISPONIBLE else set(Formato) - {Formato.PDF}
+    return set(FORMATOS_PAQUETE) if PDF_DISPONIBLE else FORMATOS_PAQUETE - {Formato.PDF}

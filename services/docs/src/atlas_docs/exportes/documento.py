@@ -17,6 +17,7 @@ class GuiaDoc:
     ancla: str
     titulo: str
     markdown: str
+    detalle: str = ""  # versión, tipo y responsable, en un documento de la F5
 
 
 @dataclass
@@ -37,10 +38,21 @@ class Documento:
     changelog: list[EntradaDoc]
     guias: list[GuiaDoc]
     contratos: list[Contrato]
+    es_documentacion: bool = False  # documentos de la F5 (ATLAS-ADR-0053 §7): sin revisión, cambios ni contratos
 
     @property
     def titulo(self) -> str:
-        return f"{self.paquete} · revisión {self.revision}"
+        return self.paquete if self.es_documentacion else f"{self.paquete} · revisión {self.revision}"
+
+    @property
+    def subtitulo(self) -> str:
+        if self.es_documentacion:
+            return "Documentación técnica y funcional"
+        return f"Paquete de contratos de integración · revisión {self.revision}"
+
+    @property
+    def titulo_guias(self) -> str:
+        return "Documentos" if self.es_documentacion else "Guías"
 
     @property
     def marca_agua(self) -> str:
@@ -52,7 +64,7 @@ class Documento:
 
     @property
     def nombre_base(self) -> str:
-        return ancla(self.paquete, f"r{self.revision}")
+        return ancla(self.paquete) if self.es_documentacion else ancla(self.paquete, f"r{self.revision}")
 
 
 def armar(paquete: PaqueteExportar, specs: list[SpecLeido], hash_contenido: str) -> Documento:
