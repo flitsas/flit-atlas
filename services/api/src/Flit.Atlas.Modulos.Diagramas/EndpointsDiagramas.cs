@@ -8,6 +8,7 @@ using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
 using Flit.Atlas.Plataforma.Modulos;
 using Flit.Atlas.Plataforma.Permisos;
+using Flit.Atlas.Plataforma.Render;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -28,6 +29,7 @@ internal static class EndpointsDiagramas
     public const string AccionVersion = "diagramas.version_guardada";
     public const string AccionRestaurada = "diagramas.version_restaurada";
     public const string AccionComentario = "diagramas.comentario_creado";
+    public const string AccionExportado = "diagramas.exportado";
 
     private const int LimiteMaximo = 100;
 
@@ -115,7 +117,7 @@ internal static class EndpointsDiagramas
 
     [Description("Por qué no se hizo, con un código estable.")]
     public sealed record ErrorDiagrama(
-        [property: Description("no_encontrado (404); sin_permiso (403); version_desactualizada, sin_cambios, codigo_existente (409).")] string Codigo,
+        [property: Description("no_encontrado (404); sin_permiso (403); version_desactualizada, sin_cambios, codigo_existente (409); exportacion_no_soportada (422); render_no_disponible (503).")] string Codigo,
         string Mensaje);
 
     public static void Mapear(RouteGroupBuilder grupo)
@@ -180,6 +182,16 @@ internal static class EndpointsDiagramas
             .WithDescription("La versión tal como se guardó. 404 si no existe o la persona no alcanza su nivel. Requiere atlas.docs.ver.")
             .Produces<VersionDiagramaDetalle>()
             .Produces<ErrorDiagrama>(StatusCodes.Status404NotFound);
+
+        grupo.MapGet("/{id:guid}/versiones/{numero}/svg", ExportarSvgAsync)
+            .RequierePermiso(PermisosDiagramas.Ver)
+            .WithName("ExportarVersionDiagramaSvg")
+            .WithSummary("Exportar una versión del lienzo a SVG")
+            .WithDescription("El SVG de la versión, generado con D2 en atlas-render y limpio de scripts y enlaces externos, como archivo para descargar. Acomoda los nodos de nuevo: no conserva las posiciones del lienzo. Auditado. 404 si no existe o la persona no alcanza su nivel; 422 exportacion_no_soportada si no es un lienzo; 503 render_no_disponible si atlas-render no está disponible. Requiere atlas.docs.ver.")
+            .Produces<string>(StatusCodes.Status200OK, "image/svg+xml")
+            .Produces<ErrorDiagrama>(StatusCodes.Status404NotFound)
+            .Produces<ErrorDiagrama>(StatusCodes.Status422UnprocessableEntity)
+            .Produces<ErrorDiagrama>(StatusCodes.Status503ServiceUnavailable);
 
         grupo.MapPost("/{id:guid}/versiones/{numero}/restauracion", RestaurarAsync)
             .RequierePermiso(PermisosDiagramas.Editar)
@@ -305,6 +317,45 @@ internal static class EndpointsDiagramas
         }
         var nombres = await NombresAsync(plataforma, [version.AutorPersonaId], ct);
         return Results.Ok(new VersionDiagramaDetalle(ResumenVersion(version, nombres), version.Fuente));
+    }
+
+    private static async Task<IResult> ExportarSvgAsync(
+        [Description("Id del diagrama.")] Guid id,
+        [Description("Número de la versión.")] int numero,
+        HttpContext http, DiagramasDbContext contexto, PlataformaDbContext plataforma, IPermisosDeSesion permisosDeSesion, ILectorAplicativos lector,
+        IRenderLienzo render, TimeProvider reloj, CancellationToken ct)
+    {
+        var acceso = await AccesoDiagramas.CalcularAsync(http.User, permisosDeSesion, lector, ct);
+        var diagrama = await acceso.Filtrar(contexto.Diagramas.AsNoTracking()).FirstOrDefaultAsync(d => d.Id == id, ct);
+        var version = diagrama is null
+            ? null
+            : await acceso.FiltrarVersiones(contexto.Versiones.AsNoTracking().Where(v => v.DiagramaId == id && v.Numero == numero), diagrama.AplicativoId).FirstOrDefaultAsync(ct);
+        if (diagrama is null || version is null)
+        {
+            return NoEncontrado();
+        }
+        if (diagrama.Tipo != TipoDiagrama.Lienzo)
+        {
+            return Error(StatusCodes.Status422UnprocessableEntity, "exportacion_no_soportada", "Solo los lienzos se exportan a SVG.");
+        }
+
+        var lienzo = ValidadorLienzo.Leer(version.Fuente);
+        byte[] svg;
+        try
+        {
+            svg = await render.SvgAsync(new ModeloExporte(
+                [.. lienzo.Nodos.Select(n => new NodoExporte(n.Id, n.Tipo, n.Etiqueta))],
+                [.. lienzo.Relaciones.Select(r => new RelacionExporte(r.Origen, r.Destino, r.Etiqueta))]), ct);
+        }
+        catch (RenderLienzoException ex) when (ex.NoDisponible)
+        {
+            return Error(StatusCodes.Status503ServiceUnavailable, "render_no_disponible", "La exportación a SVG no está disponible en este momento.");
+        }
+
+        await GuardarConAuditoriaAsync(contexto, plataforma, Evento(http, reloj.GetUtcNow(), AccionExportado, id, numero, new { formato = "svg", huella = version.Huella }), ct);
+        // Se descarga, no se muestra en el origen de Atlas; por si alguien lo abre directo, sin scripts ni recursos externos.
+        http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; font-src data:; sandbox";
+        return Results.File(svg, "image/svg+xml", $"{diagrama.Codigo}-v{numero}.svg");
     }
 
     private static async Task<IResult> ComentariosAsync(

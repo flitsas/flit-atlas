@@ -102,6 +102,7 @@ public static class ExtensionesRender
         servicios.AddHttpClient(ClienteRenderDiff.NombreCliente, (sp, c) =>
             c.BaseAddress = sp.GetRequiredService<IOptions<OpcionesRender>>().Value.Url);
         servicios.TryAddSingleton<IRenderDiff, ClienteRenderDiff>();
+        servicios.TryAddSingleton<IRenderLienzo, ClienteRenderLienzo>();
         return servicios;
     }
 }

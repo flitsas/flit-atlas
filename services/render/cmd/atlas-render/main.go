@@ -15,6 +15,7 @@ import (
 
 	"github.com/flitsas/flit-atlas/services/render/internal/config"
 	"github.com/flitsas/flit-atlas/services/render/internal/diferencias"
+	"github.com/flitsas/flit-atlas/services/render/internal/lienzo"
 	"github.com/flitsas/flit-atlas/services/render/internal/salud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -49,14 +50,15 @@ func ejecutar(log *slog.Logger) error {
 		Log:          log,
 		Registro:     registro,
 	})
+	lienzo.Registrar(mux, lienzo.Opciones{Log: log, Registro: registro})
 
 	servidor := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Puerto),
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		// La respuesta del diff sale a más tardar al vencer su tiempo; el margen cubre el envío.
-		WriteTimeout: cfg.Diff.Tiempo + 10*time.Second,
+		// Cada respuesta sale a más tardar al vencer su tiempo (diff o lienzo); el margen cubre el envío.
+		WriteTimeout: max(cfg.Diff.Tiempo, lienzo.TiempoPorDefecto) + 10*time.Second,
 		IdleTimeout:  2 * time.Minute,
 	}
 

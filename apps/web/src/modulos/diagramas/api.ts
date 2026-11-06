@@ -157,6 +157,17 @@ export async function restaurarVersion(id: string, numero: number, nota: string,
   return (await (await enviarJson(`/api/v1/diagramas/${encodeURIComponent(id)}/versiones/${numero}/restauracion`, 'POST', { nota, versionBase })).json()) as DiagramaDetalle;
 }
 
+/** Descarga el SVG de una versión del lienzo (HU 6.8, ATLAS-ADR-0054 §7). No se muestra en el shell: va como archivo. */
+export async function descargarSvg(id: string, numero: number, codigo: string): Promise<void> {
+  const respuesta = await pedir(`/api/v1/diagramas/${encodeURIComponent(id)}/versiones/${numero}/svg`);
+  const url = URL.createObjectURL(await respuesta.blob());
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = `${codigo}-v${numero}.svg`;
+  enlace.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function useComentar(id: string) {
   const cliente = useQueryClient();
   return useMutation({

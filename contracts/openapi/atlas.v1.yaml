@@ -6184,6 +6184,66 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.docs.ver
+  '/api/v1/diagramas/{id}/versiones/{numero}/svg':
+    get:
+      tags:
+        - Diagramas
+      summary: Exportar una versión del lienzo a SVG
+      description: 'El SVG de la versión, generado con D2 en atlas-render y limpio de scripts y enlaces externos, como archivo para descargar. Acomoda los nodos de nuevo: no conserva las posiciones del lienzo. Auditado. 404 si no existe o la persona no alcanza su nivel; 422 exportacion_no_soportada si no es un lienzo; 503 render_no_disponible si atlas-render no está disponible. Requiere atlas.docs.ver.'
+      operationId: ExportarVersionDiagramaSvg
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
   '/api/v1/diagramas/{id}/versiones/{numero}/restauracion':
     post:
       tags:
@@ -13303,7 +13363,7 @@ components:
       properties:
         codigo:
           type: string
-          description: 'no_encontrado (404); sin_permiso (403); version_desactualizada, sin_cambios, codigo_existente (409).'
+          description: 'no_encontrado (404); sin_permiso (403); version_desactualizada, sin_cambios, codigo_existente (409); exportacion_no_soportada (422); render_no_disponible (503).'
         mensaje:
           type: string
       description: 'Por qué no se hizo, con un código estable.'

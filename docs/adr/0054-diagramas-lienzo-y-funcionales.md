@@ -82,6 +82,7 @@ diagramas suelen inyectar estilos. Además, el XML de BPMN y el texto de Mermaid
 | `elkjs` | 0.12.0 | EPL-2.0 o GPL-3.0 | Shell, solo al pulsar «Acomodar» | `elk.bundled.js` corre en el hilo principal sin `Worker` |
 | `bpmn-js` | 18.31.1 | bpmn.io (conservar la marca) | `/visor/bpmn.html`, iframe con `sandbox="allow-scripts"` | Inyecta estilos en línea; se aísla como Scalar (ATLAS-ADR-0039) y Mermaid (ATLAS-ADR-0053 §5) |
 | `mermaid` | 12.2.0 | MIT | `/visor/mermaid.html` | Ya estaba |
+| `oss.terrastruct.com/d2` | 0.7.2 | MPL-2.0 | atlas-render (Go), sin navegador | Exporte a SVG (§7) |
 
 - La marca de bpmn.io es la propia de `bpmn-js`, sin ocultar. El visor no tiene cookie ni acceso a la API (origen opaco) y solo
   intercambia XML con quien lo enmarca por `postMessage`.
@@ -98,6 +99,28 @@ El visor Mermaid pasa de `modulos/documentacion` a `app/diagramas`, junto con la
 otro. `<Diagrama/>` pide `GET /api/v1/diagramas/por-codigo/{codigo}` con la sesión de quien lee. Sin permiso o sin diagrama,
 muestra «No tienes acceso a este contenido»; no revela cuál de los dos es. Los exportes de documentos conservan el texto
 «disponible en Atlas» de ATLAS-ADR-0053.
+
+### 7. Exportar el lienzo a SVG (HU 6.8)
+
+- **atlas-render recibe el modelo, no texto D2.** Los nodos se llaman `n0`, `n1`… y las etiquetas van entre comillas simples,
+  así que nadie puede usar imports, enlaces ni variables de D2. D2 0.7.2 se enlaza como librería, sin leer archivos, y su logger
+  se descarta porque puede citar etiquetas.
+- **El SVG se limpia con una lista blanca** de elementos, sin `script`, `foreignObject`, `a`, `image` ni `use`. Quita `on*` y los
+  `href` que no sean `#`. El `<style>` solo admite `url()` con fuentes `data:` y referencias internas; si trae otra cosa, se
+  rechaza el SVG entero.
+- **Caché en atlas-render** por el hash del modelo y la versión de D2, en memoria, por réplica.
+- **Sin PNG.** `d2` lo genera con Playwright y un navegador, lo que A-02 no admite en producción. No se evaluó a fondo un
+  rasterizador en Go puro, que tendría que pintar el texto con las fuentes incrustadas. Queda fuera hasta que el líder lo pida.
+- **Solo lienzos.** Mermaid y BPMN no pasan por D2.
+- **D2 acomoda de nuevo:** el archivo no conserva las posiciones del lienzo. Lo dice la página. Para eso sirve D2 aquí; si se
+  necesitan las posiciones, habría que generar el SVG desde `LienzoSvg`.
+- `GET /api/v1/diagramas/{id}/versiones/{numero}/svg` exige `atlas.docs.ver`, la misma visibilidad de leer esa versión, y queda
+  auditado (`diagramas.exportado`). No exige `atlas.docs.exportar`: quien lee ya recibe la fuente.
+- **atlas-render aún no está desplegado en QA ni en pdn:** no tiene Deployment ni entrada en `kustomization.yaml`. El endpoint
+  responde 503 `render_no_disponible` y la página lo explica, sin afectar la lectura; el aviso puede tardar varios segundos por
+  los reintentos del cliente HTTP. `cd.yml` publica la imagen y fija su digest solo si el ambiente declara la entrada.
+- **Sin token de servicio:** como el diff (ATLAS-ADR-0036), el endpoint depende de la política de red, y el token de §5.1 sigue
+  pendiente para todas las llamadas a atlas-render. Va con los pendientes de seguridad.
 
 ## Consecuencias
 
@@ -121,5 +144,7 @@ muestra «No tienes acceso a este contenido»; no revela cuál de los dos es. Lo
   técnico no puede dejar un diagrama en ese nivel, salvo en un aplicativo del que sea responsable.
 - **[por verificar con el líder]** Licencia de `elkjs` (EPL-2.0 o GPL-3.0): es copyleft débil. Se usa sin modificar; A-04 la
   nombra, pero el aviso de licencia y su aprobación quedan a su cargo.
+- **[por verificar con el líder]** Licencia de D2 (MPL-2.0, copyleft por archivo): se usa sin modificar.
+- **[por verificar con el líder]** Si hace falta PNG, y si el SVG debe conservar las posiciones del lienzo.
 - **[por verificar]** La `@xyflow/react` 12.12.1 y la `elkjs` 0.12.1 se publicaron hace menos de dos semanas: se fijan las
   anteriores.

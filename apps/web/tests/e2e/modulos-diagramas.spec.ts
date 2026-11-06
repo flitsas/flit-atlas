@@ -121,6 +121,32 @@ test('lista y lectura de un lienzo con su SVG propio, sin violar la CSP', async 
   sinViolaciones(violaciones);
 });
 
+test('el lienzo se descarga como SVG y, sin atlas-render, se explica sin dañar la lectura', async ({ page }) => {
+  const violaciones = await vigilarCsp(page);
+  await simular(page, []);
+  let disponible = true;
+  await page.route('**/api/v1/diagramas/*/versiones/*/svg', (route) =>
+    route.fulfill(
+      disponible
+        ? { status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' }
+        : { status: 503, contentType: 'application/json', body: JSON.stringify({ codigo: 'render_no_disponible', mensaje: 'La exportación a SVG no está disponible en este momento.' }) },
+    ),
+  );
+  await page.goto('/diagramas/lienzo');
+  const boton = page.getByRole('button', { name: 'Descargar SVG' });
+  await expect(boton).toBeVisible();
+
+  const [descarga] = await Promise.all([page.waitForEvent('download'), boton.click()]);
+  expect(descarga.suggestedFilename()).toMatch(/-v\d+\.svg$/);
+
+  disponible = false;
+  await boton.click();
+  await expect(page.getByText('La exportación a SVG no está disponible en este momento.')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Mapa de radicación' })).toBeVisible();
+  await revisar(page);
+  sinViolaciones(violaciones);
+});
+
 test('el lienzo se edita con React Flow y ELK sin relajar la CSP, y guarda un JSON válido', async ({ page }, info) => {
   test.setTimeout(90_000);
   const violaciones = await vigilarCsp(page);

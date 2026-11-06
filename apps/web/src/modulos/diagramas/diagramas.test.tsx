@@ -124,6 +124,30 @@ describe('detalle', () => {
     '/api/v1/diagramas/d1/comentarios': [200, [{ id: 'c1', versionNumero: 2, nodoClave: null, persona: { id: 'p1', nombre: 'Persona Demo' }, texto: 'Falta un paso', escritoEn: '2026-11-06T12:00:00Z' }]],
   });
 
+  it('solo el lienzo ofrece el SVG; si atlas-render no está disponible lo explica y el diagrama sigue ahí', async () => {
+    const lienzo = JSON.stringify({ nodos: [{ id: 'a', tipo: 'sistema', etiqueta: 'Trámites', x: 0, y: 0 }], relaciones: [] });
+    const base = rutas(false);
+    const llamadas = api({
+      ...base,
+      '/api/v1/diagramas/d1': [200, { diagrama: { ...DIAGRAMA, tipo: 'lienzo' }, version: { version: VERSION, fuente: lienzo }, referencias: [], puedeEditar: false }],
+      '/api/v1/diagramas/d1/versiones/2/svg': [503, { codigo: 'render_no_disponible', mensaje: 'La exportación a SVG no está disponible en este momento.' }],
+    });
+    pintarDetalle();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Descargar SVG' }));
+
+    expect(await screen.findByText('La exportación a SVG no está disponible en este momento.')).toBeInTheDocument();
+    expect(llamadas.some((l) => l.ruta === '/api/v1/diagramas/d1/versiones/2/svg')).toBe(true);
+    expect(screen.getByRole('img', { name: 'Flujo' })).toBeInTheDocument();
+  });
+
+  it('un Mermaid no ofrece el SVG', async () => {
+    api(rutas(false));
+    pintarDetalle();
+    await screen.findByText('Falta un paso');
+    expect(screen.queryByRole('button', { name: 'Descargar SVG' })).toBeNull();
+  });
+
   it('muestra versiones, comentarios, referencias y el código para citarlo; sin permiso no ofrece editar ni restaurar', async () => {
     api(rutas(false));
     pintarDetalle();

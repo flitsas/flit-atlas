@@ -5,6 +5,7 @@ using System.Text.Json;
 using Flit.Atlas.Modulos.Diagramas;
 using Flit.Atlas.Plataforma.Busqueda;
 using Flit.Atlas.Plataforma.Permisos;
+using Flit.Atlas.Plataforma.Render;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,8 @@ public sealed class ModuloDiagramasTests(EntornoApi entorno)
 
     private readonly ResponsablesDePrueba _responsables = new();
 
+    private readonly RenderLienzoSimulado _render = new();
+
     private sealed class ResponsablesDePrueba
     {
         public ConcurrentDictionary<Guid, Guid> PorPersona { get; } = new();
@@ -42,6 +45,7 @@ public sealed class ModuloDiagramasTests(EntornoApi entorno)
     {
         s.AddSingleton(_responsables);
         s.Replace(ServiceDescriptor.Scoped<IProveedorRolesImplicitos, RolesDePrueba>());
+        s.Replace(ServiceDescriptor.Singleton<IRenderLienzo>(_render));
     });
 
     private async Task<Navegador> EmpleadoAsync(WebApplicationFactory<Program> api, string? rol = null, Guid? responsableDe = null)
@@ -320,6 +324,55 @@ public sealed class ModuloDiagramasTests(EntornoApi entorno)
         Assert.Contains(eventos, e => e.Accion == EndpointsDiagramas.AccionCreado);
         var comentario = Assert.Single(eventos, e => e.Accion == EndpointsDiagramas.AccionComentario);
         Assert.DoesNotContain(secreto, comentario.Datos ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task Exportar_un_lienzo_a_svg_respeta_la_visibilidad_se_audita_y_avisa_si_no_hay_render()
+    {
+        await using var api = Api();
+        var lider = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
+        var lector = await EmpleadoAsync(api);
+        var aplicativo = await AplicativoAsync(lider);
+        var fuente = JsonSerializer.Serialize(new
+        {
+            nodos = new[] { new { id = "a", tipo = "sistema", etiqueta = "Trámites", x = 10, y = 20 }, new { id = "b", tipo = "actor", etiqueta = "Radicador", x = 30, y = 40 } },
+            relaciones = new[] { new { id = "r", origen = "b", destino = "a", etiqueta = "radica" } },
+        });
+        var codigo = Codigo();
+        var id = Id(await CrearAsync(lider, Solicitud(aplicativo, codigo: codigo, tipo: "lienzo", fuente: fuente)));
+
+        var respuesta = await lector.GetAsync($"{Ruta}/{id}/versiones/1/svg");
+
+        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+        Assert.Equal("image/svg+xml", respuesta.Content.Headers.ContentType?.MediaType);
+        Assert.Equal($"{codigo}-v1.svg", respuesta.Content.Headers.ContentDisposition?.FileNameStar ?? respuesta.Content.Headers.ContentDisposition?.FileName);
+        Assert.Contains("sandbox", string.Join(' ', respuesta.Headers.GetValues("Content-Security-Policy")), StringComparison.Ordinal);
+        var modelo = Assert.Single(_render.Recibidos);
+        Assert.Equal(["Trámites", "Radicador"], modelo.Nodos.Select(n => n.Etiqueta));
+        Assert.Equal("radica", Assert.Single(modelo.Relaciones).Etiqueta);
+
+        await using (var bd = entorno.Plataforma())
+        {
+            var evento = Assert.Single(await bd.Auditoria.AsNoTracking()
+                .Where(e => e.RecursoId == id.ToString() && e.Accion == EndpointsDiagramas.AccionExportado).ToListAsync(Ct));
+            Assert.DoesNotContain("Trámites", evento.Datos ?? string.Empty);
+        }
+
+        // Lo que no existe y lo que la persona no alcanza responden igual, y no llegan a atlas-render.
+        var tecnico = Id(await CrearAsync(lider, Solicitud(aplicativo, tipo: "lienzo", fuente: fuente, visibilidad: "interno_ti")));
+        Assert.Equal(HttpStatusCode.NotFound, (await lector.GetAsync($"{Ruta}/{tecnico}/versiones/1/svg")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await lector.GetAsync($"{Ruta}/{id}/versiones/9/svg")).StatusCode);
+        Assert.Single(_render.Recibidos);
+
+        var mermaid = Id(await CrearAsync(lider, Solicitud(aplicativo)));
+        var noSoportada = await lector.GetAsync($"{Ruta}/{mermaid}/versiones/1/svg");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, noSoportada.StatusCode);
+        Assert.Equal("exportacion_no_soportada", await CodigoError(noSoportada));
+
+        _render.Fallo = new RenderLienzoException("atlas-render no respondió.", noDisponible: true);
+        var sinRender = await lector.GetAsync($"{Ruta}/{id}/versiones/1/svg");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, sinRender.StatusCode);
+        Assert.Equal("render_no_disponible", await CodigoError(sinRender));
     }
 
     [Fact]

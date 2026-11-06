@@ -7,6 +7,7 @@ import { VistaDiagrama } from '../../../app/diagramas/VistaDiagrama';
 import { Boton, Insignia } from '../../../app/ui/Tarjeta';
 import { formatearFechaHora } from '../../../app/ui/formato';
 import {
+  descargarSvg,
   mensajeDeError,
   restaurarVersion,
   TEXTO_ORIGEN,
@@ -131,6 +132,33 @@ function Versiones({ id, ultima, puedeEditar, elegida, alElegir }: { id: string;
   );
 }
 
+/** Descargar el SVG (HU 6.8). Si atlas-render no está disponible lo explica; el diagrama se sigue viendo. */
+function ExportarSvg({ id, numero, codigo }: { id: string; numero: number; codigo: string }) {
+  const [generando, setGenerando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <Boton
+        variante="secundario"
+        disabled={generando}
+        onClick={() => {
+          setGenerando(true);
+          setError(null);
+          descargarSvg(id, numero, codigo)
+            .catch((motivo: unknown) => setError(motivo instanceof ErrorApi ? motivo.mensajePara(ERROR_EXPORTAR) : ERROR_EXPORTAR))
+            .finally(() => setGenerando(false));
+        }}
+      >
+        {generando ? 'Generando el SVG…' : 'Descargar SVG'}
+      </Boton>
+      {error && <Aviso tono="error">{error}</Aviso>}
+      <p className="text-xs text-atlas-texto-suave">El archivo acomoda los elementos de nuevo: no conserva las posiciones del lienzo.</p>
+    </div>
+  );
+}
+
+const ERROR_EXPORTAR = 'No pudimos generar el SVG. Revisa tu conexión y vuelve a intentarlo.';
+
 /** Un diagrama con su historial y sus comentarios (HU 6.6 y 6.7). */
 export default function DetalleDiagrama() {
   const { id = '' } = useParams();
@@ -179,6 +207,7 @@ export default function DetalleDiagrama() {
       ) : (
         elegida === null && <p className="text-sm text-atlas-texto-suave">No tienes acceso a ninguna versión de este diagrama.</p>
       )}
+      {mostrada && d.tipo === 'lienzo' && <ExportarSvg id={d.id} numero={mostrada.version.numero} codigo={d.codigo} />}
 
       {referencias.length > 0 && (
         <section aria-labelledby="titulo-referencias">

@@ -18,7 +18,8 @@ export function Aviso({ tono, children }: { tono: 'error' | 'exito'; children: R
       role={tono === 'error' ? 'alert' : 'status'}
       className={
         tono === 'error'
-          ? 'rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]'
+          ? // El texto no usa --badge-danger-fg: sobre este fondo da contraste 4,08, por debajo de AA.
+            'rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-sm text-foreground'
           : 'rounded-xl border border-[var(--badge-success-border)] bg-[var(--badge-success-bg)] p-3 text-sm text-[var(--badge-success-fg)]'
       }
     >
