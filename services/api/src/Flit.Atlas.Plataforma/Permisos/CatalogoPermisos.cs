@@ -93,7 +93,7 @@ public sealed class CatalogoPermisos
     /// <summary>La matriz en la forma que publica <c>GET /api/v1/plataforma/permisos/matriz</c>.</summary>
     public MatrizPermisos Matriz() => new(
         [.. RolesAtlas.Todos.Select(r => new RolMatriz(r.Codigo, r.Nombre, Texto(r.Tipo), r.Descripcion, r.Tipo != TipoRol.Implicito))],
-        [.. Manifiestos.Select(m => new ModuloMatriz(m.Modulo, m.Nombre, [.. m.Permisos.Select(p => new PermisoMatriz(
+        [.. Manifiestos.Where(m => m.Permisos.Count > 0).Select(m => new ModuloMatriz(m.Modulo, m.Nombre, [.. m.Permisos.Select(p => new PermisoMatriz(
             p.Codigo, p.Descripcion, [.. RolesAtlas.Todos.Select(r => r.Codigo).Where(r => _porRol[r].Contains(p.Codigo))]))]))]);
 
     internal static string Texto(TipoRol tipo) => tipo switch

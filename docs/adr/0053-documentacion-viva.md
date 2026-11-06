@@ -35,6 +35,11 @@ persona. Atlas corre con una CSP estricta, sin `unsafe-eval` (ATLAS-ADR-0048).
 `Flit.Atlas.Modulos.Documentacion`, con id `documentacion`: rutas `/api/v1/documentacion`, bandera
 `modulo.documentacion` y permisos `atlas.docs.*` (el manifiesto `ManifiestosNucleo.Documentacion`, que ya existe).
 
+`atlas.docs.*` no lleva el prefijo del módulo, así que no puede mudarse a él (`ExtensionesModulos.Validar` exige
+`atlas.<id>.`): se queda en el núcleo, como `atlas.paquetes.gestionar` en el portal. Como dos manifiestos no pueden
+compartir id, el del núcleo pasa de `documentacion` a `docs`, y el módulo declara un manifiesto vacío. Los códigos y las
+concesiones no cambian.
+
 **Prefijo de tablas `documentacion_`, no `doc_`.** El contrato de módulo deriva el prefijo del id (ATLAS-ADR-0016), igual
 que `contratos_` frente al `contrato_` del prompt maestro §9. Este ADR registra la diferencia.
 
@@ -74,8 +79,9 @@ que `contratos_` frente al `contrato_` del prompt maestro §9. Este ADR registra
   responsable), topes de tamaño y lista blanca de MDX (§5). El aplicativo del front-matter debe estar autorizado para el
   repo. El servidor nunca confía en lo validado por la CI.
 - El front-matter no trae secretos ni datos reales; el workflow corre gitleaks sobre lo que publica.
-- Una ruta que desaparece del repo no borra nada: el documento se marca `archivado` por una bandera explícita del lote,
-  y sus versiones siguen ahí.
+- Una ruta que desaparece del repo no borra nada. El último lote puede traer `rutasVigentes`: lo que no esté ahí sale del
+  canal de ese ambiente y, cuando ya no le queda ningún canal, se marca `archivado`. Así, borrar un archivo en `develop` no
+  retira lo que sigue corriendo en pdn. Sus versiones siguen ahí.
 
 ### 5. MDX sin evaluar código
 
@@ -94,9 +100,17 @@ lo recorre con un renderizador propio:
 El servidor valida la misma lista blanca con un analizador propio, conservador: rechaza los `import` y `export` de nivel
 superior, las expresiones entre llaves fuera de bloques de código y las etiquetas fuera de la lista. Ante la duda, rechaza.
 
+Lo escrito en Atlas se valida al enviar a revisión y al publicar, no al guardar: un borrador a medias se puede guardar.
+
+Cada versión guarda su propia visibilidad y el predicado la revisa, además de la del documento: una versión vieja más
+restringida no se abre si el documento se abre después. El documento copia la foto de su versión vigente, así que una versión
+de `develop` no cambia el título ni la visibilidad de lo que corre en pdn.
+
 ### 6. Visibilidad y permisos en SQL
 
-Los niveles de §7.1 se traducen a un predicado obligatorio en cada consulta, incluidas búsqueda y exportes. Las tablas con
+Los niveles de §7.1 se traducen a un predicado obligatorio en cada consulta, incluidas búsqueda y exportes: `interno_ti` para
+superadmin, líder técnico y desarrollador; `restringido` para superadmin y gobierno de IA; los demás empleados, hasta
+`interno_negocio`. El responsable ve todos los documentos de su aplicativo, porque los edita (§7.2). Las tablas con
 datos de organizaciones externas (`documentacion_comparticion`, `documentacion_exportacion`) llevan `organizacion_id` y RLS.
 
 Un externo solo ve `publico_clientes` dentro de lo compartido con su organización. Compartir se construye en esta fase,
@@ -105,7 +119,11 @@ este módulo. `IDocumentacionDelPortal` deja de ser la implementación vacía cu
 
 ### 7. Búsqueda, exportes y eventos
 
-- Búsqueda: columna `tsvector` generada con la configuración de español + `unaccent` y un `IProveedorBusqueda`.
+- Búsqueda: columna `tsvector` generada con la configuración de español y un `IProveedorBusqueda`. Las tildes se quitan
+  con `translate`, no con `unaccent`: una columna generada solo admite funciones inmutables, `unaccent` no lo es, y esa
+  extensión la crea el administrador en cada ambiente y sigue sin verificarse en la 177
+  (`docs/preparacion/04-prerrequisitos.md`). Si falta, la migración fallaría y atlas-api no arrancaría. La búsqueda
+  normaliza el texto igual (`FuncionesSql.NormalizarBusqueda`) y cubre el español y el portugués.
 - Exportes: los hace atlas-docs por la cola existente (ATLAS-ADR-0042), con un tipo de entrada nuevo. El MDX se convierte
   en contenido estático con los valores vigentes al exportar.
 - Eventos: `atlas.documentacion.version_publicada` (para F7), en el AsyncAPI.
@@ -141,4 +159,8 @@ aún no existe; el borrador siempre queda en `borrador` y lo aprueba una persona
 
 - **[por verificar con el líder]** Quién aprueba si un aplicativo no tiene responsables (hoy, el líder técnico) y si se
   exige aprobación de otra persona. Abierto también en las guías.
+- **[por verificar con el líder]** Quién ve `interno_ti` y `restringido`: el líder técnico no ve `restringido`, y el auditor
+  tampoco (§7.1 solo nombra a administración y gobierno de IA).
+- **[por verificar con el líder]** Los ADR de los repos no traen este front-matter: hasta decidir cómo llegan (HU 6.1), el
+  workflow publica `docs/funcional` y `docs/integraciones` por defecto.
 - **[por verificar]** Versiones y licencias de `remark-mdx`, Tiptap y Monaco; Monaco con la CSP.

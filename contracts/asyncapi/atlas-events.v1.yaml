@@ -55,6 +55,8 @@ channels:
         $ref: '#/components/messages/contratosExportacionSolicitadaV1'
       contratosVersionDeprecadaV1:
         $ref: '#/components/messages/contratosVersionDeprecadaV1'
+      documentacionVersionPublicadaV1:
+        $ref: '#/components/messages/documentacionVersionPublicadaV1'
     bindings:
       amqp:
         is: routingKey
@@ -106,6 +108,7 @@ operations:
       - $ref: '#/components/messages/contratosCanalActualizadoV1'
       - $ref: '#/components/messages/contratosExportacionSolicitadaV1'
       - $ref: '#/components/messages/contratosVersionDeprecadaV1'
+      - $ref: '#/components/messages/documentacionVersionPublicadaV1'
     bindings:
       amqp:
         deliveryMode: 2
@@ -219,6 +222,55 @@ components:
               commit: 0123456789abcdef0123456789abcdef01234567
               tieneBreaking: false
               operaciones: 3
+
+    documentacionVersionPublicadaV1:
+      name: atlas.documentacion.version_publicada
+      x-atlas-tipo: atlas.documentacion.version_publicada
+      x-atlas-version: 1
+      title: Versión de documento publicada
+      summary: Hay una versión nueva de un documento, desde la CI de un repo o aprobada en Atlas (HU 5.1 y 5.2, ATLAS-ADR-0053).
+      description: |
+        Se emite una vez por versión nueva, en la misma transacción que la guarda; si el contenido ya existía, el canal se
+        mueve sin repetirlo. Lo consumirá el asistente (reindexar, F7). No trae el título ni el cuerpo: se leen de Atlas.
+        Es interno: `tenantId` va en ceros.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.documentacion.version_publicada
+              version:
+                const: 1
+              data:
+                $ref: '#/components/schemas/DocumentacionVersionPublicadaV1'
+      examples:
+        - name: desdeUnRepo
+          summary: Versión de un documento ficticio publicada desde develop.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e01
+            type: atlas.documentacion.version_publicada
+            version: 1
+            occurredAt: '2026-11-06T15:30:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4737
+            data:
+              documentoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e02
+              versionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e03
+              numero: 2
+              aplicativoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e04
+              aplicativo: api-demo
+              origen: repo
+              tipo: guia_funcional
+              visibilidad: interno_negocio
+              esBorrador: false
+              sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+              ambiente: dev
+              repositorio: flitsas-demo/api-demo
+              rama: develop
+              commit: 0123456789abcdef0123456789abcdef01234567
 
     contratosCanalActualizadoV1:
       name: atlas.contratos.canal_actualizado
@@ -533,6 +585,81 @@ components:
           type: object
           description: Contenido del evento; su esquema depende de `type` y `version`.
 
+    DocumentacionVersionPublicadaV1:
+      type: object
+      description: '`data` de atlas.documentacion.version_publicada v1: qué versión es, de dónde salió y con qué hash.'
+      additionalProperties: false
+      required:
+        - documentoId
+        - versionId
+        - numero
+        - aplicativoId
+        - aplicativo
+        - origen
+        - tipo
+        - visibilidad
+        - esBorrador
+        - sha256
+        - ambiente
+        - repositorio
+        - rama
+        - commit
+      properties:
+        documentoId:
+          type: string
+          format: uuid
+          description: Id del documento en Atlas.
+        versionId:
+          type: string
+          format: uuid
+          description: Id de la versión publicada.
+        numero:
+          type: integer
+          description: Número correlativo de la versión dentro del documento.
+        aplicativoId:
+          type: string
+          format: uuid
+          description: Id del aplicativo del catálogo.
+        aplicativo:
+          type: string
+          description: Slug del aplicativo del catálogo.
+        origen:
+          type: string
+          enum: [repo, atlas]
+          description: Si llegó por la CI o se aprobó en Atlas.
+        tipo:
+          type: string
+          description: manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial, adr o nota_version.
+        visibilidad:
+          type: string
+          enum: [publico_clientes, interno_negocio, interno_ti, restringido]
+          description: Nivel de visibilidad de esta versión.
+        esBorrador:
+          type: boolean
+          description: De repo y sin aprobar; solo la ven los roles técnicos y los responsables.
+        sha256:
+          type: string
+          description: SHA-256 del archivo (repo) o de la foto de la revisión (Atlas).
+        ambiente:
+          type:
+            - string
+            - 'null'
+          description: Canal en el que quedó (dev, qa o pdn).
+        repositorio:
+          type:
+            - string
+            - 'null'
+          description: Repo que la publicó; vacío si se aprobó en Atlas.
+        rama:
+          type:
+            - string
+            - 'null'
+          description: Rama que la publicó; vacío si se aprobó en Atlas.
+        commit:
+          type:
+            - string
+            - 'null'
+          description: Commit que la publicó; vacío si se aprobó en Atlas.
     ContratosVersionPublicadaV1:
       type: object
       description: '`data` de atlas.contratos.version_publicada v1: qué se publicó, desde dónde y con qué hash.'
@@ -837,7 +964,8 @@ components:
           description: La versión estable vigente más alta posterior, si la hay.
 
 # Eventos publicados: atlas.contratos.version_publicada (HU 3.2), atlas.contratos.canal_actualizado (HU 3.4),
-# atlas.contratos.exportacion_solicitada (HU 4.5) y atlas.contratos.version_deprecada (HU 4.8); recibidos de atlas-docs: atlas.contratos.exportacion_iniciada, _lista y
+# atlas.contratos.exportacion_solicitada (HU 4.5), atlas.contratos.version_deprecada (HU 4.8) y
+# atlas.documentacion.version_publicada (HU 5.1 y 5.2); recibidos de atlas-docs: atlas.contratos.exportacion_iniciada, _lista y
 # _fallida (HU 4.5). Cada evento nuevo se agrega en el mismo PR que su
 # TipoEvento, así:
 #

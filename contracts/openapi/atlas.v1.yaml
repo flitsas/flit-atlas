@@ -5853,6 +5853,766 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.portal.ver
+  /api/v1/documentacion/publicaciones:
+    post:
+      tags:
+        - Documentación
+      summary: Publicar un lote de documentos desde la CI
+      description: 'Solo con el token OIDC de GitHub Actions del workflow reutilizable oficial, desde un repo, rama y workflow de la lista blanca con el tipo docs. El aplicativo de cada archivo, que dice su front-matter, debe estar autorizado para el repo. El ambiente sale de la rama (develop → dev, staging → qa, release → pdn). Responde 200 con el resultado de cada archivo: creada, igual (mismo hash: no crea versión, solo mueve el canal) o rechazada con su código. La cookie de la PWA no sirve aquí.'
+      operationId: PublicarLoteDocumentos
+      requestBody:
+        description: El lote.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudLote'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoLote'
+        '403':
+          description: 'El dueño del repo, el evento o el workflow reutilizable no están permitidos (sin cuerpo), o el repo, la rama, el workflow, el aplicativo o el tipo no están en la lista blanca (con el código).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorLote'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorLote'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - githubActions: [ ]
+  /api/v1/documentacion/documentos:
+    get:
+      tags:
+        - Documentación
+      summary: Documentos que la persona puede ver
+      description: 'Con el nivel de visibilidad aplicado en la consulta; la búsqueda (texto) es full-text en español sobre la versión vigente, sin distinguir tildes. Los archivados solo aparecen con estado=archivado y para quien puede editarlos. Requiere atlas.docs.ver.'
+      operationId: ListarDocumentos
+      parameters:
+        - name: aplicativo
+          in: query
+          description: Solo de este aplicativo.
+          schema:
+            type: string
+            format: uuid
+        - name: tipo
+          in: query
+          description: Solo de este tipo.
+          schema:
+            type: string
+        - name: estado
+          in: query
+          description: 'borrador, en_revision, publicado o archivado. Vacío: todos menos los archivados.'
+          schema:
+            type: string
+        - name: texto
+          in: query
+          description: Búsqueda full-text en español.
+          schema:
+            type: string
+        - name: pagina
+          in: query
+          description: Desde 1.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+        - name: tamano
+          in: query
+          description: De 1 a 100; por defecto 25.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoDocumentos'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    post:
+      tags:
+        - Documentación
+      summary: Crear un documento en Atlas
+      description: 'Lo crea en borrador con su revisión 1, auditado en la misma transacción. Requiere atlas.docs.editar global o sobre el aplicativo (responsable); si no, 403.'
+      operationId: CrearDocumento
+      requestBody:
+        description: El documento y su primera revisión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDocumento'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}':
+    get:
+      tags:
+        - Documentación
+      summary: Un documento con una de sus versiones
+      description: 'Por defecto, la versión vigente (la del canal pdn o, sin él, la última); con version o canal, esa. Una versión que la persona no puede leer responde 404. Requiere atlas.docs.ver.'
+      operationId: ObtenerDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: query
+          description: Número de versión.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+        - name: canal
+          in: query
+          description: 'dev, qa o pdn: la versión de ese canal.'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    put:
+      tags:
+        - Documentación
+      summary: Guardar un documento (revisión nueva)
+      description: 'Cada guardado crea una revisión inmutable y deja el documento en borrador; lo publicado no cambia hasta volver a publicar. 409 revision_desactualizada, sin_cambios, documento_de_repo o documento_archivado. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: GuardarDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/versiones':
+    get:
+      tags:
+        - Documentación
+      summary: Versiones de un documento
+      description: 'Las que la persona puede leer, de la más reciente a la más antigua, sin los cuerpos. Requiere atlas.docs.ver.'
+      operationId: ListarVersionesDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResumenVersionDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/documentacion/documentos/{id}/versiones/{numero}':
+    get:
+      tags:
+        - Documentación
+      summary: Una versión con su cuerpo
+      description: La PWA compara dos versiones con estos cuerpos. 404 si no existe o la persona no puede leerla. Requiere atlas.docs.ver.
+      operationId: ObtenerVersionDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleVersionDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/documentacion/documentos/{id}/revisiones':
+    get:
+      tags:
+        - Documentación
+      summary: Historial de revisiones
+      description: 'De la más reciente a la más antigua, sin los cuerpos. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: ListarRevisionesDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResumenRevisionDocumento'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/revisiones/{numero}':
+    get:
+      tags:
+        - Documentación
+      summary: Una revisión con su cuerpo
+      description: La revisión tal como se guardó. Requiere atlas.docs.editar sobre el aplicativo.
+      operationId: ObtenerRevisionDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la revisión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleRevisionDocumento'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/revisiones/{numero}/restauracion':
+    post:
+      tags:
+        - Documentación
+      summary: Restaurar una revisión
+      description: 'Crea una revisión nueva igual a la elegida, sin reescribir la historia, y deja el documento en borrador. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: RestaurarRevisionDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Revisión a restaurar.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      requestBody:
+        description: La nota y la última revisión que se vio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRestauracionDocumento'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/envio-revision':
+    post:
+      tags:
+        - Documentación
+      summary: Enviar a revisión
+      description: 'De borrador a en_revision. Revisa la lista blanca de MDX: 422 mdx_invalido con el detalle. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: EnviarDocumentoARevision
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión que se envía.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEstadoDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/devolucion':
+    post:
+      tags:
+        - Documentación
+      summary: Devolver a borrador
+      description: De en_revision a borrador. Requiere atlas.docs.aprobar sobre el aplicativo.
+      operationId: DevolverDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión que se devuelve.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEstadoDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.aprobar
+  '/api/v1/documentacion/documentos/{id}/publicacion':
+    post:
+      tags:
+        - Documentación
+      summary: Aprobar y publicar
+      description: 'De en_revision a publicado: congela la última revisión en una versión inmutable y la deja en el canal pdn. Lo publico_clientes solo lo aprueba el principal o el secundario; si el aplicativo no tiene responsables, el líder técnico. 403 aprobacion_requerida para los demás. Auditado, con el evento en la misma transacción. Requiere atlas.docs.aprobar sobre el aplicativo.'
+      operationId: PublicarDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión que se publica.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEstadoDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.aprobar
+  '/api/v1/documentacion/documentos/{id}/archivo':
+    post:
+      tags:
+        - Documentación
+      summary: Archivar
+      description: Deja de listarse a los lectores; sus versiones y revisiones siguen ahí. Los de repo se archivan desde la CI (409 documento_de_repo). Requiere atlas.docs.aprobar sobre el aplicativo.
+      operationId: ArchivarDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.aprobar
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -9259,6 +10019,19 @@ components:
             - string
           format: int64
       description: Un archivo generado.
+    ArchivoLote:
+      required:
+        - ruta
+        - contenido
+      type: object
+      properties:
+        ruta:
+          type: string
+          description: 'Ruta en el repo; con el aplicativo, identifica al documento.'
+        contenido:
+          type: string
+          description: El archivo completo (front-matter y MDX).
+      description: Un archivo del repo.
     AsignacionVista:
       required:
         - id
@@ -9948,6 +10721,23 @@ components:
             - string
           format: date-time
       description: Versión de un contrato en un ambiente; vacía si nunca se desplegó allí.
+    CanalDocumentoDto:
+      required:
+        - ambiente
+        - version
+      type: object
+      properties:
+        ambiente:
+          type: string
+          description: 'dev, qa o pdn.'
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de la versión.
+          format: int32
+      description: Versión de un documento en un ambiente.
     CanalDto:
       required:
         - ambiente
@@ -11012,6 +11802,40 @@ components:
           items:
             $ref: '#/components/schemas/AvisoDelPortal'
       description: Detalle de un paquete compartido.
+    DetalleRevisionDocumento:
+      required:
+        - revision
+        - tipo
+        - contenido
+        - audiencias
+        - responsable
+      type: object
+      properties:
+        revision:
+          $ref: '#/components/schemas/ResumenRevisionDocumento'
+        tipo:
+          type: string
+        contenido:
+          type: string
+        audiencias:
+          type: array
+          items:
+            type: string
+        responsable:
+          type: string
+      description: Revisión inmutable con su cuerpo.
+    DetalleVersionDocumento:
+      required:
+        - version
+        - contenido
+      type: object
+      properties:
+        version:
+          $ref: '#/components/schemas/ResumenVersionDocumento'
+        contenido:
+          type: string
+          description: 'Cuerpo en MDX, sin evaluar.'
+      description: Versión inmutable con su cuerpo en MDX.
     DiferenciaDto:
       required:
         - patron
@@ -11127,6 +11951,101 @@ components:
         ruta:
           type: string
       description: 'Documento funcional de un aplicativo (llega con la documentación, F5).'
+    DocumentoDetalle:
+      required:
+        - documento
+        - canales
+        - version
+        - puedeEditar
+        - puedeAprobar
+      type: object
+      properties:
+        documento:
+          $ref: '#/components/schemas/DocumentoResumen'
+        canales:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanalDocumentoDto'
+        version:
+          oneOf:
+            - type: 'null'
+            - description: La versión pedida o la vigente; vacío si aún no tiene una que la persona pueda leer.
+              $ref: '#/components/schemas/DetalleVersionDocumento'
+        puedeEditar:
+          type: boolean
+          description: 'Si puede editarlo: nunca en los de repo.'
+        puedeAprobar:
+          type: boolean
+          description: 'Si puede aprobar lo que está en revisión; si es publico_clientes, solo el principal o el secundario (o, sin responsables, el líder técnico).'
+      description: Un documento con la versión pedida y lo que la persona puede hacer.
+    DocumentoResumen:
+      required:
+        - id
+        - aplicativoId
+        - origen
+        - tipo
+        - titulo
+        - visibilidad
+        - audiencias
+        - responsable
+        - estado
+        - ruta
+        - versionVigente
+        - revisionActual
+        - actualizadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        aplicativoId:
+          type: string
+          format: uuid
+        origen:
+          type: string
+          description: repo (no se edita en Atlas) o atlas.
+        tipo:
+          type: string
+          description: 'manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial, adr o nota_version.'
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'publico_clientes, interno_negocio, interno_ti o restringido.'
+        audiencias:
+          type: array
+          items:
+            type: string
+        responsable:
+          type: string
+          description: Responsable funcional.
+        estado:
+          type: string
+          description: 'borrador, en_revision, publicado o archivado.'
+        ruta:
+          type:
+            - 'null'
+            - string
+          description: 'Ruta en el repo, si es de origen repo.'
+        versionVigente:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: La versión que se lee por defecto; vacío si no tiene.
+          format: int32
+        revisionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de la última revisión; 0 en los de repo.
+          format: int32
+        actualizadoEn:
+          type: string
+          format: date-time
+      description: 'Un documento, sin el cuerpo.'
     DocumentoVigente:
       required:
         - documento
@@ -11448,6 +12367,24 @@ components:
         mensaje:
           type: string
       description: 'Por qué no se pudo calcular el diff, con un código estable.'
+    ErrorDocumento:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso, aprobacion_requerida (403); documento_de_repo, documento_archivado, revision_desactualizada, sin_cambios, estado_invalido, ya_publicada (409); mdx_invalido (422).'
+        mensaje:
+          type: string
+        errores:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorEquipo:
       required:
         - codigo
@@ -11517,6 +12454,18 @@ components:
         mensaje:
           type: string
       description: 'Por qué no se hizo, con un código estable.'
+    ErrorLote:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: fuente_no_autorizada (403) o rama_sin_ambiente (422).
+        mensaje:
+          type: string
+      description: 'Por qué no se publicó el lote, con un código estable.'
     ErrorPaquete:
       required:
         - codigo
@@ -13109,6 +14058,23 @@ components:
           items:
             $ref: '#/components/schemas/ContratoResumen'
       description: 'Contratos que cumplen el filtro, ordenados por aplicativo y código.'
+    ListadoDocumentos:
+      required:
+        - total
+        - elementos
+      type: object
+      properties:
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoResumen'
+      description: Una página de documentos.
     ListadoElegibles:
       required:
         - elementos
@@ -14936,6 +15902,46 @@ components:
           description: 'Cuándo la hizo la persona, si la hizo sin conexión.'
           format: date-time
       description: 'Respuesta del reemplazo: acepta o rechaza tomar el turno.'
+    ResultadoArchivo:
+      required:
+        - ruta
+        - resultado
+        - documentoId
+        - version
+        - codigo
+        - errores
+      type: object
+      properties:
+        ruta:
+          type: string
+        resultado:
+          type: string
+          description: 'creada (versión nueva), igual (ya existía con el mismo hash: solo se mueve el canal) o rechazada.'
+        documentoId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Número de la versión que quedó en el canal.
+          format: int32
+        codigo:
+          type:
+            - 'null'
+            - string
+          description: 'Si se rechazó: front_matter_invalido, documento_invalido, mdx_invalido, ruta_invalida, ruta_de_otro_repo, aplicativo_no_autorizado, tipo_no_autorizado, fuente_no_autorizada, conflicto_concurrente o contenido_no_indexable.'
+        errores:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+      description: Qué pasó con un archivo.
     ResultadoBusquedaPersonas:
       required:
         - personas
@@ -15040,6 +16046,26 @@ components:
           description: 'El informe: lo mismo que la vista previa confirmada.'
           $ref: '#/components/schemas/VistaPreviaImportacionDto'
       description: 'Resultado de la importación, con el informe final.'
+    ResultadoLote:
+      required:
+        - ambiente
+        - resultados
+        - retiradas
+      type: object
+      properties:
+        ambiente:
+          type: string
+          description: 'dev, qa o pdn, según la rama.'
+        resultados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultadoArchivo'
+        retiradas:
+          type: array
+          items:
+            type: string
+          description: Rutas que salieron del canal de este ambiente porque ya no están en el repo.
+      description: Resultado del lote.
     ResultadoPortal:
       required:
         - tipo
@@ -15215,6 +16241,104 @@ components:
           description: Casos ambiguos (filas marcadas para revisión).
           format: int32
       description: Conteos de la vista previa o de la importación.
+    ResumenRevisionDocumento:
+      required:
+        - numero
+        - origen
+        - restauradaDe
+        - titulo
+        - visibilidad
+        - nota
+        - autorPersonaId
+        - guardadaEn
+        - huella
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        origen:
+          type: string
+          description: 'creacion, edicion o restauracion.'
+        restauradaDe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+        nota:
+          type: string
+        autorPersonaId:
+          type: string
+          format: uuid
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+      description: 'Revisión inmutable, sin el cuerpo.'
+    ResumenVersionDocumento:
+      required:
+        - numero
+        - titulo
+        - visibilidad
+        - esBorrador
+        - sha256
+        - repositorio
+        - rama
+        - commitSha
+        - revisionOrigen
+        - publicadoEn
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'publico_clientes, interno_negocio, interno_ti o restringido.'
+        esBorrador:
+          type: boolean
+          description: 'De repo y sin aprobar: solo la ven los roles técnicos y los responsables.'
+        sha256:
+          type: string
+        repositorio:
+          type:
+            - 'null'
+            - string
+        rama:
+          type:
+            - 'null'
+            - string
+        commitSha:
+          type:
+            - 'null'
+            - string
+        revisionOrigen:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Revisión congelada, si se escribió en Atlas.'
+          format: int32
+        publicadoEn:
+          type: string
+          format: date-time
+      description: 'Versión inmutable, sin el cuerpo.'
     RevisionDetalle:
       required:
         - numero
@@ -16287,6 +17411,58 @@ components:
           description: 'Fecha de retiro (aaaa-mm-dd): después de hoy y a lo sumo dentro de dos años. Deprecar otra vez cambia la fecha y avisa de nuevo.'
           format: date
       description: 'Deprecar una versión: la fecha en que se retira (hora de Bogotá).'
+    SolicitudDocumento:
+      required:
+        - aplicativoId
+        - tipo
+        - titulo
+        - contenido
+        - visibilidad
+        - audiencias
+        - responsable
+        - nota
+        - revisionBase
+      type: object
+      properties:
+        aplicativoId:
+          type:
+            - 'null'
+            - string
+          description: 'Al crear: el aplicativo. Al editar se ignora.'
+          format: uuid
+        tipo:
+          type: string
+          description: 'manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial o nota_version; adr solo llega desde los repos.'
+        titulo:
+          type: string
+          description: Hasta 200 caracteres.
+        contenido:
+          type: string
+          description: 'Cuerpo en MDX, hasta 300 mil caracteres. La lista blanca se revisa al enviar a revisión y al publicar.'
+        visibilidad:
+          type: string
+          description: 'publico_clientes, interno_negocio, interno_ti o restringido: uno que la persona alcance a ver.'
+        audiencias:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+        responsable:
+          type: string
+          description: 'Responsable funcional, hasta 200 caracteres.'
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        revisionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Al editar: la revisión sobre la que se trabajó (409 si hay otra más nueva).'
+          format: int32
+      description: Lo que se guarda en una revisión nueva.
     SolicitudEnlace:
       required:
         - enlace
@@ -16303,6 +17479,19 @@ components:
         enlace:
           type: string
       description: Enlace de activación de la cuenta de emergencia (el fragmento de la URL que imprime el comando).
+    SolicitudEstadoDocumento:
+      required:
+        - revision
+      type: object
+      properties:
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La revisión sobre la que se actúa: debe ser la última (409 si no).'
+          format: int32
+      description: Un cambio de estado sobre la última revisión.
     SolicitudExportacion:
       required:
         - paqueteId
@@ -16614,6 +17803,24 @@ components:
             type: string
           description: 'exportar, sandbox.'
       description: Invitación nueva. Un proveedor exige vencimiento y alcance; el vencimiento no supera el máximo configurado.
+    SolicitudLote:
+      required:
+        - documentos
+      type: object
+      properties:
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArchivoLote'
+          description: Hasta 100 archivos; el lote va hasta 8 MB. Un repo con más los manda en varios lotes.
+        rutasVigentes:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Opcional, solo en el último lote: todas las rutas que siguen en el repo. Un documento del repo que no esté aquí sale del canal de este ambiente y, sin canales, queda archivado; sus versiones no se borran. No puede ir vacía.'
+      description: Lo que publica un commit.
     SolicitudMapeoGrupo:
       required:
         - grupoId
@@ -16825,6 +18032,23 @@ components:
             - integer
             - string
           description: La última revisión que vio la persona (409 si ya hay otra más nueva).
+          format: int32
+      description: 'Restaurar una revisión: crea otra igual a ella.'
+    SolicitudRestauracionDocumento:
+      required:
+        - nota
+        - revisionBase
+      type: object
+      properties:
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        revisionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: La última revisión que vio la persona.
           format: int32
       description: 'Restaurar una revisión: crea otra igual a ella.'
     SolicitudSandbox:
@@ -17818,6 +19042,8 @@ tags:
     description: 'Catálogo de aplicativos de FLIT: productos, módulos y servicios con su repo, tecnología, ambientes, criticidad, datos personales, estado y etiquetas, y la ficha de cada uno.'
   - name: Contratos
     description: 'Contratos de integración (OpenAPI, AsyncAPI y proto) publicados desde la CI de cada repo con el token OIDC de GitHub Actions y la lista blanca del catálogo: versiones semánticas inmutables con su hash y su procedencia, el spec de cada versión y el índice de operaciones, webhooks, canales y rpc.'
+  - name: Documentación
+    description: 'Documentación técnica y funcional viva: lo que llega de los repos por la CI como versiones inmutables y lo que se escribe en Atlas con revisiones y aprobación del responsable, con su nivel de visibilidad aplicado en cada consulta.'
   - name: Equipo
     description: 'Responsables principal y secundario de cada producto y módulo: reparto importado del documento, vistas por persona y por aplicativo, mapa de carga, historial versionado, traspasos, revisión trimestral, CODEOWNERS y «¿A quién llamo?».'
   - name: Hola

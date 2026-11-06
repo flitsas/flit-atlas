@@ -43,7 +43,7 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.exportaciones.solicitar` | Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP). | ✔ | ✔ | ✔ |   | ✔ |   |   |   | ✔ |   | ✔ |   |   |   |
 | `atlas.sandbox.usar` | Usar el sandbox de los contratos. | ✔ | ✔ | ✔ | ✔ |   |   |   |   | ✔ |   |   |   |   |   |
 
-## Documentación (`documentacion`)
+## Documentación (`docs`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
