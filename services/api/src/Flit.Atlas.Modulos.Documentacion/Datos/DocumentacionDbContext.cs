@@ -180,6 +180,70 @@ public sealed class RevisionDocumento : Entidad
     public required string Huella { get; init; }
 }
 
+/// <summary>Estado de una exportación (ATLAS-ADR-0053 §7).</summary>
+public enum EstadoExportacionDocumentos
+{
+    Pendiente,
+    Procesando,
+    Lista,
+    Fallida,
+    Vencida,
+}
+
+/// <summary>
+/// Una exportación de un documento o de una colección (HU 5.6): quién la pidió (la única persona que la ve y la descarga),
+/// qué entró, su estado y sus objetos en el S3. Sin <c>organizacion_id</c>: hasta que exista compartir, solo exportan empleados.
+/// </summary>
+public sealed class ExportacionDocumentos : Entidad
+{
+    public required Guid SolicitadaPor { get; init; }
+
+    public required string Nombre { get; init; }
+
+    /// <summary>El documento, si es de uno solo (para el enlace del aviso).</summary>
+    public Guid? DocumentoId { get; init; }
+
+    /// <summary>Qué se exportó (<c>jsonb</c>): <c>[{documentoId, version, sha256, visibilidad}]</c>.</summary>
+    public required string Documentos { get; init; }
+
+    public List<string> Formatos { get; init; } = [];
+
+    public EstadoExportacionDocumentos Estado { get; set; } = EstadoExportacionDocumentos.Pendiente;
+
+    public required string EntradaClave { get; init; }
+
+    public required string EntradaSha256 { get; init; }
+
+    public string? Objeto { get; set; }
+
+    public string? HashContenido { get; set; }
+
+    /// <summary>Archivos en el S3 (<c>jsonb</c>): <c>[{clave, ruta, formato, bytes, sha256, tipo}]</c>.</summary>
+    public string Archivos { get; set; } = "[]";
+
+    public string? ErrorCodigo { get; set; }
+
+    public string? Error { get; set; }
+
+    public required DateTimeOffset SolicitadaEn { get; init; }
+
+    public DateTimeOffset? IniciadaEn { get; set; }
+
+    public DateTimeOffset? TerminadaEn { get; set; }
+
+    public DateTimeOffset? VenceEn { get; set; }
+
+    public DateTimeOffset? VencidaEn { get; set; }
+}
+
+/// <summary>Un documento que una persona marcó para leer sin conexión (HU 5.4, ATLAS-ADR-0034).</summary>
+public sealed class FavoritoDocumento : Entidad
+{
+    public required Guid PersonaId { get; init; }
+
+    public required Guid DocumentoId { get; init; }
+}
+
 /// <summary>Qué versión de un documento corre en cada ambiente (ATLAS-ADR-0053 §2).</summary>
 public sealed class CanalDocumento : Entidad
 {
@@ -211,6 +275,8 @@ public sealed class DocumentacionDbContext(DbContextOptions<DocumentacionDbConte
     public const int LargoNota = 500;
     public const int LargoAudiencia = 60;
     public const int MaximoAudiencias = 20;
+    public const int LargoClaveObjeto = 500;
+    public const int LargoErrorExportacion = 500;
 
     /// <summary>
     /// Tope del cuerpo. Mantiene el <c>tsvector</c> por debajo de su límite de 1 MB aun con un texto de palabras cortas y
@@ -225,6 +291,10 @@ public sealed class DocumentacionDbContext(DbContextOptions<DocumentacionDbConte
     public DbSet<RevisionDocumento> Revisiones => Set<RevisionDocumento>();
 
     public DbSet<CanalDocumento> Canales => Set<CanalDocumento>();
+
+    public DbSet<ExportacionDocumentos> Exportaciones => Set<ExportacionDocumentos>();
+
+    public DbSet<FavoritoDocumento> Favoritos => Set<FavoritoDocumento>();
 
     /// <summary>Propiedad sombra con el <c>tsvector</c> de la versión.</summary>
     public const string ColumnaBusqueda = "Busqueda";
@@ -326,6 +396,42 @@ public sealed class DocumentacionDbContext(DbContextOptions<DocumentacionDbConte
             e.HasOne<VersionDocumento>().WithMany().HasPrincipalKey(v => new { v.DocumentoId, v.Numero })
                 .HasForeignKey(c => new { c.DocumentoId, c.VersionNumero }).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(c => new { c.DocumentoId, c.Ambiente }).IsUnique();
+        });
+
+        modelBuilder.Entity<ExportacionDocumentos>(e =>
+        {
+            e.ToTable(Prefijo + "exportacion", t =>
+            {
+                t.HasComment("Exportaciones de documentos y colecciones: quién, qué, formatos, estado y objetos en el S3 (ATLAS-ADR-0053).");
+                t.HasCheckConstraint("ck_documentacion_exportacion_lista",
+                    "estado <> 'lista' OR (objeto IS NOT NULL AND hash_contenido IS NOT NULL AND terminada_en IS NOT NULL AND vence_en IS NOT NULL)");
+                t.HasCheckConstraint("ck_documentacion_exportacion_hash", "hash_contenido IS NULL OR hash_contenido ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("ck_documentacion_exportacion_documentos", "jsonb_typeof(documentos) = 'array'");
+                t.HasCheckConstraint("ck_documentacion_exportacion_archivos", "jsonb_typeof(archivos) = 'array'");
+            });
+            e.Property(x => x.Id).ValueGeneratedNever();
+            Enum(e.Property(x => x.Estado), 20);
+            e.Property(x => x.Nombre).HasMaxLength(LargoTitulo + 100);
+            e.Property(x => x.Documentos).HasColumnType("jsonb");
+            e.Property(x => x.EntradaClave).HasMaxLength(LargoClaveObjeto);
+            e.Property(x => x.EntradaSha256).HasMaxLength(64).IsFixedLength();
+            e.Property(x => x.Objeto).HasMaxLength(LargoClaveObjeto);
+            e.Property(x => x.HashContenido).HasMaxLength(64).IsFixedLength();
+            e.Property(x => x.Archivos).HasColumnType("jsonb");
+            e.Property(x => x.ErrorCodigo).HasMaxLength(40);
+            e.Property(x => x.Error).HasMaxLength(LargoErrorExportacion);
+            e.HasOne<Documento>().WithMany().HasForeignKey(x => x.DocumentoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.SolicitadaPor, x.SolicitadaEn });
+            // El trabajo de retención busca las que vencen y las pendientes viejas.
+            e.HasIndex(x => new { x.Estado, x.VenceEn });
+        });
+
+        modelBuilder.Entity<FavoritoDocumento>(e =>
+        {
+            e.ToTable(Prefijo + "favorito", t => t.HasComment("Documentos que cada persona marcó para leer sin conexión (ATLAS-ADR-0034)."));
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasOne<Documento>().WithMany().HasForeignKey(x => x.DocumentoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.PersonaId, x.DocumentoId }).IsUnique();
         });
     }
 

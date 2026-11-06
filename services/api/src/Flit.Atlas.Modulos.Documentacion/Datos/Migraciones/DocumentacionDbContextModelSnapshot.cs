@@ -177,6 +177,173 @@ namespace Flit.Atlas.Modulos.Documentacion.Datos.Migraciones
                         });
                 });
 
+            modelBuilder.Entity("Flit.Atlas.Modulos.Documentacion.Datos.ExportacionDocumentos", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Archivos")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("archivos");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("DocumentoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("documento_id");
+
+                    b.Property<string>("Documentos")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("documentos");
+
+                    b.Property<string>("EntradaClave")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("entrada_clave");
+
+                    b.Property<string>("EntradaSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("entrada_sha256")
+                        .IsFixedLength();
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("error");
+
+                    b.Property<string>("ErrorCodigo")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("error_codigo");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.PrimitiveCollection<List<string>>("Formatos")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("formatos");
+
+                    b.Property<string>("HashContenido")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("hash_contenido")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset?>("IniciadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("iniciada_en");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("nombre");
+
+                    b.Property<string>("Objeto")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("objeto");
+
+                    b.Property<DateTimeOffset>("SolicitadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("solicitada_en");
+
+                    b.Property<Guid>("SolicitadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitada_por");
+
+                    b.Property<DateTimeOffset?>("TerminadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("terminada_en");
+
+                    b.Property<DateTimeOffset?>("VenceEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("vence_en");
+
+                    b.Property<DateTimeOffset?>("VencidaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("vencida_en");
+
+                    b.HasKey("Id")
+                        .HasName("pk_documentacion_exportacion");
+
+                    b.HasIndex("DocumentoId")
+                        .HasDatabaseName("ix_documentacion_exportacion_documento_id");
+
+                    b.HasIndex("Estado", "VenceEn")
+                        .HasDatabaseName("ix_documentacion_exportacion_estado_vence_en");
+
+                    b.HasIndex("SolicitadaPor", "SolicitadaEn")
+                        .HasDatabaseName("ix_documentacion_exportacion_solicitada_por_solicitada_en");
+
+                    b.ToTable("documentacion_exportacion", "atlas", t =>
+                        {
+                            t.HasComment("Exportaciones de documentos y colecciones: quién, qué, formatos, estado y objetos en el S3 (ATLAS-ADR-0053).");
+
+                            t.HasCheckConstraint("ck_documentacion_exportacion_archivos", "jsonb_typeof(archivos) = 'array'");
+
+                            t.HasCheckConstraint("ck_documentacion_exportacion_documentos", "jsonb_typeof(documentos) = 'array'");
+
+                            t.HasCheckConstraint("ck_documentacion_exportacion_hash", "hash_contenido IS NULL OR hash_contenido ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_documentacion_exportacion_lista", "estado <> 'lista' OR (objeto IS NOT NULL AND hash_contenido IS NOT NULL AND terminada_en IS NOT NULL AND vence_en IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Documentacion.Datos.FavoritoDocumento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid>("DocumentoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("documento_id");
+
+                    b.Property<Guid>("PersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_documentacion_favorito");
+
+                    b.HasIndex("DocumentoId")
+                        .HasDatabaseName("ix_documentacion_favorito_documento_id");
+
+                    b.HasIndex("PersonaId", "DocumentoId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_documentacion_favorito_persona_id_documento_id");
+
+                    b.ToTable("documentacion_favorito", "atlas", t =>
+                        {
+                            t.HasComment("Documentos que cada persona marcó para leer sin conexión (ATLAS-ADR-0034).");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Atlas.Modulos.Documentacion.Datos.RevisionDocumento", b =>
                 {
                     b.Property<Guid>("Id")
@@ -446,6 +613,25 @@ namespace Flit.Atlas.Modulos.Documentacion.Datos.Migraciones
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_documentacion_canal_documentacion_version_documento_id_vers");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Documentacion.Datos.ExportacionDocumentos", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Documentacion.Datos.Documento", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_documentacion_exportacion_documentacion_documento_documento");
+                });
+
+            modelBuilder.Entity("Flit.Atlas.Modulos.Documentacion.Datos.FavoritoDocumento", b =>
+                {
+                    b.HasOne("Flit.Atlas.Modulos.Documentacion.Datos.Documento", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_documentacion_favorito_documentacion_documento_documento_id");
                 });
 
             modelBuilder.Entity("Flit.Atlas.Modulos.Documentacion.Datos.RevisionDocumento", b =>

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using Flit.Atlas.Modulos.Documentacion.Datos;
+using Flit.Atlas.Modulos.Documentacion.TiempoReal;
 using Flit.Atlas.Plataforma;
 using Flit.Atlas.Plataforma.Datos;
 using Flit.Atlas.Plataforma.Entidades;
@@ -568,7 +569,7 @@ internal static class EndpointsDocumentos
         [Description("Id del documento.")] Guid id,
         [Description("La revisión que se publica.")] SolicitudEstadoDocumento solicitud,
         HttpContext http, DocumentacionDbContext contexto, PlataformaDbContext plataforma, IPermisosDeSesion permisosDeSesion, ILectorAplicativos lector,
-        ILectorResponsables responsables, TimeProvider reloj, CancellationToken ct)
+        ILectorResponsables responsables, AvisosDocumentos avisos, TimeProvider reloj, CancellationToken ct)
     {
         var (documento, acceso, error) = await ParaAprobarAsync(id, http.User, contexto, permisosDeSesion, lector, ct);
         if (documento is null)
@@ -628,6 +629,7 @@ internal static class EndpointsDocumentos
         }),
             nueva is null ? null : new PublicacionDocumentos.DatosVersionPublicada(id, nueva.Id, numero, documento.AplicativoId, slug, ReglasDocumentos.Texto(OrigenDocumento.Atlas),
                 foto.Tipo, ReglasDocumentos.Texto(foto.Visibilidad), false, sha, OpcionesDocumentacion.CanalVigente, null, null, null), ct);
+        await avisos.VersionNuevaAsync(id, numero);
         return Results.Ok(await DetalleAsync(documento, documento.VersionVigente, acceso, contexto, responsables, ct));
     }
 

@@ -84,7 +84,7 @@ internal static partial class EndpointsPublicacionDocumentos
     private static async Task<IResult> PublicarAsync(
         [Description("El lote.")] SolicitudLote solicitud,
         HttpContext http, DocumentacionDbContext contexto, PlataformaDbContext plataforma, IFuentesPublicacion fuentes,
-        IOptions<OpcionesDocumentacion> opciones, TimeProvider reloj, ILoggerFactory logs, CancellationToken ct)
+        IOptions<OpcionesDocumentacion> opciones, TiempoReal.AvisosDocumentos avisos, TimeProvider reloj, ILoggerFactory logs, CancellationToken ct)
     {
         var log = logs.CreateLogger(typeof(EndpointsPublicacionDocumentos));
         var publicador = http.Publicador();
@@ -133,6 +133,15 @@ internal static partial class EndpointsPublicacionDocumentos
         var retiradas = solicitud.RutasVigentes is { } rutas
             ? await RetirarAusentesAsync(rutas, ambiente, publicador, validas, http, contexto, plataforma, reloj, ct)
             : [];
+
+        // Quien tenga abierto uno de estos documentos ve la versión nueva o el canal que se movió; sin nadie en el grupo no cuesta nada.
+        foreach (var r in resultados.Where(r => r.Resultado != "rechazada"))
+        {
+            if (r.DocumentoId is { } documento && r.Version is { } numero)
+            {
+                await avisos.VersionNuevaAsync(documento, numero);
+            }
+        }
 
         var creadas = resultados.Count(r => r.Resultado == "creada");
         var iguales = resultados.Count(r => r.Resultado == "igual");

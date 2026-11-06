@@ -23,7 +23,7 @@ public class ModuloDocumentacionTests(Contenedores contenedores)
         Assert.Equal(typeof(DocumentacionDbContext), modulo.ContextoDatos);
         Assert.Equal("__ef_migraciones_documentacion", DocumentacionDbContext.TablaHistorial);
         Assert.Empty(modulo.Permisos.Permisos);
-        Assert.Equal(["atlas.documentacion.version_publicada"], modulo.EventosPublicados.Select(e => e.Nombre));
+        Assert.Equal(["atlas.documentacion.version_publicada", "atlas.documentacion.exportacion_solicitada"], modulo.EventosPublicados.Select(e => e.Nombre));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class ModuloDocumentacionTests(Contenedores contenedores)
         Assert.Empty(await contexto.Database.GetPendingMigrationsAsync(Ct));
         var tablas = await Contenedores.ConsultarAsync(bd.Servicio,
             "SELECT table_name::text FROM information_schema.tables WHERE table_schema = 'atlas' AND table_name LIKE 'documentacion%' ORDER BY 1");
-        Assert.Equal(["documentacion_canal", "documentacion_documento", "documentacion_revision", "documentacion_version"], tablas);
+        Assert.Equal(["documentacion_canal", "documentacion_documento", "documentacion_exportacion", "documentacion_favorito", "documentacion_revision", "documentacion_version"], tablas);
     }
 
     [Fact]

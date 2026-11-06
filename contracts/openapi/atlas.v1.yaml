@@ -6613,6 +6613,279 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.docs.aprobar
+  /api/v1/documentacion/favoritos:
+    get:
+      tags:
+        - Documentación
+      summary: Mis documentos favoritos
+      description: 'Los que la persona marcó y todavía puede ver, del más reciente al más antiguo. Requiere atlas.docs.ver.'
+      operationId: ListarFavoritosDocumentos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FavoritoDocumentoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/documentacion/favoritos/{documentoId}':
+    put:
+      tags:
+        - Documentación
+      summary: Marcar un documento como favorito
+      description: Idempotente. 404 si no existe o la persona no puede verlo. Requiere atlas.docs.ver.
+      operationId: MarcarDocumentoFavorito
+      parameters:
+        - name: documentoId
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritoDocumentoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.ver.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    delete:
+      tags:
+        - Documentación
+      summary: Quitar un documento de los favoritos
+      description: 204 aunque no fuera favorito o la persona ya no pueda verlo. Requiere atlas.docs.ver.
+      operationId: QuitarDocumentoFavorito
+      parameters:
+        - name: documentoId
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.ver.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  /api/v1/documentacion/exportaciones:
+    post:
+      tags:
+        - Documentación
+      summary: Exportar un documento o una colección
+      description: 'Deja la entrada en el S3, con el MDX convertido y los componentes vivos con los valores que la persona puede ver, y encola la generación: responde 202 sin esperarla. 404 si alguno de los documentos o versiones no existe o la persona no puede leerlo; 409 sin_version si un documento aún no tiene versión. 429 exportaciones_en_curso si ya tiene el máximo en proceso (2 por defecto), con Retry-After. Requiere atlas.docs.exportar y un ingreso reciente.'
+      operationId: SolicitarExportacionDocumentos
+      requestBody:
+        description: Qué exportar y en qué formatos.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudExportacionDocumentos'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDocumentosDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.exportar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasExportaciones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
+    get:
+      tags:
+        - Documentación
+      summary: Mis exportaciones de documentos
+      description: 'Las últimas 20 de la persona, de la más reciente a la más antigua. Requiere atlas.docs.exportar.'
+      operationId: ListarExportacionesDocumentos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoExportacionesDocumentos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.exportar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
+  '/api/v1/documentacion/exportaciones/{exportacionId}':
+    get:
+      tags:
+        - Documentación
+      summary: Estado de una exportación de documentos
+      description: 'pendiente, procesando, lista (con sus archivos), fallida (con el error) o vencida. Solo la ve quien la pidió (404 para los demás). Requiere atlas.docs.exportar.'
+      operationId: ObtenerExportacionDocumentos
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDocumentosDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.exportar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
+  '/api/v1/documentacion/exportaciones/{exportacionId}/descarga':
+    get:
+      tags:
+        - Documentación
+      summary: URL firmada de descarga
+      description: 'Una URL del S3 firmada por 15 minutos para el ZIP o, con archivo, para uno de sus archivos. 409 no_lista; 410 vencida. Auditado. Requiere atlas.docs.exportar.'
+      operationId: DescargarExportacionDocumentos
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: archivo
+          in: query
+          description: Ruta de un archivo de la exportación; vacío = el ZIP.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescargaExportacionDocumentos'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.exportar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -9995,6 +10268,30 @@ components:
           type: boolean
           description: Si la persona ve teléfonos (atlas.equipo.ver_contacto).
       description: '«¿A quién llamo?»: soporte de turno si hoy es sábado, y el principal y el secundario del aplicativo.'
+    ArchivoExportacionDocumentos:
+      required:
+        - ruta
+        - nombre
+        - formato
+        - bytes
+      type: object
+      properties:
+        ruta:
+          type: string
+          description: Ruta dentro de la exportación; es el valor de archivo en la descarga.
+        nombre:
+          type: string
+          description: Nombre con que se descarga.
+        formato:
+          type: string
+          description: 'html, pdf, word, markdown o zip.'
+        bytes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int64
+      description: Un archivo generado.
     ArchivoExportacionDto:
       required:
         - ruta
@@ -11705,6 +12002,31 @@ components:
           description: Cuándo vence la URL (15 minutos).
           format: date-time
       description: URL firmada para descargar un archivo de una exportación.
+    DescargaExportacionDocumentos:
+      required:
+        - url
+        - nombre
+        - bytes
+        - venceEn
+      type: object
+      properties:
+        url:
+          type: string
+          description: 'URL del almacenamiento S3, firmada y de un solo archivo; deja de servir al vencer.'
+          format: uri
+        nombre:
+          type: string
+        bytes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int64
+        venceEn:
+          type: string
+          description: Cuándo vence la URL (15 minutos).
+          format: date-time
+      description: URL firmada para descargar un archivo.
     Desfase:
       required:
         - ambiente
@@ -11933,6 +12255,24 @@ components:
           type: boolean
           description: La respuesta salió de la caché de atlas-render.
       description: 'Diff entre dos versiones de un contrato: primero los cambios que rompen compatibilidad, del más grave al menos.'
+    DocumentoAExportar:
+      required:
+        - documentoId
+        - version
+      type: object
+      properties:
+        documentoId:
+          type: string
+          format: uuid
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Número de versión; vacío = la vigente.
+          format: int32
+      description: Un documento a exportar.
     DocumentoDelAplicativo:
       required:
         - id
@@ -12343,6 +12683,18 @@ components:
             type: string
           description: 'Con no_publicable: qué ya no se cumple en la revisión fijada.'
       description: 'Por qué no se hizo, con un código estable.'
+    ErrorDeExportacionDocumentos:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'pdf_no_disponible, entrada_invalida, tiempo_agotado o interno.'
+        mensaje:
+          type: string
+      description: Por qué falló una exportación.
     ErrorDeprecacion:
       required:
         - codigo
@@ -12417,6 +12769,18 @@ components:
           items:
             type: string
           description: 'Con no_exportable: qué impide exportar.'
+      description: 'Por qué no se hizo, con un código estable.'
+    ErrorExportacionDocumentos:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_version, no_lista (409); vencida (410); almacenamiento_no_disponible (503).'
+        mensaje:
+          type: string
       description: 'Por qué no se hizo, con un código estable.'
     ErrorExportacionDto:
       required:
@@ -12828,6 +13192,74 @@ components:
           description: 'Cuándo lo hizo la persona en su dispositivo, si lo hizo sin conexión.'
           format: date-time
       description: Paso del historial de una solicitud de cambio.
+    ExportacionDocumentosDto:
+      required:
+        - id
+        - estado
+        - nombre
+        - documentoId
+        - formatos
+        - solicitadaEn
+        - iniciadaEn
+        - listaEn
+        - venceEn
+        - hashContenido
+        - archivos
+        - error
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          description: 'pendiente, procesando, lista, fallida o vencida.'
+        nombre:
+          type: string
+        documentoId:
+          type:
+            - 'null'
+            - string
+          description: 'El documento, si es de uno solo.'
+          format: uuid
+        formatos:
+          type: array
+          items:
+            type: string
+        solicitadaEn:
+          type: string
+          format: date-time
+        iniciadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        listaEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo quedó lista o fallida.
+          format: date-time
+        venceEn:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo se puede descargar; después se borran los archivos.
+          format: date-time
+        hashContenido:
+          type:
+            - 'null'
+            - string
+          description: SHA-256 del contenido exportado (va en la portada de cada formato).
+        archivos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArchivoExportacionDocumentos'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ErrorDeExportacionDocumentos'
+      description: Una exportación de documentos y su estado.
     ExportacionDto:
       required:
         - id
@@ -12894,6 +13326,43 @@ components:
             - type: 'null'
             - $ref: '#/components/schemas/ErrorExportacionDto'
       description: Una exportación y su estado.
+    FavoritoDocumentoDto:
+      required:
+        - id
+        - documentoId
+        - titulo
+        - tipo
+        - versionVigente
+        - ruta
+        - marcadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        documentoId:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        tipo:
+          type: string
+          description: 'manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial, adr o nota_version.'
+        versionVigente:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'La versión vigente: la que la PWA guarda sin conexión.'
+          format: int32
+        ruta:
+          type: string
+          description: Ruta de la PWA.
+        marcadoEn:
+          type: string
+          format: date-time
+      description: Un documento marcado como favorito.
     FavoritoInterno:
       required:
         - id
@@ -14095,6 +14564,16 @@ components:
           items:
             $ref: '#/components/schemas/ExportacionDto'
       description: 'Las exportaciones de la persona, de la más reciente a la más antigua.'
+    ListadoExportacionesDocumentos:
+      required:
+        - elementos
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportacionDocumentosDto'
+      description: 'Las exportaciones de documentos de la persona, de la más reciente a la más antigua.'
     ListadoGuias:
       required:
         - contratoId
@@ -17528,6 +18007,33 @@ components:
             type: string
           description: 'openapi, postman, html, pdf, word, excel o zip; el ZIP con todo siempre se agrega.'
       description: 'Qué exportar: un paquete (en una revisión) o una versión de un contrato, y en qué formatos.'
+    SolicitudExportacionDocumentos:
+      required:
+        - documentos
+        - nombre
+        - formatos
+      type: object
+      properties:
+        documentos:
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/DocumentoAExportar'
+          description: 'Uno o, como colección, hasta 50 documentos, en el orden en que irán.'
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: 'Nombre de la colección, hasta 200 caracteres; de un solo documento, su título.'
+        formatos:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'html, pdf, word, markdown o zip; el ZIP con todo siempre se agrega.'
+      description: Qué exportar y en qué formatos.
     SolicitudExportacionPortal:
       required:
         - paqueteId

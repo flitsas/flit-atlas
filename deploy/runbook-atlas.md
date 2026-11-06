@@ -210,7 +210,7 @@ Si una organización legítima choca con un límite, sube el valor del ambiente 
 
 | Cola | Consume | Para qué |
 |---|---|---|
-| `atlas.docs.exportaciones` | atlas-docs | `atlas.contratos.exportacion_solicitada` |
+| `atlas.docs.exportaciones` | atlas-docs | `atlas.contratos.exportacion_solicitada`, `atlas.documentacion.exportacion_solicitada` |
 | `atlas.api.exportaciones` | atlas-api | resultados `_iniciada`, `_lista`, `_fallida` desde `flit.atlas.docs` |
 
 Cada cola tiene `<cola>.reintentos` (TTL 30 s, vuelve a la cola) y `<cola>.errores`. Un fallo se reintenta hasta 5

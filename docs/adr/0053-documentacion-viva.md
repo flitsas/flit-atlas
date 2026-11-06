@@ -117,12 +117,14 @@ de `develop` no cambia el título ni la visibilidad de lo que corre en pdn.
 
 Los niveles de §7.1 se traducen a un predicado obligatorio en cada consulta, incluidas búsqueda y exportes: `interno_ti` para
 superadmin, líder técnico y desarrollador; `restringido` para superadmin y gobierno de IA; los demás empleados, hasta
-`interno_negocio`. El responsable ve todos los documentos de su aplicativo, porque los edita (§7.2). Las tablas con
-datos de organizaciones externas (`documentacion_comparticion`, `documentacion_exportacion`) llevan `organizacion_id` y RLS.
+`interno_negocio`. El responsable ve todos los documentos de su aplicativo, porque los edita (§7.2).
 
-Un externo solo ve `publico_clientes` dentro de lo compartido con su organización. Compartir se construye en esta fase,
-pero nadie externo entra a pdn hasta cerrar la revisión de seguridad (`docs/seguridad/revision-f4.md` §8), que ya incluirá
-este módulo. `IDocumentacionDelPortal` deja de ser la implementación vacía cuando exista compartir.
+Un externo solo verá `publico_clientes` dentro de lo compartido con su organización. **Compartir no está construido:** por
+decisión del líder (06/11/2026) lo de externos va al final, así que hoy un externo no ve ningún documento, aunque tenga
+`atlas.docs.ver`. Al construirlo, `documentacion_comparticion` y `documentacion_exportacion` llevarán `organizacion_id` y RLS,
+e `IDocumentacionDelPortal` dejará de ser la implementación vacía. Hoy `documentacion_exportacion` no la lleva: es de una
+persona y solo exportan empleados. Nadie externo entra a pdn hasta cerrar la revisión de seguridad
+(`docs/seguridad/revision-f4.md` §8), que deberá incluir este módulo.
 
 ### 7. Búsqueda, exportes y eventos
 
@@ -131,9 +133,24 @@ este módulo. `IDocumentacionDelPortal` deja de ser la implementación vacía cu
   extensión la crea el administrador en cada ambiente y sigue sin verificarse en la 177
   (`docs/preparacion/04-prerrequisitos.md`). Si falta, la migración fallaría y atlas-api no arrancaría. La búsqueda
   normaliza el texto igual (`FuncionesSql.NormalizarBusqueda`) y cubre el español y el portugués.
-- Exportes: los hace atlas-docs por la cola existente (ATLAS-ADR-0042), con un tipo de entrada nuevo. El MDX se convierte
-  en contenido estático con los valores vigentes al exportar.
-- Eventos: `atlas.documentacion.version_publicada` (para F7), en el AsyncAPI.
+- Exportes (HU 5.6): uno o, como colección, hasta 50 documentos a PDF, Word, HTML y Markdown, siempre con un ZIP. Los hace
+  atlas-docs por la cola existente (ATLAS-ADR-0042), con una entrada propia (`EntradaDocumentos`). Solicitar exige
+  `atlas.docs.exportar` y un ingreso reciente, con el predicado de lectura de cada documento y versión: basta uno que la persona
+  no pueda leer para responder 404 a toda la solicitud, sin decir cuál. Solo quien pidió la exportación la ve y la descarga.
+- atlas-api convierte el MDX en Markdown estático con los valores vigentes al exportar, sin evaluar nada: `Alerta` deja su
+  título y su contenido, `Pestanas` sus títulos y su contenido, y `Contrato`, `Responsables` y `SoporteDeTurno` su valor solo si
+  **quien exporta** tiene el permiso de ese dato, como en el lector; si no, «No tienes acceso a este contenido». Un archivo sale
+  de Atlas: lo que la persona no ve no entra. `Responsables` lista los nombres sin distinguir principal de secundario, porque
+  es lo que da `ILectorResponsables`. `Diagrama` deja un texto hasta la F6. **Un bloque Mermaid queda como código en los
+  archivos:** dibujarlo exigiría un navegador o D2 en atlas-docs.
+- `ILectorContratos`, nueva lectura en Plataforma, le da el contrato a este módulo sin referenciar al de contratos.
+- **Sin permisos nuevos en RabbitMQ ni en el S3.** atlas-docs liga `atlas.documentacion.exportacion_solicitada` a su misma cola
+  `atlas.docs.exportaciones` y publica `atlas.documentacion.exportacion_{iniciada,lista,fallida}` en `flit.atlas.docs`. Los
+  resultados llegan a la misma cola `atlas.api.exportaciones`: los permisos de QA y pdn son una lista exacta de colas, y una cola
+  nueva sin su permiso tumbaría también el consumo de los contratos, porque `ConsumidorEventos` abre todo en un solo ciclo. Por
+  eso el consumidor ahora admite varios manejadores en una cola, con un consumidor por cola y despacho por tipo. La entrada va
+  bajo el mismo `exportaciones/<id>/`, con la misma regla de ciclo de vida.
+- Eventos: `atlas.documentacion.version_publicada` (para F7) y los de exportación, en el AsyncAPI.
 
 ### 8. Editor y tiempo real
 
@@ -143,12 +160,30 @@ este módulo. `IDocumentacionDelPortal` deja de ser la implementación vacía cu
 - **Tiptap queda para después [por verificar con el líder]:** 3.33.0 (MIT) se publicó el 05/11, sin las dos semanas. Un editor
   visual además debe conservar los componentes MDX al ida y vuelta, y eso necesita su propio trabajo.
 - Antes de adoptar cada librería se verifica versión estable con ≥ 2 semanas, licencia y que funcione con la CSP.
-- SignalR es el primer hub de Atlas: «quién está viendo» y «versión nueva». La edición colaborativa con Yjs queda fuera.
+- SignalR es el primer hub de Atlas (HU 5.8), en `/api/v1/documentacion/tiempo-real`: «quién está viendo» y «versión nueva». Pide
+  sesión y `atlas.docs.ver` al negociar; la bandera y el origen se revisan al conectar, porque el filtro de los endpoints y la
+  antifalsificación no cubren un WebSocket (un GET). Cada documento se revisa al entrar con el predicado de lectura. Por el hub
+  solo viajan nombres de quienes pueden ver el documento, ids y números de versión; nunca contenido.
+- Una conexión abierta no vuelve a pasar por la cookie: se cierra a los 5 minutos (`Documentacion:TiempoReal:VidaMaxima`) y el
+  cliente se reconecta, y al negociar se revisan otra vez la sesión y los permisos. Ese es el retraso máximo tras suspender a
+  alguien o quitarle el permiso, y durante ese rato solo puede recibir lo anterior.
+- **Sin backplane: una sola réplica.** QA y pdn corren atlas-api con `replicas: 1`. La presencia vive en memoria y los avisos solo
+  llegan a las conexiones de la réplica que publica. Con más réplicas, la presencia mostraría solo a los de la misma réplica, un
+  aviso de versión podría no llegar (el documento se ve al recargar) y el long polling exigiría afinidad de sesión. Antes de
+  escalar hay que agregar el backplane de Redis y llevar la presencia allí. La PWA lo trata como un añadido: sin hub, el lector
+  funciona igual y no muestra a nadie.
+- El transporte es el que el navegador negocie: WebSocket, y si no, SSE o long polling. `connect-src 'self'` cubre el `wss` del
+  mismo host en los navegadores vigentes **[por verificar en Safari real]**.
+- La edición colaborativa con Yjs queda como mejora posterior: necesitaría un servidor de sincronización y persistir el documento
+  CRDT, y lo que se escribe aquí ya resuelve los conflictos con `revision_desactualizada`. Se decide con su propio ADR.
+- Favoritos sin conexión (HU 5.4, ATLAS-ADR-0034): `documentacion_favorito` por persona; la PWA guarda el documento con su versión
+  vigente y la lista de versiones, con 72 horas de vida. Los componentes vivos no se guardan: sin red dicen que se verán al volver
+  la conexión.
 
 ### 9. Asistencia con IA
 
-La HU 5.7 queda detrás de la bandera `documentacion.borradores_ia`, apagada. Toda llamada pasa por el gateway (A-10), que
-aún no existe; el borrador siempre queda en `borrador` y lo aprueba una persona.
+La HU 5.7 **no está construida**: depende del gateway (A-10), que aún no existe. Cuando llegue irá detrás de la bandera
+`documentacion.borradores_ia`, apagada; el borrador siempre quedará en `borrador` y lo aprobará una persona.
 
 ## Consecuencias
 
@@ -156,7 +191,8 @@ aún no existe; el borrador siempre queda en `borrador` y lo aprueba una persona
   edita lo que vive en git.
 - Malas: dos analizadores de MDX (PWA y servidor) que pueden diferir, por lo que el de la PWA nunca confía en el servidor;
   no se puede usar MDX con expresiones.
-- A vigilar: tamaño del bundle del editor (presupuesto de §11) y capacidad de la cola de exportes.
+- A vigilar: tamaño del bundle del editor (presupuesto de §11) y capacidad de la cola de exportes, que los documentos comparten
+  con los contratos, de a uno por pod.
 
 ## Opciones descartadas
 
@@ -174,3 +210,4 @@ aún no existe; el borrador siempre queda en `borrador` y lo aprueba una persona
 - **[por verificar con el líder]** Los ADR de los repos no traen este front-matter: hasta decidir cómo llegan (HU 6.1), el
   workflow publica `docs/funcional` y `docs/integraciones` por defecto.
 - **[por verificar con el líder]** Si se quiere un editor visual para negocio (Tiptap, §8).
+- **[por verificar con el líder]** Si un bloque Mermaid debe dibujarse en los exportes (§7); hoy queda como código.
