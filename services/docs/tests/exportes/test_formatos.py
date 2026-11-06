@@ -31,7 +31,7 @@ def test_genera_los_7_formatos_y_el_zip_los_trae_todos(nombre: str, request: pyt
     requiere_pdf()
     resultado: ResultadoExportacion = request.getfixturevalue(nombre)
 
-    assert {a.formato for a in resultado.archivos} == set(Formato)
+    assert {a.formato for a in resultado.archivos} == FORMATOS_PAQUETE
     zip_ = resultado.zip
     assert zip_ is not None
     with zipfile.ZipFile(io.BytesIO(zip_.datos)) as archivo:
