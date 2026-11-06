@@ -66,7 +66,8 @@ que `contratos_` frente al `contrato_` del prompt maestro §9. Este ADR registra
 - Quien aprueba su propio texto recibe el mismo trato que en las guías. La pregunta de si se exige aprobación de otra
   persona sigue abierta y se resolverá igual para los dos módulos.
 - En los documentos de repo, la revisión es el PR. Su front-matter debe traer `estado: aprobado` para publicarse como
-  `publico_clientes`; si no, se publica y se muestra como borrador solo a roles técnicos (plan 03 §18.3).
+  `publico_clientes`; si no, se publica y se muestra como borrador solo a roles técnicos (plan 03 §18.3). Además,
+  `estado: borrador` o `estado: en_revision` marcan la versión como borrador en cualquier nivel de visibilidad.
 
 ### 4. Publicación desde la CI
 
