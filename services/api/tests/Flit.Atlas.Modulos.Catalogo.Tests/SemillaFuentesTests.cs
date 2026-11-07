@@ -138,6 +138,9 @@ public class SemillaFuentesTests(Contenedores contenedores)
             Assert.Equal(["likec4"], fuente.Tipos);
             Assert.Equal(".github/workflows/arquitectura.yml", fuente.Workflow);
         }
+        var gitops = Assert.Single(fuentes, f => f.Repositorio == "flitsas/flit-gitops");
+        Assert.Equal(["main"], gitops.Ramas);
+        Assert.Equal(".github/workflows/arquitectura-despliegue.yml", gitops.Workflow);
         var flito = Assert.Single(fuentes, f => f.Aplicativo == "flito-api");
         Assert.Equal(["openapi"], flito.Tipos);
         Assert.Equal(WorkflowFlit, flito.Workflow);

@@ -98,6 +98,14 @@
       "nota": "Modelos LikeC4 de FLIT 2.0 y del landscape: docs/arquitectura y arquitectura/landscape (ATLAS-ADR-0056)."
     },
     {
+      "aplicativo": "infraestructura-flit-gitops",
+      "repositorio": "flitsas/flit-gitops",
+      "ramas": ["main"],
+      "workflow": ".github/workflows/arquitectura-despliegue.yml",
+      "tipos": ["likec4"],
+      "nota": "Snapshots de despliegue por ambiente y clúster (ATLAS-ADR-0056)."
+    },
+    {
       "aplicativo": "flito",
       "repositorio": "flitsas/flito",
       "ramas": ["develop", "staging", "release"],
