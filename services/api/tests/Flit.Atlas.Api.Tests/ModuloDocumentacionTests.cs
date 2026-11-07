@@ -315,6 +315,7 @@ public sealed class ModuloDocumentacionTests(EntornoApi entorno) : IDisposable
         var (desarrollador, _) = await EmpleadoAsync(api, RolesAtlas.Desarrollador);
         var (gobierno, _) = await EmpleadoAsync(api, RolesAtlas.GobiernoIa);
         var (admin, _) = await EmpleadoAsync(api, RolesAtlas.Superadmin);
+        var (liderTecnico, _) = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
         var (responsable, personaResponsable) = await EmpleadoAsync(api, responsableDe: aplicativoId);
 
         Assert.Equal(N, await Ve(lector));
@@ -322,6 +323,7 @@ public sealed class ModuloDocumentacionTests(EntornoApi entorno) : IDisposable
         Assert.Equal(["docs/negocio.md", "docs/publico.md", "docs/sin-aprobar.md", "docs/ti.md"], await Ve(desarrollador));
         Assert.Equal(["docs/negocio.md", "docs/publico.md", "docs/restringido.md"], await Ve(gobierno));
         Assert.Equal(["docs/negocio.md", "docs/publico.md", "docs/restringido.md", "docs/sin-aprobar.md", "docs/ti.md"], await Ve(admin));
+        Assert.Equal(["docs/negocio.md", "docs/publico.md", "docs/restringido.md", "docs/sin-aprobar.md", "docs/ti.md"], await Ve(liderTecnico));
         Assert.Equal(["docs/negocio.md", "docs/publico.md", "docs/restringido.md", "docs/sin-aprobar.md", "docs/ti.md"], await Ve(responsable));
 
         // Lo que no ve es 404, no 403, y por cualquier ruta.
@@ -515,7 +517,8 @@ public sealed class ModuloDocumentacionTests(EntornoApi entorno) : IDisposable
         var (lider, _) = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
         var (_, aplicativoId, _) = await FuenteAsync(lider);
 
-        var nivel = await Enviar(lider, HttpMethod.Post, "/api/v1/documentacion/documentos", Solicitud(aplicativoId, visibilidad: "restringido"));
+        var (desarrollador, _) = await EmpleadoAsync(api, RolesAtlas.Desarrollador);
+        var nivel = await Enviar(desarrollador, HttpMethod.Post, "/api/v1/documentacion/documentos", Solicitud(aplicativoId, visibilidad: "restringido"));
         Assert.Equal(HttpStatusCode.BadRequest, nivel.StatusCode);
         Assert.True((await Json(nivel)).GetProperty("errors").TryGetProperty("visibilidad", out _));
         var adr = await Enviar(lider, HttpMethod.Post, "/api/v1/documentacion/documentos", Solicitud(aplicativoId, tipo: "adr"));
