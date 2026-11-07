@@ -59,33 +59,34 @@ La tabla de HU y ADR de la F4 (4.1 a 4.10, ADR 0038 y 0041 a 0051) está en el h
 **Decisión del líder del 06/11:** externos, Entra, seguridad y todo lo que dependa de él van al final. Lo demás se
 implementa de forma autónoma y se despliega en QA y pdn.
 
-Tres PR en borrador, apilados y con el CI completo en verde; **ninguno está integrado ni desplegado**. Se integran en este
-orden porque cada uno se construye sobre el anterior:
+Tres PR listos para revisión, apilados y con el CI completo en verde; **ninguno está integrado ni desplegado**. Se integran en
+este orden porque cada uno se construye sobre el anterior:
 
 | PR | Fase | ADR | Último commit |
 |---|---|---|---|
-| #47 | F5: documentación viva (sin compartir, editor visual ni HU 5.7) | 0053 | `bb1d1d2` |
-| #48 | F6: lienzo, Mermaid, BPMN y export SVG (HU 6.6, 6.7 y 6.8) | 0054 | `6f82ddc` |
-| #49 | F8 sin LiteLLM (HU 8.1, 8.2, 8.3, 8.5 y tablero de 8.6) | 0055 | `02ff31e` |
+| #47 | F5: documentación viva (sin compartir, editor visual ni HU 5.7) | 0053 | `286138d` |
+| #48 | F6: lienzo, Mermaid, BPMN y export SVG (HU 6.6, 6.7 y 6.8) | 0054 | `d2146c5` |
+| #49 | F8 sin LiteLLM (HU 8.1, 8.2, 8.3, 8.5 y tablero de 8.6) | 0055 | `a24c3bb` |
 
-1. **Definir cómo se integran:** `develop`, `staging` y `release` exigen una aprobación, incluso a administradores.
+1. **Integra el líder (decisión del 06/11).** `develop`, `staging` y `release` exigen una aprobación, incluso a administradores,
+   y GitHub no deja aprobar el PR propio. Hace falta que apruebe otro administrador, o que el líder quite `enforce_admins`
+   un momento y lo vuelva a activar.
 2. **Al desplegar:**
-   - Antes del código, en flit-gitops: Deployment, Service, entrada en `images:`, `Plataforma__Render__Url` y NetworkPolicy de
-     `atlas-render` en `atlas-qa` y `atlas-pdn` (detalle en ATLAS-ADR-0054 §7). Hoy no está desplegado, así que el diff de
-     contratos (HU 3.5) probablemente no funciona en QA ni en pdn (sin comprobar en los servidores).
+   - `atlas-render` en flit-gitops: PR #109 (QA) justo antes de pasar `develop` a `staging`, y PR #110 (pdn) justo antes de pasar
+     `staging` a `release`. Después, `rollout restart` de atlas-api. Hoy no está desplegado, así que el diff de contratos
+     (HU 3.5) probablemente no funciona en QA ni en pdn (sin comprobar en los servidores).
    - atlas-api y atlas-docs van juntos: con un atlas-docs viejo, exportar documentos falla por tiempo a las 2 horas.
    - Mover el tag `v1` a un commit con `atlas-publicar-docs.yml`, para publicar documentos desde otros repos.
-   - El migrador carga los 13 casos y las 7 políticas de la F8 aunque `modulo.gia` siga apagado. Decidir antes si eso va a pdn.
-3. **F6 restante:** HU 6.3 a 6.5 y 6.9 necesitan los modelos LikeC4 de `flit` y `flito` (HU 6.2): pedir autorización
-   para abrir esos PR. HU 6.1 se coordina con el líder.
+   - El migrador carga los 13 casos y las 7 políticas de la F8 aunque `modulo.gia` siga apagado. El líder aprobó que vayan a pdn.
+3. **F6 restante:** los modelos LikeC4 (HU 6.2) están en borrador en flit #807 y flito #750, con CI en verde; se integra primero
+   #807. No lanzar `pr-monitor-agent` sobre #750. Las HU 6.3 a 6.5 y 6.9 van en un PR aparte de flit-atlas, en construcción.
+   HU 6.1 se coordina con el líder.
 4. **F-IA y F7:** F-IA requiere aprobar su ADR y definir P-04 y P-08. F7 depende de F-IA y no se construye antes, porque no
    se podría probar. La HU 5.7 y la 8.4 esperan también al gateway.
 5. **Tiptap:** se puede evaluar desde el 19/11 para el editor visual de la HU 5.3 (hoy, `<textarea>` con vista previa).
 
 Pendientes de esos PR para preguntar:
 
-- Nivel `restringido`: solo superadmin y gobierno de IA; deja fuera al líder técnico salvo en sus aplicativos.
-- Políticas de IA: con las concesiones actuales, los empleados no pueden leerlas ni aceptarlas.
 - F8: quórum del Comité (hoy un voto basta), quien tiene `atlas.gia.gestionar` puede darse ese rol, y si evaluar y aprobar
   puede hacerlo la misma persona.
 - Licencias: `elkjs` (EPL-2.0 o GPL-3.0) y D2 (MPL-2.0).
@@ -130,6 +131,8 @@ Hecho desde el corte anterior: el tag `v1` del workflow de publicación apunta a
   (ATLAS-ADR-0052). No se separa la publicación por ambiente: el Consolidado necesita todos los canales en un Atlas.
 - 05/11: cuenta de emergencia activada en pdn; superadmin asignado a mano al líder hasta tener el mapeo de grupo.
 - 06/11: externos, Entra, seguridad y lo que dependa del líder van al final; lo demás, autónomo hasta QA y pdn.
+- 06/11: integra el líder; se autorizan los PR de LikeC4 en `flit` y `flito`; la semilla de la F8 va a pdn; el rol de líder
+  técnico ve `restringido`; todos los empleados leen y aceptan las políticas de IA vigentes (`atlas.gia.politicas.ver`).
 - Excepción de breaking de core-ict 1.1.0 aceptada (ADR 0037); se quita cuando la 1.1.0 llegue a `release`.
 - Recomendaciones aplicadas que el líder puede cambiar: Excel exportado con el morado `#4E00EB`; Word con sello de texto
   como marca de agua; tabla de visibilidad por rol externo del ADR 0043.
