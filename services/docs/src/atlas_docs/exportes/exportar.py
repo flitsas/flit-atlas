@@ -10,7 +10,7 @@ from typing import Any
 from atlas_docs.exportes import excel, html, pdf, postman, word
 from atlas_docs.exportes.documento import Documento, armar
 from atlas_docs.exportes.empaquetar import zip_determinista
-from atlas_docs.exportes.modelo import Formato, PaqueteExportar
+from atlas_docs.exportes.modelo import FORMATOS_PAQUETE, Formato, PaqueteExportar
 from atlas_docs.exportes.specs import SpecLeido, a_json, a_yaml, hash_contenido, leer
 
 TIPOS_MIME = {
@@ -92,6 +92,7 @@ DESCRIPCIONES = {
     Formato.PDF: "Documento para imprimir o enviar.",
     Formato.WORD: "Documento de Word.",
     Formato.EXCEL: "Libro con una hoja por servicio, con el formato del Excel de contratos.",
+    Formato.MARKDOWN: "El texto en Markdown, con los componentes vivos ya resueltos.",
 }
 
 
@@ -148,7 +149,7 @@ def _leeme(documento: Documento, archivos: list[Archivo]) -> str:
 
 def exportar(paquete: PaqueteExportar, formatos: Iterable[Formato] | None = None) -> ResultadoExportacion:
     """Genera los formatos pedidos (todos si no se indica). Función pura: sin red, sin reloj, sin disco."""
-    pedidos = set(formatos) if formatos is not None else set(Formato)
+    pedidos = set(formatos) if formatos is not None else set(FORMATOS_PAQUETE)
     specs = [leer(s) for s in paquete.specs]
     huella = hash_contenido(paquete, specs)
     documento = armar(paquete, specs, huella)

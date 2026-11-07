@@ -1,0 +1,10 @@
+{
+  "name": "@flit-atlas/arquitectura-gen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Generador de snapshots de despliegue desde flit-gitops (HU 6.4, ATLAS-ADR-0056).",
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test" },
+  "dependencies": { "yaml": "2.9.1" }
+}

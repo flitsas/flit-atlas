@@ -43,7 +43,7 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.exportaciones.solicitar` | Solicitar exportaciones (PDF, Word, Postman, Excel, ZIP). | ✔ | ✔ | ✔ |   | ✔ |   |   |   | ✔ |   | ✔ |   |   |   |
 | `atlas.sandbox.usar` | Usar el sandbox de los contratos. | ✔ | ✔ | ✔ | ✔ |   |   |   |   | ✔ |   |   |   |   |   |
 
-## Documentación (`documentacion`)
+## Documentación (`docs`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -52,12 +52,10 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.docs.aprobar` | Aprobar y publicar documentos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 | `atlas.docs.exportar` | Exportar documentos y colecciones. | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   | ✔ |   |   |   |
 
-## Diagramas (`diagramas`)
+## Diagramas (`diagramas_edicion`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.arquitectura.ver` | Ver los diagramas de arquitectura (LikeC4) según su visibilidad. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   | ✔ |   |   |   |
-| `atlas.arquitectura.ver_despliegue` | Ver las vistas de despliegue por ambiente y el drift. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.diagramas.editar` | Crear y editar diagramas del lienzo y funcionales. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   | ✔ |
 
 ## Asistente Atlas (`asistente`)
@@ -67,19 +65,18 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.asistente.usar` | Preguntar al asistente, limitado a lo que la persona puede ver. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   | ✔ | ✔ | ✔ | ✔ |   |   |
 | `atlas.asistente.configurar` | Configurar el asistente, sus fuentes y sus topes. | ✔ |   |   |   |   | ✔ |   |   |   |   |   |   |   |   |
 
-## Gobierno de IA (`gia`)
-
-| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.gia.ver` | Ver el inventario de casos de IA, políticas y costos. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
-| `atlas.gia.gestionar` | Gestionar casos de uso, riesgos, políticas y llaves virtuales. | ✔ |   |   |   |   | ✔ |   |   |   |   |   |   |   |   |
-| `atlas.gia.auditar` | Revisar la evidencia de gobierno de IA. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
-
 ## Identidad (`identidad`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla; ver y pedir la sincronización de personas con Graph. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
+
+## Arquitectura (`arquitectura`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.arquitectura.ver` | Ver los diagramas de arquitectura (LikeC4) según su visibilidad. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   | ✔ |   |   |   |
+| `atlas.arquitectura.ver_despliegue` | Ver las vistas de despliegue por ambiente y el drift. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
 
 ## Catálogo (`catalogo`)
 
@@ -104,6 +101,15 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.equipo.ver` | Ver personas, responsables y el mapa de carga. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
 | `atlas.equipo.gestionar` | Cambiar el reparto de responsables, traspasos y revisiones. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.equipo.ver_contacto` | Ver el teléfono y los datos de contacto de las personas. | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |
+
+## Gobierno de IA (`gia`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.gia.ver` | Ver el inventario de casos de IA, políticas y costos. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
+| `atlas.gia.politicas.ver` | Leer y aceptar las políticas de IA vigentes. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
+| `atlas.gia.gestionar` | Gestionar casos de uso, riesgos, políticas y llaves virtuales. | ✔ |   |   |   |   | ✔ |   |   |   |   |   |   |   |   |
+| `atlas.gia.auditar` | Revisar la evidencia de gobierno de IA. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
 
 ## Hola (ejemplo) (`hola`)
 

@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <!-- HU 4.5: RabbitMQ real para la prueba de punta a punta de las exportaciones. -->
@@ -33,5 +34,9 @@
   <ItemGroup>
     <!-- Documento de responsables ficticio (personas «Persona Demo»), el mismo de las pruebas del módulo. -->
     <None Include="..\Flit.Atlas.Modulos.Equipo.Tests\Datos\responsables-ficticio.md" Link="Datos\responsables-ficticio.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Salida real de likec4 export json sobre un modelo ficticio: tools/arquitectura-gen/fixtures/modelo-demo. -->
+    <None Include="..\..\..\..\tools\arquitectura-gen\fixtures\modelo-demo.export.json" Link="Fixtures\modelo-demo.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

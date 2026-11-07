@@ -15,6 +15,7 @@ export type NombreIcono =
   | 'calendario'
   | 'contratos'
   | 'documentos'
+  | 'diagramas'
   | 'asistente'
   | 'notificaciones'
   | 'ajustes'

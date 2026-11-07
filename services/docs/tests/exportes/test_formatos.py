@@ -14,6 +14,7 @@ from jsonschema import Draft4Validator
 from openpyxl import load_workbook
 
 from atlas_docs.exportes import Formato, ResultadoExportacion
+from atlas_docs.exportes.modelo import FORMATOS_PAQUETE
 
 ESQUEMA_POSTMAN = Path(__file__).parent / "esquemas" / "postman-collection-v2.1.0.json"
 
@@ -30,7 +31,7 @@ def test_genera_los_7_formatos_y_el_zip_los_trae_todos(nombre: str, request: pyt
     requiere_pdf()
     resultado: ResultadoExportacion = request.getfixturevalue(nombre)
 
-    assert {a.formato for a in resultado.archivos} == set(Formato)
+    assert {a.formato for a in resultado.archivos} == FORMATOS_PAQUETE
     zip_ = resultado.zip
     assert zip_ is not None
     with zipfile.ZipFile(io.BytesIO(zip_.datos)) as archivo:
@@ -41,7 +42,7 @@ def test_genera_los_7_formatos_y_el_zip_los_trae_todos(nombre: str, request: pyt
         assert archivo.testzip() is None
     esperados = {f"{base}/{a.ruta}" for a in resultado.archivos if a.formato != Formato.ZIP}
     assert esperados | {f"{base}/LEEME.md", f"{base}/manifiesto.json"} == set(nombres)
-    assert {a["formato"] for a in manifiesto["archivos"]} == set(Formato) - {Formato.ZIP}
+    assert {a["formato"] for a in manifiesto["archivos"]} == FORMATOS_PAQUETE - {Formato.ZIP}
     assert manifiesto["hash_contenido"] == resultado.hash_contenido
     for entrada in manifiesto["archivos"]:
         assert entrada["sha256"] == resultado.archivo(entrada["ruta"]).sha256
@@ -50,7 +51,7 @@ def test_genera_los_7_formatos_y_el_zip_los_trae_todos(nombre: str, request: pyt
 
 def test_sin_pdf_genera_los_demas_formatos(ict: ResultadoExportacion) -> None:
     formatos = {a.formato for a in ict.archivos}
-    assert formatos >= set(Formato) - {Formato.PDF}
+    assert formatos >= FORMATOS_PAQUETE - {Formato.PDF}
 
 
 # OpenAPI ----------------------------------------------------------------------------------------------------------

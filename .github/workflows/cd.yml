@@ -1,7 +1,7 @@
 name: cd
 
 # HU 1.8 · ATLAS-ADR-0006 y ATLAS-ADR-0019: `staging` despliega en qa (atlas-qa, VPS 177) y `release` en pdn
-# (atlas-pdn, VPS 169). `develop` no despliega. Las imágenes van a GHCR y se fijan por digest en flit-gitops, que
+# (atlas-pdn, VPS 145). `develop` no despliega. Las imágenes van a GHCR y se fijan por digest en flit-gitops, que
 # Argo CD sincroniza.
 
 on:
@@ -61,6 +61,12 @@ jobs:
             contexto: .
             dockerfile: services/docs/Dockerfile
             target: docs
+          # HU 3.5 y 6.8 (ATLAS-ADR-0054 §7): diff de contratos y exporte de lienzos. Se publica aunque el ambiente aún no la
+          # despliegue: el paso de digests solo la fija si kustomization.yaml la declara.
+          - nombre: atlas-render
+            contexto: services/render
+            dockerfile: services/render/Dockerfile
+            target: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -132,6 +138,15 @@ jobs:
               '(.images[] | select(.name == strenv(img))) |= (.digest = strenv(d) | del(.newTag))' "$k"
             grep -q "$digest" "$k" || { echo "::error::${CARPETA}/kustomization.yaml no declara la imagen ${REGISTRO}/${nombre}"; exit 1; }
           done
+          # atlas-render es opcional mientras un ambiente no la dé de alta: sin su entrada, no se toca nada.
+          d="$(cat digests/atlas-render)"
+          [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Digest inválido de atlas-render: «$d»"; exit 1; }
+          export img="${REGISTRO}/atlas-render" d
+          if [ -n "$(yq '.images[] | select(.name == strenv(img)) | .name' "$k")" ]; then
+            yq -i '(.images[] | select(.name == strenv(img))) |= (.digest = strenv(d) | del(.newTag))' "$k"
+          else
+            echo "::notice::${CARPETA}/kustomization.yaml no declara atlas-render: no se fija su digest."
+          fi
           cd gitops
           if git diff --quiet; then echo "Sin cambios de digest."; exit 0; fi
           git config user.name "flit-atlas-ci"
@@ -168,3 +183,29 @@ jobs:
       excepciones: ${{ matrix.excepciones }}
       atlas_url: ${{ vars.ATLAS_URL }}
       ambiente: ${{ needs.ambiente.outputs.nombre }}
+
+  contratos-qa:
+    # ATLAS-ADR-0052: ATLAS_URL es el Atlas central (pdn), donde se marcan todos los canales. Desde staging, además, se
+    # publica en el Atlas de QA (ATLAS_URL_QA) para probar la versión de Atlas que acaba de llegar a qa. No corre sin la
+    # variable ni desde release.
+    needs: [ambiente, gitops]
+    if: github.ref_name == 'staging' && vars.ATLAS_URL_QA != ''
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { contrato: atlas, tipo: openapi, ruta: contracts/openapi/atlas.v1.yaml, ruleset: contracts/vacuum/openapi.yaml, excepciones: contracts/vacuum/openapi-excepciones.yaml }
+          - { contrato: atlas-eventos, tipo: asyncapi, ruta: contracts/asyncapi/atlas-events.v1.yaml, ruleset: contracts/vacuum/asyncapi.yaml, excepciones: "" }
+    uses: ./.github/workflows/atlas-publicar.yml
+    with:
+      aplicativo: atlas-api
+      contrato: ${{ matrix.contrato }}
+      tipo: ${{ matrix.tipo }}
+      ruta: ${{ matrix.ruta }}
+      ruleset: ${{ matrix.ruleset }}
+      excepciones: ${{ matrix.excepciones }}
+      atlas_url: ${{ vars.ATLAS_URL_QA }}
+      ambiente: qa

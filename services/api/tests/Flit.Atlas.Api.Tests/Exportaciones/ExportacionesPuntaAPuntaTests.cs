@@ -84,4 +84,54 @@ public sealed class ExportacionesPuntaAPuntaTests(EntornoApi entorno, Contenedor
         Assert.True(await plataforma.Notificaciones.AnyAsync(n => n.PersonaId == persona && n.Tipo == ManejadorResultadosExportacion.Notificacion.Codigo
             && n.Titulo == "Tu exportación está lista", Ct));
     }
+
+    /// <summary>HU 5.6 (ATLAS-ADR-0053 §7): la misma cola con los documentos, sin simular nada.</summary>
+    [Fact]
+    public async Task Exportar_una_coleccion_de_documentos_genera_sus_formatos_por_la_misma_cola()
+    {
+        var baseDeDatos = await entorno.BaseNuevaAsync();
+        await using var api = entorno.Api(baseDeDatos: baseDeDatos, configuracion: contenedores.Configuracion(conBroker: true));
+        var (lider, persona) = await EmpleadoAsync(entorno, api, Flit.Atlas.Plataforma.Permisos.RolesAtlas.LiderTecnico, baseDeDatos);
+        var aplicativo = await DocumentosDePrueba.AplicativoAsync(lider);
+        var uno = await DocumentosDePrueba.PublicadoAsync(lider, aplicativo, titulo: "Radicar un trámite",
+            contenido: "## Pasos\n\n<Alerta tipo=\"aviso\">\n\nRevisa la placa.\n\n</Alerta>\n\n| Campo | Largo |\n|---|---|\n| placa | 6 |\n");
+        var dos = await DocumentosDePrueba.PublicadoAsync(lider, aplicativo, titulo: "Consultar un trámite", contenido: "Texto con `código`.");
+
+        var solicitud = await PostAsync(lider, "/api/v1/documentacion/exportaciones", new
+        {
+            documentos = new[] { new { documentoId = uno }, new { documentoId = dos } },
+            nombre = "Trámites en línea",
+            formatos = new[] { "html", "pdf", "word", "markdown" },
+        });
+
+        Assert.Equal(HttpStatusCode.Accepted, solicitud.StatusCode);
+        var id = (await JsonAsync(solicitud)).GetProperty("id").GetString()!;
+        var lista = await EsperarAsync(lider, $"/api/v1/documentacion/exportaciones/{id}", TimeSpan.FromMinutes(5));
+        Assert.True(lista.GetProperty("estado").GetString() == "lista", lista.ToString());
+        var archivos = lista.GetProperty("archivos").EnumerateArray().ToList();
+        Assert.Equal(new[] { "html", "markdown", "pdf", "word", "zip" }, archivos.Select(a => a.GetProperty("formato").GetString()!).Order(StringComparer.Ordinal));
+
+        var url = new Uri((await JsonAsync(await lider.GetAsync($"/api/v1/documentacion/exportaciones/{id}/descarga"))).GetProperty("url").GetString()!);
+        using var s3 = new HttpClient();
+        var bytes = await s3.GetByteArrayAsync(url, Ct);
+        using var zip = new ZipArchive(new MemoryStream(bytes));
+        var extensiones = zip.Entries.Select(e => Path.GetExtension(e.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Superset(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".html", ".pdf", ".docx", ".md", ".json" }, extensiones);
+        await using (var md = zip.Entries.Single(e => e.Name == "tramites-en-linea.md").Open())
+        using (var lector = new StreamReader(md))
+        {
+            var texto = await lector.ReadToEndAsync(Ct);
+            Assert.Contains("**Atención**", texto, StringComparison.Ordinal);
+            Assert.DoesNotContain("<Alerta", texto, StringComparison.Ordinal);
+        }
+        using (var pdf = new MemoryStream())
+        await using (var entrada = zip.Entries.Single(e => e.Name == "tramites-en-linea.pdf").Open())
+        {
+            await entrada.CopyToAsync(pdf, Ct);
+            Assert.StartsWith("%PDF", System.Text.Encoding.ASCII.GetString(pdf.ToArray(), 0, 4), StringComparison.Ordinal);
+        }
+
+        await using var plataforma = entorno.Plataforma(baseDeDatos);
+        Assert.True(await plataforma.Notificaciones.AnyAsync(n => n.PersonaId == persona && n.Tipo == "documentacion.exportacion" && n.Titulo == "Tu exportación está lista", Ct));
+    }
 }

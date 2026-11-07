@@ -1,0 +1,101 @@
+specification {
+  element actor
+  element system
+}
+
+model {
+  actor_1 = actor 'Perfil demo 1'
+  actor_2 = actor 'Perfil demo 2'
+  actor_3 = actor 'Perfil demo 3'
+  actor_4 = actor 'Perfil demo 4'
+  sistema_01 = system 'Radicación ficticio 1' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_02 = system 'Consultas ficticio 2' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_03 = system 'Pagos ficticio 3' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_04 = system 'Reportes ficticio 4' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_05 = system 'Identidad ficticio 5' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_06 = system 'Mensajería ficticio 6' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_07 = system 'Radicación ficticio 7' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_08 = system 'Consultas ficticio 8' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_09 = system 'Pagos ficticio 9' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_10 = system 'Reportes ficticio 10' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_11 = system 'Identidad ficticio 11' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_12 = system 'Mensajería ficticio 12' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_13 = system 'Radicación ficticio 13' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_14 = system 'Consultas ficticio 14' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_15 = system 'Pagos ficticio 15' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_16 = system 'Reportes ficticio 16' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_17 = system 'Identidad ficticio 17' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_18 = system 'Mensajería ficticio 18' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_19 = system 'Radicación ficticio 19' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_20 = system 'Consultas ficticio 20' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_21 = system 'Pagos ficticio 21' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_22 = system 'Reportes ficticio 22' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_23 = system 'Identidad ficticio 23' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_24 = system 'Mensajería ficticio 24' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_25 = system 'Radicación ficticio 25' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_26 = system 'Consultas ficticio 26' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_27 = system 'Pagos ficticio 27' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_28 = system 'Reportes ficticio 28' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_29 = system 'Identidad ficticio 29' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_30 = system 'Mensajería ficticio 30' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_31 = system 'Radicación ficticio 31' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_32 = system 'Consultas ficticio 32' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_33 = system 'Pagos ficticio 33' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_34 = system 'Reportes ficticio 34' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_35 = system 'Identidad ficticio 35' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_36 = system 'Mensajería ficticio 36' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_37 = system 'Radicación ficticio 37' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_38 = system 'Consultas ficticio 38' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_39 = system 'Pagos ficticio 39' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_40 = system 'Reportes ficticio 40' { description 'Sistema ficticio para probar el tamaño del landscape' }
+  sistema_01 -> sistema_02 'usa'
+  sistema_01 -> sistema_03 'usa'
+  sistema_01 -> sistema_04 'usa'
+  sistema_02 -> sistema_05 'usa'
+  sistema_02 -> sistema_06 'usa'
+  sistema_02 -> sistema_07 'usa'
+  sistema_03 -> sistema_08 'usa'
+  sistema_03 -> sistema_09 'usa'
+  sistema_03 -> sistema_10 'usa'
+  sistema_04 -> sistema_11 'usa'
+  sistema_04 -> sistema_12 'usa'
+  sistema_04 -> sistema_13 'usa'
+  sistema_05 -> sistema_14 'usa'
+  sistema_05 -> sistema_15 'usa'
+  sistema_05 -> sistema_16 'usa'
+  sistema_06 -> sistema_17 'usa'
+  sistema_06 -> sistema_18 'usa'
+  sistema_06 -> sistema_19 'usa'
+  sistema_07 -> sistema_20 'usa'
+  sistema_07 -> sistema_21 'usa'
+  sistema_07 -> sistema_22 'usa'
+  sistema_08 -> sistema_23 'usa'
+  sistema_08 -> sistema_24 'usa'
+  sistema_08 -> sistema_25 'usa'
+  sistema_09 -> sistema_26 'usa'
+  sistema_09 -> sistema_27 'usa'
+  sistema_09 -> sistema_28 'usa'
+  sistema_10 -> sistema_29 'usa'
+  sistema_10 -> sistema_30 'usa'
+  sistema_10 -> sistema_31 'usa'
+  sistema_11 -> sistema_32 'usa'
+  sistema_11 -> sistema_33 'usa'
+  sistema_11 -> sistema_34 'usa'
+  sistema_12 -> sistema_35 'usa'
+  sistema_12 -> sistema_36 'usa'
+  sistema_12 -> sistema_37 'usa'
+  sistema_13 -> sistema_38 'usa'
+  sistema_13 -> sistema_39 'usa'
+  sistema_13 -> sistema_40 'usa'
+  actor_1 -> sistema_01 'entra'
+  actor_2 -> sistema_02 'entra'
+  actor_3 -> sistema_03 'entra'
+  actor_4 -> sistema_04 'entra'
+}
+
+views {
+  view landscape {
+    title 'Landscape ficticio de 44 nodos'
+    include *
+  }
+}

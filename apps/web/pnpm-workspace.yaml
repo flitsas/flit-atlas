@@ -1,6 +1,8 @@
 # Configuración de pnpm de atlas-web (lo copia también el Dockerfile antes de `pnpm install`).
 # vue-demi (dependencia de Scalar) no necesita su script de instalación con Vue 3.
 allowBuilds:
+  # Dependencia de la CLI de likec4, que no corre en este build: solo se usa likec4/react (ATLAS-ADR-0056 §7).
+  esbuild: false
   vue-demi: false
 
 # Dependencias transitivas del visor de contratos (Scalar, HU 3.6, ATLAS-ADR-0039) fijadas a su última versión con al

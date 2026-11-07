@@ -97,6 +97,24 @@ jobs:
       - name: Prueba del workflow reutilizable atlas-publicar (decisión de breaking y MAJOR, rulesets embebidos)
         # HU 3.3 (ATLAS-ADR-0035 §7): corre el bloque de decisión del workflow tal cual sobre specs ficticias.
         run: bash scripts/atlas-publicar/probar.sh
+      - name: Prueba del workflow reutilizable atlas-publicar-docs (validación de documentos)
+        # HU 5.2 (ATLAS-ADR-0053 §4): corre el bloque de validación del workflow tal cual sobre archivos ficticios.
+        run: bash scripts/atlas-publicar/probar-docs.sh
+
+  herramientas:
+    # HU 6.4 y 6.9 (ATLAS-ADR-0056 §5 y §8): generador de snapshots, con fixtures ficticios que traen a propósito secretos, IP y hosts
+    # internos, y prueba de humo del servidor MCP de LikeC4.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - run: npm ci --prefix tools/arquitectura-gen --ignore-scripts --no-audit --no-fund
+      - run: node --test
+        working-directory: tools/arquitectura-gen
+      - run: npm ci --prefix tools/likec4-mcp --ignore-scripts --no-audit --no-fund
+      - run: node tools/likec4-mcp/probar.mjs
 
   atlas-publicar:
     # HU 3.3: flit-atlas valida (en PR) y publica (en push a develop) sus propios contratos con el workflow reutilizable,
@@ -204,6 +222,8 @@ jobs:
           - { nombre: atlas-web, contexto: apps/web, dockerfile: apps/web/Dockerfile, target: "" }
           # atlas-docs (HU 4.5): la publica cd.yml; aquí se comprueba que construye, con las librerías de WeasyPrint.
           - { nombre: atlas-docs, contexto: ., dockerfile: services/docs/Dockerfile, target: docs }
+          # atlas-render (HU 3.5 y 6.8): la publica cd.yml.
+          - { nombre: atlas-render, contexto: services/render, dockerfile: services/render/Dockerfile, target: "" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

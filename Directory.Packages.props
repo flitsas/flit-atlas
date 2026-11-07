@@ -45,6 +45,7 @@
   <ItemGroup Label="Contratos">
     <!-- OpenAPI 3.1 generado desde el código (HU 1.7, ATLAS-ADR-0021). Mismo conjunto 10.0.13 de ASP.NET Core. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.13" />
     <!-- Validación e índice de los contratos publicados (HU 3.2, ATLAS-ADR-0035). MIT. La 2.12.2 (20/08/2026) es la misma
          Microsoft.OpenApi que ya trae Microsoft.AspNetCore.OpenApi 10.0.13; el lector YAML trae SharpYaml (MIT) con
          topes de profundidad, nodos y alias. -->

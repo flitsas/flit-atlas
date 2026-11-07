@@ -82,6 +82,23 @@ internal sealed class SinFuentesPublicacion : IFuentesPublicacion
         Task.FromResult<IReadOnlyList<FuentePublicacionLeida>>([]);
 }
 
+/// <summary>Un contrato tal como lo leen los demás módulos (ATLAS-ADR-0053 §7).</summary>
+/// <param name="UltimaVersion">La última publicada, si tiene.</param>
+public sealed record ContratoLeido(Guid Id, string Codigo, string Nombre, string? UltimaVersion);
+
+/// <summary>Lectura de contratos para los demás módulos; la implementa el módulo de contratos. No revisa permisos: los revisa quien la usa.</summary>
+public interface ILectorContratos
+{
+    /// <summary>El contrato con ese código, o <c>null</c>. Si dos aplicativos lo repiten, el primero por nombre.</summary>
+    Task<ContratoLeido?> PorCodigoAsync(string codigo, CancellationToken ct = default);
+}
+
+/// <summary>Sin módulo de contratos no hay contratos.</summary>
+internal sealed class SinContratos : ILectorContratos
+{
+    public Task<ContratoLeido?> PorCodigoAsync(string codigo, CancellationToken ct = default) => Task.FromResult<ContratoLeido?>(null);
+}
+
 /// <summary>Un documento funcional (manual, guía funcional, ficha comercial) que el portal muestra a una persona externa.</summary>
 /// <param name="AplicativoId">Aplicativo del catálogo al que pertenece; el portal lo pinta en su tarjeta.</param>
 /// <param name="Tipo"><c>manual_usuario</c>, <c>guia_funcional</c>, <c>ficha_comercial</c>…, como los defina la documentación (F5).</param>
