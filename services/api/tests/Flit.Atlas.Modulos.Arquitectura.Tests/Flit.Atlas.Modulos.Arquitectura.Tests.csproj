@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- CA1707: los nombres de las pruebas son frases en español separadas por guion bajo. -->
+    <!-- CA2007: en pruebas no hay contexto de sincronización que evitar. -->
+    <NoWarn>$(NoWarn);CA1707;CA2007</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Como el módulo: solo el módulo y el núcleo. Los endpoints se prueban con atlas-api en Flit.Atlas.Api.Tests. -->
+    <ProjectReference Include="..\..\src\Flit.Atlas.Modulos.Arquitectura\Flit.Atlas.Modulos.Arquitectura.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Salida real de likec4 export json sobre un modelo ficticio: tools/arquitectura-gen/fixtures/modelo-demo. -->
+    <None Include="..\..\..\..\tools\arquitectura-gen\fixtures\modelo-demo.export.json" Link="Fixtures\modelo-demo.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Salida real del generador sobre flit-gitops ficticio: lo comprueba tools/arquitectura-gen/gen.test.mjs. -->
+    <None Include="..\..\..\..\tools\arquitectura-gen\fixtures\snapshot-demo.json" Link="Fixtures\snapshot-demo.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

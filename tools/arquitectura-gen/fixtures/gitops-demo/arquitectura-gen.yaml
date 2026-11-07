@@ -1,0 +1,18 @@
+# Configuración ficticia. La real vive en flit-gitops: este repo no guarda nombres de clústeres ni de namespaces reales.
+raices:
+  root-demo: [cluster-a]
+  root-pdn: [cluster-a, cluster-b]
+ambientes:
+  demo-qa: qa
+  demo-pdn: pdn
+fueraDeK3s:
+  - nombre: panel-demo
+    ambiente: pdn
+    cluster: cluster-b
+    metodo: systemd
+    elementoModelo: demo.api
+    verificadoEn: "2026-10-01"
+ignorar:
+  - patron: "pgbouncer*"
+    motivo: Infraestructura de ejemplo que no es un elemento del modelo.
+    revisarEn: "2027-01-20"

@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-demo
+spec:
+  source:
+    path: clusters/demo
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-pdn
+spec:
+  source:
+    path: clusters/pdn
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-sin-clusteres
+spec:
+  source:
+    path: clusters/otro

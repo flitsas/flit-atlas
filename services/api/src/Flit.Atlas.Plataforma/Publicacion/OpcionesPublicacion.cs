@@ -100,6 +100,9 @@ public sealed class OpcionesPublicacion
     /// <summary>El workflow reutilizable oficial de la documentación en cualquier tag <c>v*</c> (HU 5.2, ATLAS-ADR-0053 §4).</summary>
     public const string WorkflowOficialDocumentacion = "flitsas/flit-atlas/.github/workflows/atlas-publicar-docs.yml@refs/tags/v*";
 
+    /// <summary>Workflow reutilizable que publica los modelos de LikeC4 y los snapshots de despliegue (ATLAS-ADR-0056 §2).</summary>
+    public const string WorkflowOficialArquitectura = "flitsas/flit-atlas/.github/workflows/atlas-publicar-arquitectura.yml@refs/tags/v*";
+
     /// <summary>
     /// Pone los valores por defecto de las listas vacías. Se hace después de leer la configuración porque el enlazador
     /// de .NET agrega los elementos configurados a los de una lista ya llena en lugar de reemplazarlos.
@@ -110,7 +113,7 @@ public sealed class OpcionesPublicacion
         if (IdsPropietarios.Count == 0) IdsPropietarios.Add("flitsas=284087596");
         if (IdsRepositorios.Count == 0) IdsRepositorios.AddRange(["flitsas/flit=1244856694", "flitsas/flit-atlas=1428322754"]);
         if (Eventos.Count == 0) Eventos.AddRange(["push", "workflow_dispatch"]);
-        if (WorkflowsReutilizables.Count == 0) WorkflowsReutilizables.AddRange([WorkflowOficial, WorkflowOficialDocumentacion]);
+        if (WorkflowsReutilizables.Count == 0) WorkflowsReutilizables.AddRange([WorkflowOficial, WorkflowOficialDocumentacion, WorkflowOficialArquitectura]);
         if (RamasEstables.Count == 0) RamasEstables.Add("release");
     }
 

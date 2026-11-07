@@ -13,6 +13,7 @@
     <!-- Módulos funcionales (uno por línea). -->
     <ProjectReference Include="..\Flit.Atlas.Modulos.Catalogo\Flit.Atlas.Modulos.Catalogo.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Modulos.Contratos\Flit.Atlas.Modulos.Contratos.csproj" />
+    <ProjectReference Include="..\Flit.Atlas.Modulos.Arquitectura\Flit.Atlas.Modulos.Arquitectura.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Modulos.Diagramas\Flit.Atlas.Modulos.Diagramas.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Modulos.Gia\Flit.Atlas.Modulos.Gia.csproj" />
     <ProjectReference Include="..\Flit.Atlas.Modulos.Documentacion\Flit.Atlas.Modulos.Documentacion.csproj" />

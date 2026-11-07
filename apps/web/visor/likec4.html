@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es-CO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Visor de arquitectura · Flit Atlas</title>
+    <style>
+      html,
+      body,
+      #diagrama {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Vistas de LikeC4 (ATLAS-ADR-0056 §7): solo dentro del iframe aislado. likec4/react inyecta estilos, que la CSP del shell no permite. -->
+    <div id="diagrama"></div>
+    <script type="module" src="/src/modulos/arquitectura/visor/entradaLikeC4.tsx"></script>
+  </body>
+</html>

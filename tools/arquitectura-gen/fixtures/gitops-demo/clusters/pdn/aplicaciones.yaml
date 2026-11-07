@@ -1,0 +1,11 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-pdn
+spec:
+  destination:
+    namespace: demo-pdn
+  sources:
+    - repoURL: https://ejemplo.com/chart
+      chart: otro
+    - path: services/demo-pdn
