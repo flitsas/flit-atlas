@@ -55,7 +55,9 @@ public sealed class OpcionesConsumo
 /// mensaje por cola (prefetch 1) y confirma solo después del efecto. Un fallo manda el mensaje a reintentos
 /// (<c>nack</c> sin reencolar, por la DLX); al llegar al tope de intentos, lo copia a errores y lo confirma. Un sobre
 /// ilegible o de un tipo que la cola no espera va directo a errores. Si el broker no está, reintenta la conexión sin
-/// tumbar atlas-api; la conexión de RabbitMQ.Client se recupera sola con sus consumidores.
+/// tumbar atlas-api; la conexión de RabbitMQ.Client se recupera sola con sus consumidores. Varios manejadores pueden
+/// compartir una cola (los resultados de atlas-docs para contratos y documentación, ATLAS-ADR-0053 §7): hay un solo
+/// consumidor por cola y cada mensaje va al manejador que declara su tipo.
 /// </summary>
 internal sealed partial class ConsumidorEventos(
     IServiceProvider servicios,
@@ -82,9 +84,9 @@ internal sealed partial class ConsumidorEventos(
             try
             {
                 var conexion = servicios.GetRequiredService<IConnection>();
-                foreach (var manejador in lista)
+                foreach (var deLaCola in lista.GroupBy(m => m.Cola, StringComparer.Ordinal))
                 {
-                    var canal = await AbrirAsync(conexion, manejador, stoppingToken).ConfigureAwait(false);
+                    var canal = await AbrirAsync(conexion, [.. deLaCola], stoppingToken).ConfigureAwait(false);
                     canal.ChannelShutdownAsync += (_, _) =>
                     {
                         cerrado.TrySetResult();
@@ -122,18 +124,21 @@ internal sealed partial class ConsumidorEventos(
         await CerrarCanalesAsync().ConfigureAwait(false);
     }
 
-    private async Task<IChannel> AbrirAsync(IConnection conexion, IManejadorEventos manejador, CancellationToken ct)
+    private async Task<IChannel> AbrirAsync(IConnection conexion, IReadOnlyList<IManejadorEventos> manejadores, CancellationToken ct)
     {
         var canal = await conexion.CreateChannelAsync(cancellationToken: ct).ConfigureAwait(false);
         lock (_cerrojo)
         {
             _canales.Add(canal);
         }
-        await DeclararAsync(canal, manejador, opciones.Value, ct).ConfigureAwait(false);
+        foreach (var manejador in manejadores)
+        {
+            await DeclararAsync(canal, manejador, opciones.Value, ct).ConfigureAwait(false);
+        }
         await canal.BasicQosAsync(0, 1, false, ct).ConfigureAwait(false);
         var consumidor = new AsyncEventingBasicConsumer(canal);
-        consumidor.ReceivedAsync += (_, entrega) => ProcesarAsync(canal, manejador, entrega, ct);
-        await canal.BasicConsumeAsync(manejador.Cola, autoAck: false, consumidor, ct).ConfigureAwait(false);
+        consumidor.ReceivedAsync += (_, entrega) => ProcesarAsync(canal, manejadores, entrega, ct);
+        await canal.BasicConsumeAsync(manejadores[0].Cola, autoAck: false, consumidor, ct).ConfigureAwait(false);
         return canal;
     }
 
@@ -167,8 +172,9 @@ internal sealed partial class ConsumidorEventos(
 
     public static string ColaErrores(string cola) => cola + ".errores";
 
-    private async Task ProcesarAsync(IChannel canal, IManejadorEventos manejador, BasicDeliverEventArgs entrega, CancellationToken ct)
+    private async Task ProcesarAsync(IChannel canal, IReadOnlyList<IManejadorEventos> manejadores, BasicDeliverEventArgs entrega, CancellationToken ct)
     {
+        var cola = manejadores[0];
         SobreEvento? sobre;
         try
         {
@@ -178,10 +184,11 @@ internal sealed partial class ConsumidorEventos(
         {
             sobre = null;
         }
-        if (sobre is null || !manejador.Tipos.Any(t => t.Nombre == sobre.Type && t.Version == sobre.Version))
+        var manejador = sobre is null ? null : manejadores.FirstOrDefault(m => m.Tipos.Any(t => t.Nombre == sobre.Type && t.Version == sobre.Version));
+        if (sobre is null || manejador is null)
         {
-            MensajeDescartado(log, manejador.Cola, entrega.BasicProperties.Type ?? "(sin tipo)");
-            await AErroresAsync(canal, manejador, entrega).ConfigureAwait(false);
+            MensajeDescartado(log, cola.Cola, entrega.BasicProperties.Type ?? "(sin tipo)");
+            await AErroresAsync(canal, cola, entrega).ConfigureAwait(false);
             return;
         }
 

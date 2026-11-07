@@ -177,10 +177,10 @@ describe('pestañas de la ficha del aplicativo (ATLAS-ADR-0028)', () => {
     expect(producto.visibles.map((p) => p.id)).toEqual(['carga', 'responsables']);
   });
 
-  it('hoy solo el equipo aporta su pestaña («responsables», HU 2.3): los demás espacios siguen como «próximamente»', () => {
-    const { visibles, sinPermiso } = resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.equipo.ver'] });
-    expect(visibles.map((p) => [p.id, p.modulo.id])).toEqual([['responsables', 'equipo']]);
-    expect(resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: [] }).sinPermiso).toEqual(new Set(['responsables']));
+  it('hoy el equipo y la documentación aportan su pestaña (HU 2.3 y 5.4): los demás espacios siguen como «próximamente»', () => {
+    const { visibles, sinPermiso } = resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.equipo.ver', 'atlas.docs.ver'] });
+    expect(visibles.map((p) => [p.id, p.modulo.id])).toEqual([['responsables', 'equipo'], ['documentos', 'documentacion']]);
+    expect(resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: [] }).sinPermiso).toEqual(new Set(['responsables', 'documentos']));
     expect(sinPermiso.size).toBe(0);
   });
 });

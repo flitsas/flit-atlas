@@ -6,6 +6,9 @@ formatos, los sube a `exportaciones/<exportacionId>/` y publica el resultado en 
 `atlas.contratos.exportacion_iniciada`, `atlas.contratos.exportacion_lista` o `atlas.contratos.exportacion_fallida`.
 Solo atlas-api publica en `flit.atlas`.
 
+Los documentos de la F5 (ATLAS-ADR-0053 §7) van por la misma cola con `atlas.documentacion.exportacion_solicitada`: otra
+entrada (`EntradaDocumentos`) y sus propios eventos de resultado, `atlas.documentacion.exportacion_*`.
+
 Entrega al menos una vez: la salida es determinista, así que una reentrega regenera los mismos bytes en las mismas
 claves y vuelve a publicar el resultado; atlas-api ignora el resultado de una exportación ya terminada. Un fallo de
 infraestructura (S3 o el broker) se reintenta a los 30 s por la cola de reintentos; a la quinta vez el mensaje pasa a
@@ -35,7 +38,15 @@ from botocore.client import BaseClient
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from atlas_docs.almacenamiento import ObjetoDemasiadoGrandeError, leer, subir_resultado
-from atlas_docs.exportes import Formato, PaqueteExportar, exportar
+from atlas_docs.exportes import (
+    FORMATOS_DOCUMENTOS,
+    EntradaDocumentos,
+    Formato,
+    PaqueteExportar,
+    ResultadoExportacion,
+    exportar,
+    exportar_documentos,
+)
 from atlas_docs.exportes.modelo import MAX_BYTES_ENTRADA
 from atlas_docs.exportes.pdf import WeasyPrintNoDisponibleError
 from atlas_docs.exportes.specs import SpecInvalidoError
@@ -57,6 +68,15 @@ SOLICITADA = "atlas.contratos.exportacion_solicitada"
 INICIADA = "atlas.contratos.exportacion_iniciada"
 LISTA = "atlas.contratos.exportacion_lista"
 FALLIDA = "atlas.contratos.exportacion_fallida"
+DOCUMENTOS_SOLICITADA = "atlas.documentacion.exportacion_solicitada"
+DOCUMENTOS_INICIADA = "atlas.documentacion.exportacion_iniciada"
+DOCUMENTOS_LISTA = "atlas.documentacion.exportacion_lista"
+DOCUMENTOS_FALLIDA = "atlas.documentacion.exportacion_fallida"
+# Por cada solicitud: los eventos de resultado (iniciada, lista y fallida).
+RESULTADOS = {
+    SOLICITADA: (INICIADA, LISTA, FALLIDA),
+    DOCUMENTOS_SOLICITADA: (DOCUMENTOS_INICIADA, DOCUMENTOS_LISTA, DOCUMENTOS_FALLIDA),
+}
 SIN_ORGANIZACION = "00000000-0000-0000-0000-000000000000"
 # El sobre solo trae ids, formatos y la clave de la entrada (el paquete va en el S3): 64 KiB sobran (F4-SEC-12).
 MAX_BYTES_MENSAJE = 64 * 1024
@@ -152,8 +172,9 @@ class ManejadorExportaciones:
             recibido = SobreSolicitado.model_validate_json(cuerpo)
         except ValidationError as error:
             raise MensajeIlegibleError("El mensaje no es un sobre de Atlas.") from error
-        if recibido.type != SOLICITADA:
+        if recibido.type not in RESULTADOS:
             raise MensajeIlegibleError(f"Tipo inesperado en la cola: {recibido.type[:100]}")
+        iniciada, lista, fallida = RESULTADOS[recibido.type]
         exportacion_id = recibido.data.get("exportacionId")
         if not isinstance(exportacion_id, str) or not re.fullmatch(PATRON_UUID, exportacion_id):
             raise MensajeIlegibleError("El mensaje no trae un exportacionId válido.")
@@ -163,7 +184,7 @@ class ManejadorExportaciones:
 
         async def fallar(codigo: str, mensaje: str) -> None:
             log.info("Exportación %s fallida: %s", exportacion_id, codigo)
-            await publicar(FALLIDA, {"exportacionId": exportacion_id, "codigo": codigo, "mensaje": mensaje})
+            await publicar(fallida, {"exportacionId": exportacion_id, "codigo": codigo, "mensaje": mensaje})
 
         try:
             datos = DatosSolicitada.model_validate(recibido.data)
@@ -175,7 +196,7 @@ class ManejadorExportaciones:
             await fallar("entrada_invalida", "La clave de la entrada no corresponde a la exportación.")
             return
 
-        await publicar(INICIADA, {"exportacionId": exportacion_id})
+        await publicar(iniciada, {"exportacionId": exportacion_id})
         cliente = self._s3()
         try:
             contenido = await anyio.to_thread.run_sync(
@@ -189,8 +210,17 @@ class ManejadorExportaciones:
         if contenido is None:
             await fallar("entrada_invalida", "La entrada de la exportación no está en el almacenamiento.")
             return
+        generar: Callable[[], ResultadoExportacion]
         try:
-            paquete = PaqueteExportar.model_validate_json(contenido)
+            if recibido.type == DOCUMENTOS_SOLICITADA:
+                if not set(datos.formatos) <= FORMATOS_DOCUMENTOS:
+                    await fallar("entrada_invalida", "Un documento se exporta a HTML, PDF, Word, Markdown o ZIP.")
+                    return
+                documentos = EntradaDocumentos.model_validate_json(contenido)
+                generar = lambda: exportar_documentos(documentos, set(datos.formatos))  # noqa: E731
+            else:
+                paquete = PaqueteExportar.model_validate_json(contenido)
+                generar = lambda: exportar(paquete, set(datos.formatos))  # noqa: E731
         except ValidationError as error:
             # Solo los campos con error, nunca los valores (pueden traer el spec).
             campos = sorted({".".join(str(p) for p in e["loc"]) for e in error.errors()})[:5]
@@ -198,9 +228,7 @@ class ManejadorExportaciones:
             return
 
         try:
-            resultado = await anyio.to_thread.run_sync(
-                lambda: exportar(paquete, set(datos.formatos)), limiter=self._limitador
-            )
+            resultado = await anyio.to_thread.run_sync(generar, limiter=self._limitador)
         except SpecInvalidoError as error:
             await fallar("spec_invalido", str(error)[:500])
             return
@@ -212,7 +240,7 @@ class ManejadorExportaciones:
             lambda: subir_resultado(cliente, self._bucket, exportacion_id, resultado)
         )
         await publicar(
-            LISTA,
+            lista,
             {"exportacionId": exportacion_id, "hashContenido": resultado.hash_contenido, "archivos": archivos},
         )
         log.info("Exportación %s lista: %d archivos", exportacion_id, len(archivos))
@@ -228,7 +256,7 @@ class ManejadorExportaciones:
             return
         exportacion_id = recibido.data.get("exportacionId")
         if (
-            recibido.type != SOLICITADA
+            recibido.type not in RESULTADOS
             or not isinstance(exportacion_id, str)
             or not re.fullmatch(PATRON_UUID, exportacion_id)
         ):
@@ -238,7 +266,8 @@ class ManejadorExportaciones:
             "codigo": "interno",
             "mensaje": "La exportación no se pudo generar después de varios intentos. Solicítala de nuevo.",
         }
-        await self._publicador.publicar(sobre(FALLIDA, datos, recibido.tenant_id, recibido.correlation_id))
+        fallida = RESULTADOS[recibido.type][2]
+        await self._publicador.publicar(sobre(fallida, datos, recibido.tenant_id, recibido.correlation_id))
 
 
 # --- Broker ---
@@ -318,7 +347,8 @@ class ConsumidorExportaciones:
         docs = await canal.declare_exchange(EXCHANGE_DOCS, aio_pika.ExchangeType.TOPIC, durable=True)
         reintentos = await canal.declare_exchange(COLA_REINTENTOS, aio_pika.ExchangeType.FANOUT, durable=True)
         cola = await canal.declare_queue(COLA, durable=True, arguments={"x-dead-letter-exchange": COLA_REINTENTOS})
-        await cola.bind(atlas, routing_key=SOLICITADA)
+        for llave in RESULTADOS:
+            await cola.bind(atlas, routing_key=llave)
         espera_cola = await canal.declare_queue(
             COLA_REINTENTOS,
             durable=True,

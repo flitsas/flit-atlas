@@ -235,7 +235,7 @@ Los roles, alcances y vigencias se guardan y evalúan **en Atlas** (no vienen de
 | `publico_clientes` | Guías de integración, operaciones compartidas, manuales de usuario final, fichas comerciales | Externos **solo dentro de su alcance**; todos los internos |
 | `interno_negocio` | Procesos, reglas de negocio, fichas de aplicativos, manual completo, responsables | Empleados |
 | `interno_ti` | ADR técnicos, contratos internos (gRPC, colas), vistas de despliegue, drift | Roles técnicos |
-| `restringido` | Seguridad, incidentes, costos, gobierno de IA sensible | Administración y gobierno de IA |
+| `restringido` | Seguridad, incidentes, costos, gobierno de IA sensible | Administración, líder técnico y gobierno de IA |
 
 ### 7.2 Roles internos (empleados)
 

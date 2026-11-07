@@ -20,6 +20,9 @@ MAX_BYTES_GUIA = 512 * 1024
 # Tope del cuerpo de `POST /exportes` y de la entrada leída del S3, en bytes y antes de leerla (F4-SEC-12). Los topes de
 # arriba cuentan caracteres y solo se revisan después de leer y parsear todo: este es el que protege la memoria.
 MAX_BYTES_ENTRADA = 64 * 1024 * 1024
+# Documentación viva (ATLAS-ADR-0053 §7): el cuerpo ya viene en Markdown estático, con los componentes vivos resueltos.
+MAX_DOCUMENTOS = 50
+MAX_CARACTERES_DOCUMENTO = 1024 * 1024
 
 
 class Formato(StrEnum):
@@ -29,7 +32,12 @@ class Formato(StrEnum):
     PDF = "pdf"
     WORD = "word"
     EXCEL = "excel"
+    MARKDOWN = "markdown"  # solo documentos (ATLAS-ADR-0053 §7)
     ZIP = "zip"
+
+
+# Lo que se genera de un paquete de contratos; el Markdown es solo de los documentos.
+FORMATOS_PAQUETE = frozenset(Formato) - {Formato.MARKDOWN}
 
 
 class EntradaChangelog(BaseModel):
@@ -74,3 +82,32 @@ class PaqueteExportar(BaseModel):
     metadatos: Metadatos
     specs: list[SpecExportar] = Field(min_length=1, max_length=MAX_SPECS)
     guias: list[Guia] = Field(default_factory=list, max_length=MAX_GUIAS)
+
+
+class DocumentoExportar(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    titulo: Texto
+    tipo: Texto = Field(description="Tipo de documento, ya legible («Guía funcional»).")
+    version: int = Field(ge=1)
+    responsable: Texto
+    publicado: date = Field(description="Fecha de la versión en hora de Bogotá.")
+    sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    markdown: Annotated[str, StringConstraints(max_length=MAX_CARACTERES_DOCUMENTO)]
+
+
+class MetadatosDocumentos(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: Texto = Field(description="El documento o la colección.")
+    organizacion: Texto = Field(description="A quién se entrega; va en la marca de agua.")
+    fecha: date = Field(description="Fecha de la exportación en hora de Bogotá; va en la marca de agua.")
+
+
+class EntradaDocumentos(BaseModel):
+    """Entrada de `atlas.documentacion.exportacion_solicitada`: atlas-api ya aplicó la visibilidad y resolvió el MDX."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    metadatos: MetadatosDocumentos
+    documentos: list[DocumentoExportar] = Field(min_length=1, max_length=MAX_DOCUMENTOS)
