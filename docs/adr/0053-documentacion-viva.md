@@ -116,7 +116,7 @@ de `develop` no cambia el título ni la visibilidad de lo que corre en pdn.
 ### 6. Visibilidad y permisos en SQL
 
 Los niveles de §7.1 se traducen a un predicado obligatorio en cada consulta, incluidas búsqueda y exportes: `interno_ti` para
-superadmin, líder técnico y desarrollador; `restringido` para superadmin y gobierno de IA; los demás empleados, hasta
+superadmin, líder técnico y desarrollador; `restringido` para superadmin, líder técnico (decisión del líder, 06/11/2026) y gobierno de IA; los demás empleados, hasta
 `interno_negocio`. El responsable ve todos los documentos de su aplicativo, porque los edita (§7.2).
 
 Un externo solo verá `publico_clientes` dentro de lo compartido con su organización. **Compartir no está construido:** por
@@ -205,8 +205,7 @@ La HU 5.7 **no está construida**: depende del gateway (A-10), que aún no exist
 
 - **[por verificar con el líder]** Quién aprueba si un aplicativo no tiene responsables (hoy, el líder técnico) y si se
   exige aprobación de otra persona. Abierto también en las guías.
-- **[por verificar con el líder]** Quién ve `interno_ti` y `restringido`: el líder técnico no ve `restringido`, y el auditor
-  tampoco (§7.1 solo nombra a administración y gobierno de IA).
+- **[por verificar con el líder]** Si el auditor debe ver `restringido`: hoy no lo ve (§7.1).
 - **[por verificar con el líder]** Los ADR de los repos no traen este front-matter: hasta decidir cómo llegan (HU 6.1), el
   workflow publica `docs/funcional` y `docs/integraciones` por defecto.
 - **[por verificar con el líder]** Si se quiere un editor visual para negocio (Tiptap, §8).
