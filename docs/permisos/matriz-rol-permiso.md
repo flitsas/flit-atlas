@@ -52,12 +52,10 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.docs.aprobar` | Aprobar y publicar documentos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 | `atlas.docs.exportar` | Exportar documentos y colecciones. | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   | ✔ |   |   |   |
 
-## Diagramas (`arquitectura`)
+## Diagramas (`diagramas_edicion`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `atlas.arquitectura.ver` | Ver los diagramas de arquitectura (LikeC4) según su visibilidad. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   | ✔ |   |   |   |
-| `atlas.arquitectura.ver_despliegue` | Ver las vistas de despliegue por ambiente y el drift. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
 | `atlas.diagramas.editar` | Crear y editar diagramas del lienzo y funcionales. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   | ✔ |
 
 ## Asistente Atlas (`asistente`)
@@ -72,6 +70,13 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.identidad.administrar` | Cerrar todas las sesiones de una persona, suspenderla y reactivarla; ver y pedir la sincronización de personas con Graph. | ✔ |   |   |   |   |   |   |   |   |   |   |   |   |   |
+
+## Arquitectura (`arquitectura`)
+
+| Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `atlas.arquitectura.ver` | Ver los diagramas de arquitectura (LikeC4) según su visibilidad. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   | ✔ |   |   |   |
+| `atlas.arquitectura.ver_despliegue` | Ver las vistas de despliegue por ambiente y el drift. | ✔ | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   |
 
 ## Catálogo (`catalogo`)
 
