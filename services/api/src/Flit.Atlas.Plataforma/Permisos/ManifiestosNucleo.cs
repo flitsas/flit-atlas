@@ -118,14 +118,15 @@ public static class ManifiestosNucleo
     public static ManifiestoPermisos GobiernoDeIa { get; } = new("gia", "Gobierno de IA",
     [
         new("atlas.gia.ver", "Ver el inventario de casos de IA, políticas y costos.", GobiernoIa, Auditor),
+        new("atlas.gia.politicas.ver", "Leer y aceptar las políticas de IA vigentes.", [.. Empleados]),
         new("atlas.gia.gestionar", "Gestionar casos de uso, riesgos, políticas y llaves virtuales.", GobiernoIa),
         new("atlas.gia.auditar", "Revisar la evidencia de gobierno de IA.", GobiernoIa, Auditor),
     ]);
 
     /// <summary>
-    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/>,
+    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/>, <see cref="GobiernoDeIa"/>,
     /// <see cref="SoporteSabados"/> ni <see cref="Contratos"/>: los registran sus módulos.
     /// </summary>
     public static IReadOnlyList<ManifiestoPermisos> Todos { get; } =
-        [PermisosPlataforma.Manifiesto, Portal, Documentacion, Diagramas, Asistente, GobiernoDeIa];
+        [PermisosPlataforma.Manifiesto, Portal, Documentacion, Diagramas, Asistente];
 }

@@ -209,6 +209,7 @@ public class AutorizacionTests(EntornoApi entorno)
         {
             [$"{OpcionesLimiteTasa.Seccion}:PorUsuario"] = "1000",
             [$"{OpcionesLimiteTasa.Seccion}:PorIp"] = "1000",
+            [$"{OpcionesLimiteTasa.Seccion}:PorExterno"] = "1000",
         });
         var catalogo = api.Services.GetRequiredService<CatalogoPermisos>();
         var definicion = catalogo.Rol(rol)!;

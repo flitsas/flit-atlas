@@ -57,5 +57,6 @@ Decisiones de arquitectura de Atlas, en formato **MADR 4** y con la serie propia
 | [ATLAS-ADR-0052](0052-atlas-central-y-prueba-en-qa.md) | Publicación de contratos: un Atlas central en pdn (`ATLAS_URL`) para todos los canales y una publicación de prueba en el Atlas de QA desde `staging` (`ATLAS_URL_QA`) | aceptado (decisión del líder, 04/11/2026) | ATLAS-ADR-0035 §7 y §8 |
 | [ATLAS-ADR-0053](0053-documentacion-viva.md) | Documentación viva: módulo propio, versiones inmutables desde los repos, revisiones en Atlas y MDX sin evaluar código | propuesto | §8.5 |
 | [ATLAS-ADR-0054](0054-diagramas-lienzo-y-funcionales.md) | Diagramas: lienzo propio, Mermaid y BPMN versionados, sin relajar la CSP | propuesto | §8.6 |
+| [ATLAS-ADR-0055](0055-gobierno-de-ia.md) | Gobierno de IA: inventario, riesgo, políticas e incidentes sin depender del gateway | propuesto | §8.8 |
 
 Las fuentes `A-xx` y `§x` remiten a [`docs/atlas/prompts/00-prompt-maestro-flit-atlas.md`](../atlas/prompts/00-prompt-maestro-flit-atlas.md).
