@@ -1,0 +1,115 @@
+// Modelo ficticio para las pruebas de Atlas (ATLAS-ADR-0056). Sirve para generar
+// services/api/tests/Flit.Atlas.Modulos.Arquitectura.Tests/Fixtures/modelo-demo.json y la copia de apps/web/tests/fixtures.
+specification {
+  element actor
+  element system
+  element container
+  element component
+  tag critico
+  tag objetivo
+  deploymentNode environment
+  deploymentNode cluster
+  deploymentNode namespace
+}
+
+model {
+  operador = actor 'Operador demo' {
+    description 'Persona ficticia que radica trámites'
+  }
+  externo = system 'Registro externo demo' {
+    description 'Sistema ficticio de otra organización'
+  }
+  demo = system 'Sistema Demo' {
+    description 'Sistema ficticio para probar Atlas'
+    metadata {
+      repo 'flitsas-demo/demo'
+      owner 'lider-tecnico'
+      criticidad 'alta'
+      datos_personales 'no'
+      aplicativo 'demo-portal'
+    }
+    link https://ejemplo.com/demo 'Sitio del sistema demo'
+
+    web = container 'Portal web' {
+      #critico
+      description 'Portal ficticio de radicación'
+      technology 'Next.js'
+      metadata {
+        repo_path 'portal'
+        owner 'lider-tecnico'
+        criticidad 'alta'
+        datos_personales 'no'
+        k8s_workload 'demo-web'
+        ambientes 'dev,qa,pdn'
+        openapi 'contracts/openapi/demo-api.v1.yaml'
+        adr 'ADR-0001'
+      }
+      login = component 'Inicio de sesión'
+      radicar = component 'Radicación'
+      login -> radicar 'deja pasar'
+    }
+    api = container 'API' {
+      description 'API ficticia'
+      technology '.NET'
+      metadata {
+        repo_path 'api'
+        owner 'lider-tecnico'
+        criticidad 'media'
+        datos_personales 'no'
+        k8s_workload 'demo-api'
+      }
+    }
+    futuro = container 'Servicio futuro' {
+      #objetivo
+      metadata {
+        owner 'lider-tecnico'
+        criticidad 'baja'
+        datos_personales 'no'
+        k8s_workload 'demo-futuro'
+      }
+    }
+    web -> api 'llama'
+    api -> externo 'consulta'
+  }
+  operador -> demo.web 'usa'
+}
+
+deployment {
+  environment qa {
+    k3s = cluster 'Clúster demo' {
+      demo_qa = namespace 'demo-qa' {
+        web = instanceOf demo.web
+        api = instanceOf demo.api
+      }
+    }
+  }
+}
+
+views {
+  view landscape {
+    title 'Landscape demo'
+    include *
+  }
+  view demo_contexto of demo {
+    title 'Contexto del sistema demo'
+    include *
+  }
+  view demo_contenedores of demo {
+    title 'Contenedores del sistema demo'
+    include *, demo.*
+  }
+  view demo_web_componentes of demo.web {
+    title 'Componentes del portal web'
+    include *
+  }
+  dynamic view flujo_radicacion {
+    title 'Radicación de un trámite'
+    operador -> demo.web 'entra al portal'
+    demo.web -> demo.api 'radica'
+    demo.api -> externo 'consulta el registro'
+  }
+  deployment view despliegue_qa {
+    title 'Despliegue en QA'
+    include qa.**
+  }
+}

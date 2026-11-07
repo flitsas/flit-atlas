@@ -1,0 +1,30 @@
+# Todo esto es ficticio y existe para probar que el generador no lo abre.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-secreto
+stringData:
+  clave: VALOR-SECRETO-FICTICIO
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: demo-sellado
+spec:
+  encryptedData:
+    clave: SELLADO-FICTICIO
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-config
+data:
+  dato: configmap-ficticio
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: demo-externo
+addressType: IPv4
+endpoints:
+  - addresses: [192.0.2.10]

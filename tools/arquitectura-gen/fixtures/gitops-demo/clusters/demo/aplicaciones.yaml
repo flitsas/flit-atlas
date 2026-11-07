@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-qa
+spec:
+  destination:
+    namespace: demo-qa
+  source:
+    path: services/demo-qa
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sin-mapear
+spec:
+  destination:
+    namespace: sin-ambiente
+  source:
+    path: services/demo-qa

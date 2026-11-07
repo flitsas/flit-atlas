@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "likec4-flit": {
+      "command": "npx",
+      "args": ["-y", "likec4@1.59.4", "mcp", "--stdio", "docs/arquitectura"]
+    }
+  }
+}
