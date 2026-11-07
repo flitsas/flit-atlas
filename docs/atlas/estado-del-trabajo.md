@@ -71,8 +71,9 @@ El líder vio la arquitectura en QA con sesión. **Falta verla en pdn con sesió
 
 Abiertos al corte:
 
-1. **flit-gitops #112:** `atlas-render` sigue en `Pending` en pdn por falta de CPU reservable en la 145 (6990m de 7000m). Hasta
-   integrarlo, el diff de contratos y el SVG no funcionan en pdn.
+1. **CPU de la 145:** con flit-gitops #112 integrado, `atlas-render` corre en pdn con 10m reservados y Argo está `Synced
+   Healthy`. La reserva libre de la 145 quedó en 0m: cualquier despliegue nuevo allí quedará en `Pending` hasta revisar sus
+   `requests`.
 2. **PR #56 y su promoción:** `atlas` y `atlas-eventos` a 1.1.0. Sin eso, el job `contratos` del CD de `release` falla (409) y
    esos dos contratos siguen en 1.0.0. No afecta el despliegue.
 3. **PR #55:** alinea `staging` con `release`. `--admin` fue rechazado. Hace falta antes de la siguiente promoción.
