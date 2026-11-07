@@ -1,0 +1,61 @@
+{
+  "ambiente": "qa",
+  "gitopsSha": "0123456789abcdef0123456789abcdef01234567",
+  "generadoEn": "2026-11-06T15:00:00.000Z",
+  "cluster": {
+    "id": "cluster-a",
+    "raiz": "root-demo",
+    "namespaces": [
+      {
+        "nombre": "demo-qa",
+        "application": "demo-qa",
+        "workloads": [
+          {
+            "kind": "Deployment",
+            "nombre": "demo-api",
+            "replicas": null,
+            "imagenes": [
+              {
+                "imagen": "demo/api:1",
+                "digest": null
+              }
+            ]
+          },
+          {
+            "kind": "CronJob",
+            "nombre": "demo-limpieza",
+            "replicas": null,
+            "imagenes": [
+              {
+                "imagen": "ghcr.io/flitsas-demo/limpieza:1",
+                "digest": null
+              }
+            ]
+          },
+          {
+            "kind": "Deployment",
+            "nombre": "demo-web",
+            "replicas": 2,
+            "imagenes": [
+              {
+                "imagen": "ghcr.io/flitsas-demo/web:1.2.3",
+                "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          }
+        ],
+        "ingressHosts": [
+          "app.ejemplo.com"
+        ]
+      }
+    ]
+  },
+  "fueraDeK3s": [],
+  "ignorar": [
+    {
+      "patron": "pgbouncer*",
+      "motivo": "Infraestructura de ejemplo que no es un elemento del modelo.",
+      "revisarEn": "2027-01-20"
+    }
+  ]
+}

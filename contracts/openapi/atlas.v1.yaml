@@ -2544,6 +2544,501 @@ paths:
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
+  /api/v1/arquitectura/publicaciones:
+    post:
+      tags:
+        - Arquitectura
+      summary: Publicar un modelo de LikeC4 o un snapshot de despliegue desde la CI
+      description: 'Solo con el token OIDC de GitHub Actions del workflow reutilizable oficial, desde un repo, rama y workflow de la lista blanca con el tipo likec4. Un snapshot exige además que el repo esté en Arquitectura__RepositoriosDespliegue. El sha sale del token. Responde 201 con la versión nueva, 200 si el mismo sha ya publicó ese mismo contenido, y 409 si lo publicó con otro: las versiones son inmutables. Se rechaza con 422 lo que parezca una IP o un secreto, sin citar el valor. La cookie de la PWA no sirve aquí.'
+      operationId: PublicarArquitectura
+      requestBody:
+        description: Lo que se publica.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPublicacionArquitectura'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoPublicacionArquitectura'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoPublicacionArquitectura'
+        '403':
+          description: 'El dueño del repo, el evento o el workflow reutilizable no están permitidos (sin cuerpo), o el repo, la rama, el workflow, el aplicativo o el tipo no están en la lista blanca (con el código).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacionArquitectura'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacionArquitectura'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPublicacionArquitectura'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - githubActions: [ ]
+  /api/v1/arquitectura/proyectos:
+    get:
+      tags:
+        - Arquitectura
+      summary: Listar los proyectos de arquitectura
+      description: Los proyectos con un modelo que la persona puede ver y lo vigente en cada canal. Un externo recibe la lista vacía.
+      operationId: ListarProyectosArquitectura
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProyectoArquitecturaResumen'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver
+  '/api/v1/arquitectura/proyectos/{codigo}/publicaciones':
+    get:
+      tags:
+        - Arquitectura
+      summary: Listar el historial de modelos de un proyecto
+      description: 'Las publicaciones del modelo que la persona puede ver, de la más reciente a la más antigua, hasta 100. Se puede filtrar por canal y por fechas.'
+      operationId: ListarPublicacionesArquitectura
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: canal
+          in: query
+          schema:
+            type: string
+        - name: desde
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialPublicacionesArquitectura'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver
+  '/api/v1/arquitectura/proyectos/{codigo}/vigente':
+    get:
+      tags:
+        - Arquitectura
+      summary: 'Obtener el modelo vigente de un proyecto, también en una fecha pasada'
+      description: 'La última publicación del canal (pdn por defecto) con fecha menor o igual a «en». Sin «en», la última. Es «volver en el tiempo» (plan 01 §9.2).'
+      operationId: ObtenerModeloVigente
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: canal
+          in: query
+          schema:
+            type: string
+        - name: en
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetallePublicacionArquitectura'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver
+  '/api/v1/arquitectura/publicaciones/{id}':
+    get:
+      tags:
+        - Arquitectura
+      summary: Obtener una publicación del modelo y sus vistas
+      description: Sin atlas.arquitectura.ver_despliegue no trae las vistas de despliegue. Lo que no se puede ver responde 404.
+      operationId: ObtenerPublicacionArquitectura
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetallePublicacionArquitectura'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver
+  '/api/v1/arquitectura/publicaciones/{id}/modelo':
+    get:
+      tags:
+        - Arquitectura
+      summary: Obtener el JSON de LikeC4 para dibujar las vistas
+      description: 'La salida de likec4 export json con su layout. Sin atlas.arquitectura.ver_despliegue, sin vistas ni nodos de despliegue.'
+      operationId: ObtenerModeloArquitectura
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonElement'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver
+  '/api/v1/arquitectura/publicaciones/{id}/elementos/{elementoId}':
+    get:
+      tags:
+        - Arquitectura
+      summary: Obtener la ficha de un elemento
+      description: 'Metadatos del elemento y sus enlaces a la ficha del aplicativo, a los contratos (si la persona puede verlos) y a los ADR.'
+      operationId: ObtenerFichaElemento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: elementoId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaElementoArquitectura'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver
+  '/api/v1/arquitectura/publicaciones/{a}/diff/{b}':
+    get:
+      tags:
+        - Arquitectura
+      summary: Comparar dos publicaciones del modelo de un proyecto
+      description: 'Elementos, relaciones y vistas agregados, quitados o cambiados, hasta 500 por grupo. Las dos deben ser del mismo proyecto.'
+      operationId: CompararModelos
+      parameters:
+        - name: a
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: b
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiffArquitectura'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver
+  /api/v1/arquitectura/despliegue/vigentes:
+    get:
+      tags:
+        - Arquitectura
+      summary: 'Listar el snapshot vigente de cada ambiente y clúster, también en una fecha pasada'
+      description: 'Responde a «¿qué corría en pdn el 11/10 a las 23:12?»: el último snapshot con fecha menor o igual a «en» por ambiente y clúster (plan 01 §9.2).'
+      operationId: ListarSnapshotsVigentes
+      parameters:
+        - name: en
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: ambiente
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoSnapshots'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver_despliegue.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver_despliegue
+  /api/v1/arquitectura/despliegue/publicaciones:
+    get:
+      tags:
+        - Arquitectura
+      summary: Listar el historial de snapshots
+      description: 'De la más reciente a la más antigua, hasta 100. Se puede filtrar por ambiente y por clúster.'
+      operationId: ListarSnapshots
+      parameters:
+        - name: ambiente
+          in: query
+          schema:
+            type: string
+        - name: cluster
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoSnapshots'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver_despliegue.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver_despliegue
+  '/api/v1/arquitectura/despliegue/publicaciones/{id}':
+    get:
+      tags:
+        - Arquitectura
+      summary: Obtener un snapshot
+      description: 'Workloads, imágenes, réplicas y hosts públicos de un ambiente y un clúster según un sha de gitops.'
+      operationId: ObtenerSnapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleSnapshot'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver_despliegue.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver_despliegue
+  '/api/v1/arquitectura/despliegue/diff/{a}/{b}':
+    get:
+      tags:
+        - Arquitectura
+      summary: Comparar dos snapshots
+      description: 'Workloads y hosts agregados o quitados, e imágenes y réplicas cambiadas (plan 01 §9.3).'
+      operationId: CompararSnapshots
+      parameters:
+        - name: a
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: b
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiffArquitectura'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver_despliegue.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver_despliegue
+  /api/v1/arquitectura/drift:
+    get:
+      tags:
+        - Arquitectura
+      summary: Obtener el panel de drift
+      description: 'Por ambiente, si cada capa (modelo, gitops y Argo CD) tiene datos, qué dice cada comparación y sus hallazgos, hasta 500. Una capa sin datos se reporta como sin_datos, nunca como sin_drift. Por defecto, solo los hallazgos abiertos.'
+      operationId: ObtenerPanelDrift
+      parameters:
+        - name: ambiente
+          in: query
+          schema:
+            type: string
+        - name: estado
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PanelDrift'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.arquitectura.ver_despliegue.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.arquitectura).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.arquitectura.ver_despliegue
   /api/v1/catalogo/aplicativos:
     get:
       tags:
@@ -12211,6 +12706,18 @@ components:
           description: Cuándo se registró.
           format: date-time
       description: Una actividad del traspaso acompañado.
+    AdrElementoArquitectura:
+      required:
+        - codigo
+        - rutaAtlas
+      type: object
+      properties:
+        codigo:
+          type: string
+        rutaAtlas:
+          type: string
+          description: 'Búsqueda en la documentación de Atlas: los ADR se ubican por ruta, no por número (HU 6.1).'
+      description: Un ADR que cita el elemento.
     AlcanceVista:
       required:
         - tipo
@@ -12296,6 +12803,21 @@ components:
             - 'null'
             - string
       description: Aplicativo del catálogo de un contrato compartido.
+    AplicativoEnlaceArquitectura:
+      required:
+        - slug
+        - nombre
+        - ruta
+      type: object
+      properties:
+        slug:
+          type: string
+        nombre:
+          type: string
+        ruta:
+          type: string
+          description: Ruta de la PWA.
+      description: Enlace a la ficha de un aplicativo.
     AplicativoRefDto:
       required:
         - id
@@ -12821,6 +13343,21 @@ components:
             $ref: '#/components/schemas/FestivoDto'
           description: Festivos del rango.
       description: 'Turnos y festivos de un rango de fechas, para las vistas de lista, semana y mes.'
+    CambioArquitectura:
+      required:
+        - tipo
+        - id
+        - detalle
+      type: object
+      properties:
+        tipo:
+          type: string
+        id:
+          type: string
+        detalle:
+          type:
+            - 'null'
+            - string
     CambioBreaking:
       required:
         - regla
@@ -13329,6 +13866,17 @@ components:
           type: boolean
           description: 'El canal de Teams del soporte está configurado (HU 2.10): el aviso del sábado al equipo sale por ahí. No hay aviso personal por Teams.'
       description: Canales de los recordatorios que tiene este ambiente.
+    CanalProyectoArquitectura:
+      required:
+        - canal
+        - publicacion
+      type: object
+      properties:
+        canal:
+          type: string
+        publicacion:
+          $ref: '#/components/schemas/ResumenPublicacionArquitectura'
+      description: Lo vigente de un proyecto en un canal.
     CanalSoporteDto:
       required:
         - fecha
@@ -13611,6 +14159,24 @@ components:
           type: string
           description: 'QR de la URI como imagen SVG en data URI (img-src data: de la CSP).'
       description: Clave TOTP nueva para registrar en la aplicación de autenticación.
+    ClusterSnapshot:
+      required:
+        - id
+        - raiz
+        - namespaces
+      type: object
+      properties:
+        id:
+          type: string
+        raiz:
+          type:
+            - 'null'
+            - string
+        namespaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamespaceSnapshot'
+      description: El clúster del snapshot.
     CodeownersDto:
       required:
         - version
@@ -14158,6 +14724,35 @@ components:
           items:
             $ref: '#/components/schemas/GuiaElegible'
       description: Contrato compartible con sus versiones elegibles y sus guías compartibles.
+    ContratoElementoArquitectura:
+      required:
+        - ruta
+        - tipo
+        - nombre
+        - ultimaVersion
+        - rutaAtlas
+      type: object
+      properties:
+        ruta:
+          type: string
+        tipo:
+          type: string
+          description: 'openapi, asyncapi o proto.'
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: Nombre del contrato en Atlas; null si no está publicado o no puedes ver contratos.
+        ultimaVersion:
+          type:
+            - 'null'
+            - string
+        rutaAtlas:
+          type:
+            - 'null'
+            - string
+          description: Ruta de la PWA; null si no se resolvió.
+      description: Un contrato que declara el elemento.
     ContratoResumen:
       required:
         - id
@@ -14499,6 +15094,22 @@ components:
           items:
             $ref: '#/components/schemas/AvisoDelPortal'
       description: Detalle de un paquete compartido.
+    DetallePublicacionArquitectura:
+      required:
+        - proyecto
+        - publicacion
+        - vistas
+      type: object
+      properties:
+        proyecto:
+          type: string
+        publicacion:
+          $ref: '#/components/schemas/ResumenPublicacionArquitectura'
+        vistas:
+          type: array
+          items:
+            $ref: '#/components/schemas/VistaArquitecturaResumen'
+      description: 'Una publicación y sus vistas. Sin ver_despliegue, no trae las vistas de despliegue.'
     DetalleRevisionDocumento:
       required:
         - revision
@@ -14521,6 +15132,17 @@ components:
         responsable:
           type: string
       description: Revisión inmutable con su cuerpo.
+    DetalleSnapshot:
+      required:
+        - publicacion
+        - snapshot
+      type: object
+      properties:
+        publicacion:
+          $ref: '#/components/schemas/ResumenPublicacionArquitectura'
+        snapshot:
+          $ref: '#/components/schemas/SnapshotDespliegue'
+      description: Un snapshot con su publicación.
     DetalleVersionDocumento:
       required:
         - version
@@ -14651,6 +15273,25 @@ components:
             $ref: '#/components/schemas/DiferenciaDto'
           description: Diferencias por patrón.
       description: Diferencias entre el CODEOWNERS sugerido y el real de un repo (lectura de la API de GitHub).
+    DiffArquitectura:
+      required:
+        - altas
+        - bajas
+        - cambios
+      type: object
+      properties:
+        altas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CambioArquitectura'
+        bajas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CambioArquitectura'
+        cambios:
+          type: array
+          items:
+            $ref: '#/components/schemas/CambioArquitectura'
     DiffContrato:
       required:
         - contratoId
@@ -14894,6 +15535,19 @@ components:
             - string
           format: date-time
       description: La evaluación de impacto en privacidad (plan 02 §8.4).
+    EnlaceFichaArquitectura:
+      required:
+        - url
+        - titulo
+      type: object
+      properties:
+        url:
+          type: string
+        titulo:
+          type:
+            - 'null'
+            - string
+      description: Enlace https del modelo.
     EntradaPaqueteDto:
       required:
         - contratoId
@@ -15397,6 +16051,24 @@ components:
             type: string
           description: 'Detalle de la validación del spec (422), si lo hay.'
       description: 'Por qué no se publicó, con un código estable.'
+    ErrorPublicacionArquitectura:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'fuente_no_autorizada, aplicativo_no_autorizado, tipo_no_autorizado, proyecto_de_otro_repo o despliegue_no_autorizado (403); sha_con_otro_contenido (409); rama_sin_ambiente, modelo_invalido, snapshot_invalido o contenido_sensible (422).'
+        mensaje:
+          type: string
+        errores:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+      description: 'Por qué no se publicó, con un código estable.'
     ErrorRoles:
       required:
         - error
@@ -15496,6 +16168,36 @@ components:
             - integer
             - string
           format: int32
+    EstadoAmbiente:
+      required:
+        - ambiente
+        - modelo
+        - gitops
+        - argo
+        - clusteres
+        - modeloGitops
+        - gitopsArgo
+      type: object
+      properties:
+        ambiente:
+          type: string
+        modelo:
+          $ref: '#/components/schemas/EstadoCapa'
+        gitops:
+          $ref: '#/components/schemas/EstadoCapa'
+        argo:
+          $ref: '#/components/schemas/EstadoCapa'
+        clusteres:
+          type: array
+          items:
+            $ref: '#/components/schemas/LecturaCluster'
+        modeloGitops:
+          type: string
+          description: 'con_drift, sin_drift o sin_datos: sin datos nunca se reporta como sin drift.'
+        gitopsArgo:
+          type: string
+          description: 'con_drift, sin_drift o sin_datos: sin datos nunca se reporta como sin drift.'
+      description: Las tres capas de un ambiente y lo que dicen sus comparaciones.
     EstadoCalendarioM365Dto:
       required:
         - activo
@@ -15538,6 +16240,21 @@ components:
           description: Última vez que un evento quedó sincronizado.
           format: date-time
       description: Estado del calendario compartido «Soporte TI sábados».
+    EstadoCapa:
+      required:
+        - estado
+        - motivo
+      type: object
+      properties:
+        estado:
+          type: string
+          description: con_datos o sin_datos.
+        motivo:
+          type:
+            - 'null'
+            - string
+          description: 'Por qué no hay datos: sin_publicaciones, sin_snapshot, sin_configurar, sin_lectura, lectura_vencida, http_401, sin_respuesta…'
+      description: Si una capa tiene datos para comparar.
     EstadoM365Dto:
       required:
         - calendario
@@ -15846,6 +16563,23 @@ components:
           description: 'Cuándo lo hizo la persona en su dispositivo, si lo hizo sin conexión.'
           format: date-time
       description: Paso del historial de una solicitud de cambio.
+    ExclusionDrift:
+      required:
+        - patron
+        - motivo
+        - revisarEn
+      type: object
+      properties:
+        patron:
+          type: string
+        motivo:
+          type: string
+        revisarEn:
+          type:
+            - 'null'
+            - string
+          description: 'dd/mm/aaaa no: AAAA-MM-DD. Vencida, la exclusión deja de aplicar.'
+      description: 'Un workload que el drift no debe señalar, con su motivo y su fecha de revisión.'
     ExportacionDocumentosDto:
       required:
         - id
@@ -16455,6 +17189,71 @@ components:
             type: string
           description: 'ADR, historias y PR relacionados.'
       description: La ficha de un caso de uso (plan 02 §7.1). Lo obligatorio se exige al enviarla a revisión.
+    FichaElementoArquitectura:
+      required:
+        - id
+        - kind
+        - titulo
+        - descripcion
+        - tecnologia
+        - etiquetas
+        - metadatos
+        - aplicativo
+        - contratos
+        - adr
+        - enlaces
+        - driftAbierto
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        titulo:
+          type: string
+        descripcion:
+          type:
+            - 'null'
+            - string
+        tecnologia:
+          type:
+            - 'null'
+            - string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        metadatos:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        aplicativo:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/AplicativoEnlaceArquitectura'
+        contratos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContratoElementoArquitectura'
+        adr:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdrElementoArquitectura'
+        enlaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnlaceFichaArquitectura'
+        driftAbierto:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Hallazgos de drift abiertos; null sin ver_despliegue.
+          format: int32
+      description: 'Ficha de un elemento: lo que se abre al tocarlo en la vista.'
     FichaResponsablesDto:
       required:
         - aplicativo
@@ -16887,6 +17686,76 @@ components:
           description: 'Revisión que se comparte: debe ser la publicada (aprobada por el responsable). Vacío = la publicada.'
           format: int32
       description: Una guía compartible dentro de un contrato del paquete.
+    HallazgoResumen:
+      required:
+        - id
+        - capa
+        - ambiente
+        - cluster
+        - codigo
+        - elementoId
+        - sujeto
+        - descripcion
+        - severidad
+        - estado
+        - detectadoEn
+        - resueltoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        capa:
+          type: string
+          description: modelo_gitops o gitops_argo.
+        ambiente:
+          type: string
+        cluster:
+          type:
+            - 'null'
+            - string
+        codigo:
+          type: string
+        elementoId:
+          type:
+            - 'null'
+            - string
+        sujeto:
+          type:
+            - 'null'
+            - string
+        descripcion:
+          type: string
+        severidad:
+          type: string
+          description: media o alta.
+        estado:
+          type: string
+          description: abierto o resuelto.
+        detectadoEn:
+          type: string
+          format: date-time
+        resueltoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: Un hallazgo de drift. No lleva hosts ni IP.
+    HerramientaArquitectura:
+      required:
+        - nombre
+        - version
+      type: object
+      properties:
+        nombre:
+          type:
+            - 'null'
+            - string
+        version:
+          type:
+            - 'null'
+            - string
+      description: HerramientaArquitectura con la que se generó.
     HerramientaResumen:
       required:
         - id
@@ -16983,6 +17852,16 @@ components:
             - 'null'
             - string
       description: Un cambio de canal.
+    HistorialPublicacionesArquitectura:
+      required:
+        - elementos
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResumenPublicacionArquitectura'
+      description: Historial de un proyecto.
     HttpValidationProblemDetails:
       type: object
       properties:
@@ -17015,6 +17894,20 @@ components:
             type: array
             items:
               type: string
+    ImagenWorkload:
+      required:
+        - imagen
+        - digest
+      type: object
+      properties:
+        imagen:
+          type: string
+        digest:
+          type:
+            - 'null'
+            - string
+          description: 'sha256:…, si está fijada por digest.'
+      description: 'Imagen de un contenedor, sin credenciales ni registro interno.'
     IncidenteResumen:
       required:
         - id
@@ -17384,6 +18277,7 @@ components:
           type: string
           format: date-time
       description: 'Invitación de una persona externa, con su estado calculado en este momento.'
+    JsonElement: { }
     Kpi:
       required:
         - codigo
@@ -17427,6 +18321,29 @@ components:
             - string
           description: 'Por qué no hay dato, o aclaración del cálculo.'
       description: Un KPI del plan 02 §15.
+    LecturaCluster:
+      required:
+        - cluster
+        - estado
+        - motivo
+        - leidaEn
+      type: object
+      properties:
+        cluster:
+          type: string
+        estado:
+          type: string
+          description: con_datos o sin_datos.
+        motivo:
+          type:
+            - 'null'
+            - string
+        leidaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: La lectura de Argo CD de un clúster.
     LineaCodeownersDto:
       required:
         - patron
@@ -17620,6 +18537,16 @@ components:
           items:
             $ref: '#/components/schemas/PaqueteResumen'
       description: Paquetes y si la persona puede crear uno.
+    ListadoSnapshots:
+      required:
+        - elementos
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResumenPublicacionArquitectura'
+      description: Publicaciones de snapshots.
     MapaCargaDto:
       required:
         - media
@@ -17709,6 +18636,31 @@ components:
           items:
             $ref: '#/components/schemas/PermisoMatriz'
       description: Módulo y los permisos que declara en su manifiesto.
+    NamespaceSnapshot:
+      required:
+        - nombre
+        - application
+        - workloads
+        - ingressHosts
+      type: object
+      properties:
+        nombre:
+          type: string
+        application:
+          type:
+            - 'null'
+            - string
+          description: Application de Argo CD que lo sincroniza.
+        workloads:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadSnapshot'
+        ingressHosts:
+          type: array
+          items:
+            type: string
+          description: Solo hosts públicos; los internos y las IP no llegan aquí.
+      description: Un namespace y lo que corre en él.
     NombreAmbiguoDto:
       required:
         - clave
@@ -18307,6 +19259,21 @@ components:
             - string
           format: uuid
       description: De dónde sale la exportación.
+    PanelDrift:
+      required:
+        - ambientes
+        - hallazgos
+      type: object
+      properties:
+        ambientes:
+          type: array
+          items:
+            $ref: '#/components/schemas/EstadoAmbiente'
+        hallazgos:
+          type: array
+          items:
+            $ref: '#/components/schemas/HallazgoResumen'
+      description: Panel de drift.
     PaqueteCompartido:
       required:
         - id
@@ -19096,6 +20063,25 @@ components:
         simulado:
           type: boolean
       description: Proveedores de ingreso que ofrece este ambiente. El simulado solo existe en local y dev.
+    ProyectoArquitecturaResumen:
+      required:
+        - codigo
+        - aplicativo
+        - canales
+      type: object
+      properties:
+        codigo:
+          type: string
+        aplicativo:
+          oneOf:
+            - type: 'null'
+            - description: Ficha del aplicativo; null si ya no está en el catálogo.
+              $ref: '#/components/schemas/AplicativoEnlaceArquitectura'
+        canales:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanalProyectoArquitectura'
+      description: Un proyecto con lo vigente en cada canal que la persona puede ver.
     PruebaPushDto:
       required:
         - dispositivos
@@ -19697,6 +20683,40 @@ components:
           type: string
           description: Ruta de la PWA.
       description: Resultado de la búsqueda dentro de lo compartido.
+    ResultadoPublicacionArquitectura:
+      required:
+        - publicacionId
+        - resultado
+        - canal
+        - commitSha
+        - version
+        - estado
+        - diff
+      type: object
+      properties:
+        publicacionId:
+          type: string
+          format: uuid
+        resultado:
+          type: string
+          description: 'creada o igual (el mismo sha con el mismo contenido: no crea nada).'
+        canal:
+          type: string
+        commitSha:
+          type: string
+        version:
+          type:
+            - 'null'
+            - string
+        estado:
+          type: string
+          description: borrador (desde una rama distinta de release) o publicado.
+        diff:
+          oneOf:
+            - type: 'null'
+            - description: Cuántos cambios hay frente a la publicación anterior del canal; null si es la primera.
+              $ref: '#/components/schemas/ResumenDiffArquitectura'
+      description: Resultado de una publicación.
     ResultadoRestablecimiento:
       required:
         - correoEnviado
@@ -19748,6 +20768,32 @@ components:
           format: int32
         hayBreaking:
           type: boolean
+    ResumenDiffArquitectura:
+      required:
+        - altas
+        - bajas
+        - cambios
+      type: object
+      properties:
+        altas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        bajas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        cambios:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+      description: 'Cuántas altas, bajas y cambios.'
     ResumenImportacionDto:
       required:
         - filas
@@ -19841,6 +20887,55 @@ components:
           description: Casos ambiguos (filas marcadas para revisión).
           format: int32
       description: Conteos de la vista previa o de la importación.
+    ResumenPublicacionArquitectura:
+      required:
+        - id
+        - tipo
+        - canal
+        - cluster
+        - rama
+        - commitSha
+        - version
+        - estado
+        - visibilidad
+        - herramientaVersion
+        - publicadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          description: modelo o despliegue.
+        canal:
+          type: string
+          description: 'dev, qa o pdn.'
+        cluster:
+          type: string
+          description: Vacío en un modelo.
+        rama:
+          type: string
+        commitSha:
+          type: string
+        version:
+          type:
+            - 'null'
+            - string
+        estado:
+          type: string
+          description: borrador o publicado.
+        visibilidad:
+          type: string
+          description: interno_ti o restringido.
+        herramientaVersion:
+          type:
+            - 'null'
+            - string
+        publicadoEn:
+          type: string
+          format: date-time
+      description: Publicación sin su contenido.
     ResumenRevisionDocumento:
       required:
         - numero
@@ -20541,6 +21636,29 @@ components:
           description: Códigos de recuperación que aún no se usan.
           format: int32
       description: 'Factores de la cuenta local. Nunca trae secretos: ni la clave TOTP ni los códigos.'
+    ServicioFueraDeK3s:
+      required:
+        - nombre
+        - metodo
+        - elementoModelo
+        - verificadoEn
+      type: object
+      properties:
+        nombre:
+          type: string
+        metodo:
+          type:
+            - 'null'
+            - string
+        elementoModelo:
+          type:
+            - 'null'
+            - string
+        verificadoEn:
+          type:
+            - 'null'
+            - string
+      description: 'Un servicio que corre fuera de k3s, declarado a mano en gitops.'
     SesionDispositivo:
       required:
         - id
@@ -20593,6 +21711,45 @@ components:
         notificaA:
           type: string
       description: Una severidad del plan 02 §6.6.
+    SnapshotCrudo:
+      description: 'El snapshot, tal como lo escribe tools/arquitectura-gen.'
+    SnapshotDespliegue:
+      required:
+        - ambiente
+        - gitopsSha
+        - generadoEn
+        - cluster
+        - fueraDeK3s
+        - ignorar
+      type: object
+      properties:
+        ambiente:
+          type: string
+        gitopsSha:
+          type:
+            - 'null'
+            - string
+          description: 'Si viene, debe ser el sha del token OIDC.'
+        generadoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        cluster:
+          $ref: '#/components/schemas/ClusterSnapshot'
+        fueraDeK3s:
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/ServicioFueraDeK3s'
+        ignorar:
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/ExclusionDrift'
+      description: 'Lo desplegado en un ambiente y un clúster según un commit de flit-gitops. No lleva secretos, IP ni hosts internos.'
     SolicitudAceptacion:
       required:
         - token
@@ -22052,6 +23209,76 @@ components:
             - string
           description: 'Versión contra la que se calculó el changelog (la que Atlas entregó en GET /publicaciones/base), si la hubo. El Consolidado usa el changelog guardado cuando coincide con la versión que corre en pdn.'
       description: Una versión de contrato publicada desde la CI de su repo.
+    SolicitudPublicacionArquitectura:
+      required:
+        - proyecto
+        - aplicativo
+        - tipo
+        - visibilidad
+        - versionPropuesta
+        - generadoEn
+        - herramienta
+        - ambiente
+        - cluster
+        - modelo
+        - snapshot
+      type: object
+      properties:
+        proyecto:
+          type:
+            - 'null'
+            - string
+          description: 'Código del proyecto (flit, flito, landscape, flit-gitops). Lo publica siempre el mismo repo.'
+        aplicativo:
+          type:
+            - 'null'
+            - string
+          description: Slug del aplicativo en el catálogo; debe estar autorizado para el repo con el tipo likec4.
+        tipo:
+          type:
+            - 'null'
+            - string
+          description: modelo o despliegue.
+        visibilidad:
+          type:
+            - 'null'
+            - string
+          description: interno_ti (por defecto) o restringido.
+        versionPropuesta:
+          type:
+            - 'null'
+            - string
+          description: 'arq-vMAJOR.MINOR.PATCH, opcional. La versión que cuenta es el sha.'
+        generadoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        herramienta:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/HerramientaArquitectura'
+        ambiente:
+          type:
+            - 'null'
+            - string
+          description: 'Solo en despliegue: dev, qa o pdn.'
+        cluster:
+          type:
+            - 'null'
+            - string
+          description: 'Solo en despliegue: id del clúster.'
+        modelo:
+          oneOf:
+            - type: 'null'
+            - description: 'Solo en modelo: la salida de likec4 export json de un proyecto, con su layout.'
+              $ref: '#/components/schemas/JsonElement'
+        snapshot:
+          oneOf:
+            - type: 'null'
+            - description: 'Solo en despliegue: el snapshot del generador.'
+              $ref: '#/components/schemas/SnapshotCrudo'
+      description: Lo que publica un commit.
     SolicitudPublicacionGuia:
       required:
         - revision
@@ -22927,6 +24154,25 @@ components:
           description: Cuántas responsabilidades tiene.
           format: int32
       description: 'Una versión del reparto: número, origen, autor y nota.'
+    VistaArquitecturaResumen:
+      required:
+        - id
+        - tipo
+        - categoria
+        - titulo
+      type: object
+      properties:
+        id:
+          type: string
+        tipo:
+          type: string
+          description: 'estatica, dinamica o despliegue.'
+        categoria:
+          type: string
+          description: 'landscape, contexto, contenedores, componentes, dinamica, despliegue u otra.'
+        titulo:
+          type: string
+      description: Una vista del modelo.
     VistaPreviaDto:
       required:
         - version
@@ -23148,6 +24394,30 @@ components:
           type: string
           format: date-time
       description: Un voto.
+    WorkloadSnapshot:
+      required:
+        - kind
+        - nombre
+        - imagenes
+        - replicas
+      type: object
+      properties:
+        kind:
+          type: string
+        nombre:
+          type: string
+        imagenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImagenWorkload'
+        replicas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+      description: Un workload del clúster.
     Yo:
       required:
         - sub
@@ -23328,6 +24598,8 @@ tags:
     description: 'Lo que FLIT comparte con la organización de la persona: su consolidado (aplicativos, paquetes y avisos de deprecación), el detalle de cada paquete, el spec podado por contrato, las guías y los cambios, y la búsqueda dentro de lo compartido. Siempre filtrado por la organización de la sesión, el alcance de la persona y la vigencia de la compartición; cada vista queda en la auditoría (ATLAS-ADR-0043).'
   - name: Permisos
     description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
+  - name: Arquitectura
+    description: 'Arquitectura como código: modelos de LikeC4 y snapshots de despliegue publicados por CI como versiones inmutables por sha y canal, sus vistas, y el drift entre el modelo, gitops y Argo CD.'
   - name: Catálogo
     description: 'Catálogo de aplicativos de FLIT: productos, módulos y servicios con su repo, tecnología, ambientes, criticidad, datos personales, estado y etiquetas, y la ficha de cada uno.'
   - name: Contratos

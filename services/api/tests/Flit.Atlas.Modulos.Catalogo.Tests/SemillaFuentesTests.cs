@@ -17,7 +17,7 @@ public class SemillaFuentesTests(Contenedores contenedores)
     private const string RepoFlit = "flitsas/flit";
     private const string WorkflowFlit = ".github/workflows/atlas-publicar-contratos.yml";
 
-    /// <summary>Los 23 contratos de la matriz del workflow de <c>flit</c>: aplicativo y tipo.</summary>
+    /// <summary>Los 30 contratos de la matriz del workflow de <c>flit</c>: aplicativo y tipo.</summary>
     private static readonly (string Contrato, string Aplicativo, string Tipo)[] MatrizFlit =
     [
         ("core-api", "flit2-core-api", "openapi"),
@@ -43,16 +43,23 @@ public class SemillaFuentesTests(Contenedores contenedores)
         ("platform-errores", "flit2-plataforma", "proto"),
         ("platform-tipos", "flit2-plataforma", "proto"),
         ("tramites-catalogos", "flit2-core-api", "proto"),
+        ("diagnostico", "flit2-core-diagnostico", "openapi"),
+        ("diagnostico-events", "flit2-core-diagnostico", "asyncapi"),
+        ("consultas-runt-intempo", "flit2-core-consultas", "proto"),
+        ("diagnostico-grpc", "flit2-core-diagnostico", "proto"),
+        ("tramites-persona-natural", "flit2-core-api", "proto"),
+        ("ict-orchestration", "flit2-core-ict", "proto"),
+        ("ict-state-callback", "flit2-core-ict", "proto"),
     ];
 
     [Fact]
     public void Trae_una_fila_de_flit_por_aplicativo_con_sus_ramas_su_workflow_y_sus_tipos()
     {
         var semilla = SemillaFuentes.Cargar();
-        var deFlit = semilla.Fuentes.Where(f => f.Repositorio == RepoFlit).ToList();
+        var deFlit = semilla.Fuentes.Where(f => f.Repositorio == RepoFlit && f.Workflow == WorkflowFlit).ToList();
         var aplicativos = SemillaCatalogo.Cargar().Aplicativos.ToDictionary(a => a.Slug);
 
-        Assert.Equal(23, MatrizFlit.Length);
+        Assert.Equal(30, MatrizFlit.Length);
         // Una fila por aplicativo de la matriz, con exactamente los tipos de sus contratos.
         var esperados = MatrizFlit.GroupBy(c => c.Aplicativo)
             .ToDictionary(g => g.Key, g => g.Select(c => c.Tipo).Distinct().Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
@@ -95,10 +102,10 @@ public class SemillaFuentesTests(Contenedores contenedores)
         await using var lectura = bd.Catalogo();
         Assert.Equal(fuentes.Fuentes.Count, await lectura.FuentesPublicacion.CountAsync(Ct));
         var filas = await lectura.FuentesPublicacion.AsNoTracking()
-            .Where(f => f.Repositorio == RepoFlit)
+            .Where(f => f.Repositorio == RepoFlit && f.Workflow == WorkflowFlit)
             .Join(lectura.Aplicativos.AsNoTracking(), f => f.AplicativoId, a => a.Id, (f, a) => new { Fuente = f, a.Slug })
             .ToListAsync(Ct);
-        Assert.Equal(8, filas.Count);
+        Assert.Equal(9, filas.Count);
         Assert.Equal(filas.Count, filas.Select(f => f.Slug).Distinct(StringComparer.Ordinal).Count());
 
         var leidas = filas.Select(f => new FuentePublicacionLeida(
@@ -117,7 +124,23 @@ public class SemillaFuentesTests(Contenedores contenedores)
         Assert.Equal("fuente_no_autorizada",
             ListaBlancaPublicacion.Autorizar(Publicador("develop", ".github/workflows/ci.yml"), leidas, "flit2-core-api", "openapi").Codigo);
         // Ni un tipo que el aplicativo no tiene.
-        Assert.Equal("tipo_no_autorizado", ListaBlancaPublicacion.Autorizar(Publicador("develop", WorkflowFlit), leidas, "flit2-core-ict", "proto").Codigo);
+        Assert.Equal("tipo_no_autorizado", ListaBlancaPublicacion.Autorizar(Publicador("develop", WorkflowFlit), leidas, "flit2-core-comparendos", "openapi").Codigo);
+    }
+
+    [Fact]
+    public void Trae_las_fuentes_de_arquitectura_y_de_los_contratos_de_flito()
+    {
+        var fuentes = SemillaFuentes.Cargar().Fuentes;
+
+        foreach (var (aplicativo, repositorio) in new[] { ("flit2", RepoFlit), ("flito", "flitsas/flito") })
+        {
+            var fuente = Assert.Single(fuentes, f => f.Aplicativo == aplicativo && f.Repositorio == repositorio);
+            Assert.Equal(["likec4"], fuente.Tipos);
+            Assert.Equal(".github/workflows/arquitectura.yml", fuente.Workflow);
+        }
+        var flito = Assert.Single(fuentes, f => f.Aplicativo == "flito-api");
+        Assert.Equal(["openapi"], flito.Tipos);
+        Assert.Equal(WorkflowFlit, flito.Workflow);
     }
 
     private static PublicadorCi Publicador(string rama, string workflow) => new(

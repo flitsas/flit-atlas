@@ -46,6 +46,17 @@ En `src/Flit.Atlas.ServiceDefaults/` está: telemetría, sondas `/health/live` y
 | `Plataforma__Push__Asunto` | Contacto para los servicios de push (`mailto:` o `https://`); por defecto `mailto:atlas@ejemplo.com` |
 | `Plataforma__Push__HostsPermitidos` | Servicios de push aceptados en las suscripciones, separados por coma (por defecto FCM, Mozilla, Apple y WNS) |
 
+## Arquitectura (HU 6.3 a 6.5, ATLAS-ADR-0056)
+
+Todas son opcionales. Sin `Arquitectura__Argo__*`, la capa de Argo CD del drift dice «sin datos».
+
+| Variable | Uso |
+|---|---|
+| `Arquitectura__RepositoriosDespliegue__<i>` | Repos que publican snapshots; por defecto, `flitsas/flit-gitops` |
+| `Arquitectura__Argo__<i>__Cluster`, `Arquitectura__Argo__<i>__Url` | Argo CD de un clúster, con https |
+| `Arquitectura__Argo__<i>__Token` | Token de solo lectura de ese Argo CD. Es secreto: SealedSecret en qa y pdn |
+| `Arquitectura__IntervaloDrift`, `Arquitectura__ToleranciaReconciliacion` | Por defecto, 15 y 30 minutos |
+
 ## Identidad de empleados (HU 1.3)
 
 - «Iniciar sesión con Microsoft»: OIDC con código y PKCE (Microsoft.Identity.Web), tenant único. Se rechazan las cuentas personales, las de otros tenants y los invitados externos; el rechazo queda en la auditoría como `identidad.inicio_rechazado`.

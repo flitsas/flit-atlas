@@ -101,6 +101,21 @@ jobs:
         # HU 5.2 (ATLAS-ADR-0053 §4): corre el bloque de validación del workflow tal cual sobre archivos ficticios.
         run: bash scripts/atlas-publicar/probar-docs.sh
 
+  herramientas:
+    # HU 6.4 y 6.9 (ATLAS-ADR-0056 §5 y §8): generador de snapshots, con fixtures ficticios que traen a propósito secretos, IP y hosts
+    # internos, y prueba de humo del servidor MCP de LikeC4.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - run: npm ci --prefix tools/arquitectura-gen --ignore-scripts --no-audit --no-fund
+      - run: node --test
+        working-directory: tools/arquitectura-gen
+      - run: npm ci --prefix tools/likec4-mcp --ignore-scripts --no-audit --no-fund
+      - run: node tools/likec4-mcp/probar.mjs
+
   atlas-publicar:
     # HU 3.3: flit-atlas valida (en PR) y publica (en push a develop) sus propios contratos con el workflow reutilizable,
     # llamado desde su propia rama (autopublicación, ATLAS-ADR-0035 §7). En los PR, un breaking frente a pdn (o, mientras

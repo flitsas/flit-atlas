@@ -1,0 +1,234 @@
+name: atlas-publicar-arquitectura
+
+# HU 6.3 y 6.4 · ATLAS-ADR-0056 §2 y §5, ATLAS-ADR-0009 y ATLAS-ADR-0035: workflow reutilizable con el que cada repo de FLIT publica en
+# Flit Atlas su modelo de LikeC4 (tipo: modelo) o, desde flit-gitops, sus snapshots de despliegue (tipo: despliegue). Pasos:
+#   1. modelo: likec4 validate y likec4 export json de UN proyecto (--project: sin él, la salida es una lista y Atlas la rechaza).
+#      despliegue: tools/arquitectura-gen sobre el checkout, con kustomize fijado y verificado.
+#   2. gitleaks sobre lo que va a salir. Atlas además rechaza cualquier forma de IP o de secreto.
+#   3. En push o workflow_dispatch: POST /api/v1/arquitectura/publicaciones con el token OIDC (audiencia = la URL de Atlas), uno por llamada.
+#      200 «igual» (el mismo sha ya publicó ese contenido) es un resultado correcto.
+#
+# Uso desde flit, una vez por proyecto (el job que llama debe conceder id-token: write):
+#   jobs:
+#     publicar:
+#       permissions: { contents: read, id-token: write }
+#       strategy:
+#         matrix:
+#           include:
+#             - { proyecto: landscape, carpeta: arquitectura/landscape }
+#             - { proyecto: flit, carpeta: docs/arquitectura }
+#       uses: flitsas/flit-atlas/.github/workflows/atlas-publicar-arquitectura.yml@v1
+#       with:
+#         tipo: modelo
+#         proyecto: ${{ matrix.proyecto }}
+#         aplicativo: <slug del catálogo con la fuente likec4>
+#         carpeta: ${{ matrix.carpeta }}
+#         atlas_url: ${{ vars.ATLAS_URL }}
+# Uso desde flit-gitops (rama main, su repo debe estar en Arquitectura__RepositoriosDespliegue):
+#       with: { tipo: despliegue, proyecto: flit-gitops, aplicativo: <slug>, atlas_url: "${{ vars.ATLAS_URL }}" }
+
+on:
+  workflow_call:
+    inputs:
+      tipo:
+        description: modelo o despliegue.
+        type: string
+        required: true
+      proyecto:
+        description: Código del proyecto en Atlas; en un modelo, también el nombre del proyecto en likec4.config.json.
+        type: string
+        required: true
+      aplicativo:
+        description: Slug del aplicativo en el catálogo de Atlas, el de la lista blanca con el tipo likec4.
+        type: string
+        required: true
+      carpeta:
+        description: Solo en modelo, carpeta con los .c4.
+        type: string
+        required: false
+        default: docs/arquitectura
+      visibilidad:
+        description: interno_ti o restringido.
+        type: string
+        required: false
+        default: interno_ti
+      version_propuesta:
+        description: Solo en modelo, arq-vMAJOR.MINOR.PATCH, opcional.
+        type: string
+        required: false
+        default: ""
+      config:
+        description: Solo en despliegue, configuración del generador, relativa al repo.
+        type: string
+        required: false
+        default: arquitectura-gen.yaml
+      ref_herramienta:
+        description: >-
+          Solo en despliegue, referencia de flitsas/flit-atlas de donde sale tools/arquitectura-gen. Debe ser la misma con la que se llama
+          este workflow.
+        type: string
+        required: false
+        default: v1
+      atlas_url:
+        description: URL pública de Atlas (sin /api), p. ej. https://atlas.flitsas.com. Vacía, solo valida.
+        type: string
+        required: false
+        default: ""
+      publicar:
+        description: false para solo validar. Aunque sea true, solo publica en push o workflow_dispatch.
+        type: boolean
+        required: false
+        default: true
+      runner:
+        description: Runner del job.
+        type: string
+        required: false
+        default: ubuntu-latest
+
+permissions:
+  contents: read
+
+jobs:
+  publicar:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      LIKEC4_VERSION: 1.59.4
+      KUSTOMIZE_VERSION: 5.8.3
+      KUSTOMIZE_SHA256: cb9e31198d3f63b44848bd0afc4c8efc56e6cfef9c93a4a39a211940e6decd61
+      # La misma versión y suma que el job «gitleaks» de ci.yml.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      TIPO: ${{ inputs.tipo }}
+      PROYECTO: ${{ inputs.proyecto }}
+      APLICATIVO: ${{ inputs.aplicativo }}
+      CARPETA: ${{ inputs.carpeta }}
+      VISIBILIDAD: ${{ inputs.visibilidad }}
+      VERSION_PROPUESTA: ${{ inputs.version_propuesta }}
+      CONFIG: ${{ inputs.config }}
+      ATLAS_URL: ${{ inputs.atlas_url }}
+      PUEDE_PUBLICAR: ${{ inputs.publicar && inputs.atlas_url != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Revisar las entradas
+        run: |
+          set -euo pipefail
+          if [ "$TIPO" != modelo ] && [ "$TIPO" != despliegue ]; then
+            echo "::error::tipo debe ser modelo o despliegue"
+            exit 1
+          fi
+          if [ -n "$ATLAS_URL" ] && [[ ! "$ATLAS_URL" =~ ^https://[^/]+$ ]]; then
+            echo "::error::atlas_url debe ser https://<host>, sin ruta ni barra final"
+            exit 1
+          fi
+          for ruta in "$CARPETA" "$CONFIG"; do
+            case "$ruta" in
+              /*|*..*) echo "::error::La ruta «$ruta» debe ser relativa y sin «..»"; exit 1 ;;
+            esac
+          done
+          mkdir -p "$RUNNER_TEMP/atlas-salida"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Modelo, validar y exportar
+        if: inputs.tipo == 'modelo'
+        run: |
+          set -euo pipefail
+          # Fuera del repo: no lo afectan su package.json ni su .npmrc.
+          npm install --prefix "$RUNNER_TEMP/likec4" --ignore-scripts --no-audit --no-fund "likec4@${LIKEC4_VERSION}"
+          likec4="$RUNNER_TEMP/likec4/node_modules/.bin/likec4"
+          "$likec4" validate "$CARPETA"
+          "$likec4" export json --project "$PROYECTO" -o "$RUNNER_TEMP/atlas-salida/modelo.json" "$CARPETA"
+
+      - name: Despliegue, traer el generador
+        if: inputs.tipo == 'despliegue'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: flitsas/flit-atlas
+          ref: ${{ inputs.ref_herramienta }}
+          path: .atlas-herramienta
+          persist-credentials: false
+          sparse-checkout: tools/arquitectura-gen
+
+      - name: Despliegue, generar los snapshots
+        if: inputs.tipo == 'despliegue'
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/atlas-bin"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 --retry-all-errors -o "$dir/kustomize.tgz" \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          echo "${KUSTOMIZE_SHA256}  $dir/kustomize.tgz" | sha256sum -c -
+          tar -xzf "$dir/kustomize.tgz" -C "$dir" kustomize
+          npm ci --prefix .atlas-herramienta/tools/arquitectura-gen --ignore-scripts --no-audit --no-fund
+          PATH="$dir:$PATH" node .atlas-herramienta/tools/arquitectura-gen/gen.mjs \
+            --repo . --config "$CONFIG" --sha "$GITHUB_SHA" --salida "$RUNNER_TEMP/atlas-salida"
+          # Es código de otro repo dentro de este checkout: no debe entrar en ninguna revisión de lo que se publica.
+          rm -rf .atlas-herramienta
+
+      - name: Instalar gitleaks (binario fijado y verificado)
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/atlas-bin"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 --retry-all-errors -o "$dir/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $dir/gitleaks.tgz" | sha256sum -c -
+          tar -xzf "$dir/gitleaks.tgz" -C "$dir" gitleaks
+          rm "$dir/gitleaks.tgz"
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Buscar secretos en lo que se publica
+        run: gitleaks dir "$RUNNER_TEMP/atlas-salida" --redact --no-banner --exit-code 1
+
+      - name: Publicar en Atlas
+        if: env.PUEDE_PUBLICAR == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const { ATLAS_URL, TIPO, PROYECTO, APLICATIVO, VISIBILIDAD, VERSION_PROPUESTA, LIKEC4_VERSION, RUNNER_TEMP } = process.env;
+            const salida = path.join(RUNNER_TEMP, 'atlas-salida');
+            const leer = (archivo) => JSON.parse(fs.readFileSync(path.join(salida, archivo), 'utf8'));
+            const comun = { proyecto: PROYECTO, aplicativo: APLICATIVO, tipo: TIPO, visibilidad: VISIBILIDAD, generadoEn: new Date().toISOString() };
+            const cuerpos = TIPO === 'modelo'
+              ? [{ ...comun, versionPropuesta: VERSION_PROPUESTA || null, herramienta: { nombre: 'likec4', version: LIKEC4_VERSION }, modelo: leer('modelo.json') }]
+              : fs.readdirSync(salida).filter((a) => /^snapshot\..+\.json$/.test(a)).map((a) => {
+                  const snapshot = leer(a);
+                  return { ...comun, ambiente: snapshot.ambiente, cluster: snapshot.cluster.id, snapshot };
+                });
+            if (cuerpos.length === 0) {
+              core.setFailed('No hay nada que publicar.');
+              return;
+            }
+            const motivos = {
+              401: 'token rechazado (audiencia distinta de la URL de Atlas, vencido o sin id-token: write)',
+              403: 'fuera de la lista blanca (repo, rama, workflow, aplicativo o tipo likec4), workflow reutilizable no oficial o proyecto de otro repo',
+              409: 'este commit ya publicó en este canal con otro contenido: las versiones son inmutables',
+              422: 'el contenido no se aceptó: mira los errores',
+            };
+            for (const cuerpo of cuerpos) {
+              const destino = cuerpo.cluster ? `${cuerpo.ambiente}/${cuerpo.cluster}` : PROYECTO;
+              // Un token por llamada: vive minutos, nunca sale de este paso y su audiencia es la URL a la que va (F4-SEC-27).
+              const token = await core.getIDToken(ATLAS_URL);
+              const respuesta = await fetch(`${ATLAS_URL}/api/v1/arquitectura/publicaciones`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(cuerpo),
+              });
+              const texto = await respuesta.text();
+              if (respuesta.status !== 200 && respuesta.status !== 201) {
+                core.setFailed(`${destino}: ${respuesta.status} ${motivos[respuesta.status] ?? ''}\n${texto.slice(0, 4000)}`);
+                return;
+              }
+              const { resultado, canal, diff } = JSON.parse(texto);
+              core.notice(`${destino}: ${resultado} en el canal ${canal}${diff ? `, ${diff.altas} altas, ${diff.bajas} bajas, ${diff.cambios} cambios` : ''}.`);
+            }

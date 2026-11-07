@@ -102,10 +102,13 @@ public static class ManifiestosNucleo
         new("atlas.docs.exportar", "Exportar documentos y colecciones.", LiderTecnico, Desarrollador, Soporte, Negocio, AsesorComercial),
     ], [TiposAlcance.Documento]);
 
-    public static ManifiestoPermisos Diagramas { get; } = new("arquitectura", "Diagramas",
+    /// <summary>
+    /// Lo exige el módulo <c>diagramas</c> y queda aquí porque su manifiesto es vacío (ATLAS-ADR-0054 §1), con un id que no choca con
+    /// ningún módulo. <c>atlas.arquitectura.*</c> se mudó a <c>PermisosArquitectura</c>, con los mismos códigos y concesiones
+    /// (ATLAS-ADR-0056 §1).
+    /// </summary>
+    public static ManifiestoPermisos Diagramas { get; } = new("diagramas_edicion", "Diagramas",
     [
-        new("atlas.arquitectura.ver", "Ver los diagramas de arquitectura (LikeC4) según su visibilidad.", LiderTecnico, Desarrollador, AsesorComercial),
-        new("atlas.arquitectura.ver_despliegue", "Ver las vistas de despliegue por ambiente y el drift.", LiderTecnico, Desarrollador),
         new("atlas.diagramas.editar", "Crear y editar diagramas del lienzo y funcionales.", LiderTecnico, Desarrollador, Responsable),
     ]);
 

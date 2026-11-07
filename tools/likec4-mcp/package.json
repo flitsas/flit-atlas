@@ -1,0 +1,14 @@
+{
+  "name": "@flit-atlas/likec4-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor MCP de LikeC4 para el equipo, con la versión fijada (HU 6.9, ATLAS-ADR-0056 §8). No se despliega.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "stdio": "likec4 mcp --stdio",
+    "http": "likec4 mcp --http",
+    "probar": "node probar.mjs"
+  },
+  "dependencies": { "likec4": "1.59.4" }
+}
