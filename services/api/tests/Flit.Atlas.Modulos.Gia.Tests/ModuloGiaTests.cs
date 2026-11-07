@@ -119,7 +119,8 @@ public class ModuloGiaTests(Contenedores contenedores)
     {
         var permisos = new ModuloGia().Permisos.Permisos.ToDictionary(p => p.Codigo);
 
-        Assert.Equal(["atlas.gia.auditar", "atlas.gia.gestionar", "atlas.gia.ver"], permisos.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["atlas.gia.auditar", "atlas.gia.gestionar", "atlas.gia.politicas.ver", "atlas.gia.ver"], permisos.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(RolesAtlas.Empleados, permisos[PermisosGia.PoliticasVer].ConcedidoA);
         Assert.Equal([RolesAtlas.GobiernoIa], permisos[PermisosGia.Gestionar].ConcedidoA);
         Assert.Equal([RolesAtlas.GobiernoIa, RolesAtlas.Auditor], permisos[PermisosGia.Ver].ConcedidoA);
         Assert.Equal([RolesAtlas.GobiernoIa, RolesAtlas.Auditor], permisos[PermisosGia.Auditar].ConcedidoA);

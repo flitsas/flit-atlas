@@ -2,6 +2,8 @@ import { useId, useState } from 'react';
 import { NavLink } from 'react-router';
 
 import { ErrorApi } from '../../app/api';
+import { tienePermiso } from '../../app/modulos/resolver';
+import { useSesion } from '../../app/sesion';
 import { cn } from '../../app/ui/Tarjeta';
 import { detalleError, usePersonas, type PersonaGia } from './api';
 
@@ -50,21 +52,22 @@ export function ErrorEnvio({ error, porDefecto }: { error: unknown; porDefecto: 
 }
 
 const SECCIONES = [
-  { ruta: '/gobierno-ia', texto: 'Tablero', fin: true },
-  { ruta: '/gobierno-ia/casos', texto: 'Casos' },
-  { ruta: '/gobierno-ia/politicas', texto: 'Políticas' },
-  { ruta: '/gobierno-ia/herramientas', texto: 'Herramientas' },
-  { ruta: '/gobierno-ia/incidentes', texto: 'Incidentes' },
-  { ruta: '/gobierno-ia/roles', texto: 'Roles' },
+  { ruta: '/gobierno-ia', texto: 'Tablero', fin: true, permiso: 'atlas.gia.ver' },
+  { ruta: '/gobierno-ia/casos', texto: 'Casos', permiso: 'atlas.gia.ver' },
+  { ruta: '/gobierno-ia/politicas', texto: 'Políticas', permiso: 'atlas.gia.politicas.ver' },
+  { ruta: '/gobierno-ia/herramientas', texto: 'Herramientas', permiso: 'atlas.gia.ver' },
+  { ruta: '/gobierno-ia/incidentes', texto: 'Incidentes', permiso: 'atlas.gia.ver' },
+  { ruta: '/gobierno-ia/roles', texto: 'Roles', permiso: 'atlas.gia.ver' },
 ];
 
 /** Encabezado común: título y navegación entre las secciones del módulo. */
 export function Pagina({ titulo, descripcion, accion, children }: { titulo: string; descripcion?: string; accion?: React.ReactNode; children: React.ReactNode }) {
   const id = useId();
+  const { acceso } = useSesion();
   return (
     <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4">
       <nav aria-label="Secciones de gobierno de IA" className="flex flex-wrap gap-2">
-        {SECCIONES.map((s) => (
+        {SECCIONES.filter((s) => tienePermiso(s.permiso, acceso.permisos)).map((s) => (
           <NavLink
             key={s.ruta}
             to={s.ruta}

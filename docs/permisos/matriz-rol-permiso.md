@@ -102,6 +102,7 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `atlas.gia.ver` | Ver el inventario de casos de IA, políticas y costos. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
+| `atlas.gia.politicas.ver` | Leer y aceptar las políticas de IA vigentes. | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   |   |
 | `atlas.gia.gestionar` | Gestionar casos de uso, riesgos, políticas y llaves virtuales. | ✔ |   |   |   |   | ✔ |   |   |   |   |   |   |   |   |
 | `atlas.gia.auditar` | Revisar la evidencia de gobierno de IA. | ✔ |   |   |   |   | ✔ | ✔ |   |   |   |   |   |   |   |
 

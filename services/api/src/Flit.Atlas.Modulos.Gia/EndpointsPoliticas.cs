@@ -48,9 +48,9 @@ internal static class EndpointsPoliticas
     public static void Mapear(RouteGroupBuilder grupo)
     {
         grupo.MapGet("/politicas", ListarAsync)
-            .RequierePermiso(PermisosGia.Ver)
+            .RequierePermiso(PermisosGia.PoliticasVer)
             .WithName("ListarPoliticasIa").WithSummary("Políticas de IA")
-            .WithDescription("Todas las versiones, por código y versión, sin el texto. Requiere atlas.gia.ver.")
+            .WithDescription("Por código y versión, sin el texto. Con atlas.gia.ver, todas las versiones; solo con atlas.gia.politicas.ver, las vigentes.")
             .Produces<List<PoliticaResumen>>();
 
         grupo.MapPost("/politicas", CrearAsync)
@@ -62,9 +62,9 @@ internal static class EndpointsPoliticas
             .ProducesValidationProblem();
 
         grupo.MapGet("/politicas/{id:guid}", DetalleAsync)
-            .RequierePermiso(PermisosGia.Ver)
+            .RequierePermiso(PermisosGia.PoliticasVer)
             .WithName("ObtenerPoliticaIa").WithSummary("Una versión con su texto")
-            .WithDescription("404 si no existe. Requiere atlas.gia.ver.")
+            .WithDescription("404 si no existe o, sin atlas.gia.ver, si no está vigente. Requiere atlas.gia.politicas.ver.")
             .Produces<PoliticaDetalle>()
             .Produces<ErrorGia>(StatusCodes.Status404NotFound);
 
@@ -88,9 +88,9 @@ internal static class EndpointsPoliticas
             .Produces<ErrorGia>(StatusCodes.Status422UnprocessableEntity);
 
         grupo.MapPost("/politicas/{id:guid}/aceptacion", AceptarAsync)
-            .RequierePermiso(PermisosGia.Ver)
+            .RequierePermiso(PermisosGia.PoliticasVer)
             .WithName("AceptarPoliticaIa").WithSummary("Leí y acepto")
-            .WithDescription("Registra persona, fecha e IP, una vez por versión. Solo sobre una versión vigente (409 estado_invalido); 409 ya_aceptada si ya la aceptó. Requiere atlas.gia.ver.")
+            .WithDescription("Registra persona, fecha e IP, una vez por versión. Solo sobre una versión vigente (409 estado_invalido); 409 ya_aceptada si ya la aceptó; sin atlas.gia.ver, lo que no está vigente responde 404. Requiere atlas.gia.politicas.ver.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ErrorGia>(StatusCodes.Status404NotFound)
             .Produces<ErrorGia>(StatusCodes.Status409Conflict);
@@ -103,11 +103,20 @@ internal static class EndpointsPoliticas
             .Produces<ErrorGia>(StatusCodes.Status404NotFound);
     }
 
-    private static async Task<IResult> ListarAsync(HttpContext http, GiaDbContext contexto, CancellationToken ct)
+    /// <summary>Si la persona ve también los borradores y las versiones reemplazadas; si no, solo lo vigente.</summary>
+    private static async Task<bool> VeTodasAsync(HttpContext http, IPermisosDeSesion permisosDeSesion, CancellationToken ct) =>
+        (await permisosDeSesion.ObtenerAsync(http.User, ct)).TieneEn(PermisosGia.Ver, AlcanceAsignacion.Global);
+
+    private static async Task<IResult> ListarAsync(HttpContext http, GiaDbContext contexto, IPermisosDeSesion permisosDeSesion, CancellationToken ct)
     {
         var persona = ApoyoGia.Persona(http.User);
         var aceptadas = await contexto.Aceptaciones.AsNoTracking().Where(a => a.PersonaId == persona).Select(a => a.PoliticaId).ToListAsync(ct);
-        var politicas = await contexto.Politicas.AsNoTracking().OrderBy(p => p.Codigo).ThenByDescending(p => p.Version).ToListAsync(ct);
+        var consulta = contexto.Politicas.AsNoTracking();
+        if (!await VeTodasAsync(http, permisosDeSesion, ct))
+        {
+            consulta = consulta.Where(p => p.Estado == ValoresGia.PoliticaVigente);
+        }
+        var politicas = await consulta.OrderBy(p => p.Codigo).ThenByDescending(p => p.Version).ToListAsync(ct);
         return Results.Ok(politicas.Select(p => Resumen(p, aceptadas.Contains(p.Id))).ToList());
     }
 
@@ -143,10 +152,10 @@ internal static class EndpointsPoliticas
     }
 
     private static async Task<IResult> DetalleAsync(
-        [Description("Id de la versión.")] Guid id, HttpContext http, GiaDbContext contexto, PlataformaDbContext plataforma, CancellationToken ct)
+        [Description("Id de la versión.")] Guid id, HttpContext http, GiaDbContext contexto, PlataformaDbContext plataforma, IPermisosDeSesion permisosDeSesion, CancellationToken ct)
     {
         var politica = await contexto.Politicas.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
-        if (politica is null)
+        if (politica is null || (politica.Estado != ValoresGia.PoliticaVigente && !await VeTodasAsync(http, permisosDeSesion, ct)))
         {
             return NoEncontrada();
         }
@@ -230,7 +239,7 @@ internal static class EndpointsPoliticas
 
     private static async Task<IResult> AceptarAsync(
         [Description("Id de la versión.")] Guid id,
-        HttpContext http, GiaDbContext contexto, PlataformaDbContext plataforma, TimeProvider reloj, CancellationToken ct)
+        HttpContext http, GiaDbContext contexto, PlataformaDbContext plataforma, IPermisosDeSesion permisosDeSesion, TimeProvider reloj, CancellationToken ct)
     {
         var politica = await contexto.Politicas.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
         if (politica is null)
@@ -239,6 +248,10 @@ internal static class EndpointsPoliticas
         }
         if (politica.Estado != ValoresGia.PoliticaVigente)
         {
+            if (!await VeTodasAsync(http, permisosDeSesion, ct))
+            {
+                return NoEncontrada();
+            }
             return ApoyoGia.Conflicto("estado_invalido", "Solo se acepta una política vigente.");
         }
         var persona = ApoyoGia.Persona(http.User);

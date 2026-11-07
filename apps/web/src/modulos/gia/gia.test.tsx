@@ -8,6 +8,7 @@ import { markdownSeguro } from './Markdown';
 import { moduloGia } from './modulo';
 import Caso from './paginas/Caso';
 import Politica from './paginas/Politica';
+import Politicas from './paginas/Politicas';
 import Roles from './paginas/Roles';
 import Tablero from './paginas/Tablero';
 
@@ -79,6 +80,16 @@ describe('gobierno de IA (ATLAS-ADR-0055)', () => {
     for (const ruta of ['/gobierno-ia/casos/nuevo', '/gobierno-ia/casos/:id/editar', '/gobierno-ia/casos/:id/evaluar']) {
       expect(moduloGia.rutas.find((r) => r.path === ruta)?.permiso).toBe('atlas.gia.gestionar');
     }
+  });
+
+  it('quien solo lee políticas no ve las demás secciones', async () => {
+    api({ '/api/v1/gia/politicas': [200, []] });
+    conProveedores(<Politicas />, '/gobierno-ia/politicas', '/gobierno-ia/politicas', ['atlas.gia.politicas.ver']);
+
+    const secciones = await screen.findByRole('navigation', { name: 'Secciones de gobierno de IA' });
+    expect(within(secciones).getAllByRole('link').map((e) => e.textContent)).toEqual(['Políticas']);
+    expect(moduloGia.rutas.find((r) => r.path === '/gobierno-ia')?.permiso).toBe('atlas.gia.ver');
+    expect(moduloGia.rutas.find((r) => r.path === '/gobierno-ia/politicas/:id')?.permiso).toBe('atlas.gia.politicas.ver');
   });
 
   it('el tablero dice «Sin datos» en lo que no se puede medir, no cero', async () => {

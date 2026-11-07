@@ -118,6 +118,7 @@ public static class ManifiestosNucleo
     public static ManifiestoPermisos GobiernoDeIa { get; } = new("gia", "Gobierno de IA",
     [
         new("atlas.gia.ver", "Ver el inventario de casos de IA, políticas y costos.", GobiernoIa, Auditor),
+        new("atlas.gia.politicas.ver", "Leer y aceptar las políticas de IA vigentes.", [.. Empleados]),
         new("atlas.gia.gestionar", "Gestionar casos de uso, riesgos, políticas y llaves virtuales.", GobiernoIa),
         new("atlas.gia.auditar", "Revisar la evidencia de gobierno de IA.", GobiernoIa, Auditor),
     ]);

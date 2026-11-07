@@ -15,6 +15,10 @@ namespace Flit.Atlas.Modulos.Gia;
 public static class PermisosGia
 {
     public const string Ver = "atlas.gia.ver";
+
+    /// <summary>Solo las políticas vigentes, para leerlas y aceptarlas (decisión del líder, 06/11/2026; ATLAS-ADR-0055 §7).</summary>
+    public const string PoliticasVer = "atlas.gia.politicas.ver";
+
     public const string Gestionar = "atlas.gia.gestionar";
     public const string Auditar = "atlas.gia.auditar";
 

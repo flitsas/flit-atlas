@@ -98,6 +98,10 @@ quien rinde cuentas en la matriz RACI del plan 02 §4.2.
 - Publicar exige el rol Comité (plan 02 §4.2) y reemplaza la versión vigente anterior.
 - `gia_aceptacion_politica` registra persona, fecha e IP, una vez por versión, solo sobre políticas vigentes.
 
+Por decisión del líder (06/11/2026), todos los empleados leen y aceptan las políticas **vigentes** con un permiso propio,
+`atlas.gia.politicas.ver`. No reciben `atlas.gia.ver`, que abriría casos, EIPD, tablero y borradores: sin él, lo que no está
+vigente responde 404.
+
 ### 8. Herramientas e incidentes
 
 - `gia_herramienta` y `gia_asiento`, según el plan 02 §11.2, con el proveedor como texto: no se construyen `gia_proveedor` ni
@@ -125,9 +129,9 @@ Se usa `plataforma_auditoria`, ya inmutable, en la misma transacción, sin texto
 
 - Buenas: inventario, riesgo y políticas sirven sin el gateway; nada sembrado parece aprobado; las aprobaciones quedan
   reconstruibles.
-- Malas: con las concesiones actuales los empleados no pueden leer ni aceptar las políticas (ver «Por verificar»), así que el
-  KPI de aceptación se queda bajo hasta decidirlo. El rol de gobierno es un dato, no un permiso nuevo.
-- A vigilar: la ficha guarda texto libre que puede mencionar debilidades reales; por eso el módulo es solo de `atlas.gia.*`.
+- Malas: el rol de gobierno es un dato, no un permiso nuevo.
+- A vigilar: la ficha guarda texto libre que puede mencionar debilidades reales; por eso, salvo las políticas vigentes, el
+  módulo es solo de `atlas.gia.ver`.
 
 ## Opciones descartadas
 
@@ -144,8 +148,6 @@ presupuesto por ambiente y los «proveedores efectivos» calculados desde el ali
 
 ## Por verificar
 
-- **[por verificar con el líder]** ¿Los empleados leen y aceptan las políticas? El plan 02 §11.3 lo da a «lector+», pero el
-  manifiesto solo da `atlas.gia.ver` a gobierno de IA y auditor. El líder técnico tampoco lo tiene, salvo como superadmin.
 - **[por verificar con el líder]** Quién asigna los roles de gobierno. Hoy es `atlas.gia.gestionar`, así que quien lo tiene puede
   darse el rol de Comité; la asignación queda auditada, pero no lo impide.
 - **[por verificar con el líder]** Si quien evalúa o redacta puede también aprobar. Es la misma pregunta abierta de ATLAS-ADR-0053.

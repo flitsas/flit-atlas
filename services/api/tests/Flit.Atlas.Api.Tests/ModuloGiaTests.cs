@@ -305,6 +305,48 @@ public sealed class ModuloGiaTests(EntornoApi entorno)
     }
 
     [Fact]
+    public async Task Un_empleado_lee_y_acepta_solo_las_politicas_vigentes_y_no_ve_lo_demas()
+    {
+        var baseDeDatos = await BaseEncendidaAsync();
+        await using var api = entorno.Api(baseDeDatos: baseDeDatos);
+        var (gobierno, persona) = await EmpleadoAsync(api, baseDeDatos, RolesAtlas.GobiernoIa);
+        using var navGobierno = gobierno;
+        await DarRolAsync(gobierno, persona, "comite");
+        var (lector, _) = await EmpleadoAsync(api, baseDeDatos, RolesAtlas.Lector);
+        using var navLector = lector;
+        var borrador = (await Json(await gobierno.GetAsync(Ruta + "/politicas")))[0].GetProperty("id").GetString()!;
+        Assert.Equal(0, (await Json(await lector.GetAsync(Ruta + "/politicas"))).GetArrayLength());
+
+        async Task<string> PublicarAsync(string version)
+        {
+            var r = await Enviar(gobierno, HttpMethod.Post, "/politicas", new { codigo = "POL-LECTURA", version, titulo = "Lectura", contenido = "Texto aprobado.", requiereAceptacion = true });
+            var id = (await Json(r)).GetProperty("politica").GetProperty("id").GetString()!;
+            Assert.Equal(HttpStatusCode.OK, (await Enviar(gobierno, HttpMethod.Post, $"/politicas/{id}/publicacion")).StatusCode);
+            return id;
+        }
+
+        var v1 = await PublicarAsync("1.0");
+        var v2 = await PublicarAsync("2.0");
+
+        var lista = await Json(await lector.GetAsync(Ruta + "/politicas"));
+        Assert.Equal(v2, Assert.Single(lista.EnumerateArray()).GetProperty("id").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await lector.GetAsync($"{Ruta}/politicas/{v2}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Enviar(lector, HttpMethod.Post, $"/politicas/{v2}/aceptacion")).StatusCode);
+
+        // Lo que no está vigente no existe para el lector, y lo demás del módulo sigue cerrado.
+        foreach (var id in new[] { v1, borrador })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await lector.GetAsync($"{Ruta}/politicas/{id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await Enviar(lector, HttpMethod.Post, $"/politicas/{id}/aceptacion")).StatusCode);
+        }
+        foreach (var ruta in new[] { "/casos", "/tablero", $"/politicas/{v2}/aceptaciones" })
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, (await lector.GetAsync(Ruta + ruta)).StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await Enviar(lector, HttpMethod.Put, $"/politicas/{borrador}", new { titulo = "X", contenido = "Y", requiereAceptacion = false })).StatusCode);
+    }
+
+    [Fact]
     public async Task Herramientas_asientos_e_incidentes_quedan_registrados_y_auditados()
     {
         var baseDeDatos = await BaseEncendidaAsync();

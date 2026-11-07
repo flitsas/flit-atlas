@@ -9300,7 +9300,7 @@ paths:
       tags:
         - Gobierno de IA
       summary: Políticas de IA
-      description: 'Todas las versiones, por código y versión, sin el texto. Requiere atlas.gia.ver.'
+      description: 'Por código y versión, sin el texto. Con atlas.gia.ver, todas las versiones; solo con atlas.gia.politicas.ver, las vigentes.'
       operationId: ListarPoliticasIa
       responses:
         '200':
@@ -9314,7 +9314,7 @@ paths:
         '401':
           description: No hay una sesión activa o venció.
         '403':
-          description: La sesión no tiene el permiso atlas.gia.ver.
+          description: La sesión no tiene el permiso atlas.gia.politicas.ver.
         '404':
           description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
         '429':
@@ -9322,7 +9322,7 @@ paths:
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
-        - atlas.gia.ver
+        - atlas.gia.politicas.ver
     post:
       tags:
         - Gobierno de IA
@@ -9373,7 +9373,7 @@ paths:
       tags:
         - Gobierno de IA
       summary: Una versión con su texto
-      description: 404 si no existe. Requiere atlas.gia.ver.
+      description: '404 si no existe o, sin atlas.gia.ver, si no está vigente. Requiere atlas.gia.politicas.ver.'
       operationId: ObtenerPoliticaIa
       parameters:
         - name: id
@@ -9399,13 +9399,13 @@ paths:
         '401':
           description: No hay una sesión activa o venció.
         '403':
-          description: La sesión no tiene el permiso atlas.gia.ver.
+          description: La sesión no tiene el permiso atlas.gia.politicas.ver.
         '429':
           $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
       x-atlas-permisos:
-        - atlas.gia.ver
+        - atlas.gia.politicas.ver
     put:
       tags:
         - Gobierno de IA
@@ -9523,7 +9523,7 @@ paths:
       tags:
         - Gobierno de IA
       summary: Leí y acepto
-      description: 'Registra persona, fecha e IP, una vez por versión. Solo sobre una versión vigente (409 estado_invalido); 409 ya_aceptada si ya la aceptó. Requiere atlas.gia.ver.'
+      description: 'Registra persona, fecha e IP, una vez por versión. Solo sobre una versión vigente (409 estado_invalido); 409 ya_aceptada si ya la aceptó; sin atlas.gia.ver, lo que no está vigente responde 404. Requiere atlas.gia.politicas.ver.'
       operationId: AceptarPoliticaIa
       parameters:
         - name: id
@@ -9551,14 +9551,14 @@ paths:
         '401':
           description: No hay una sesión activa o venció.
         '403':
-          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.ver.'
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.politicas.ver.'
         '429':
           $ref: '#/components/responses/DemasiadasPeticiones'
       security:
         - sesionAtlas: [ ]
           csrfAtlas: [ ]
       x-atlas-permisos:
-        - atlas.gia.ver
+        - atlas.gia.politicas.ver
   '/api/v1/gia/politicas/{id}/aceptaciones':
     get:
       tags:
