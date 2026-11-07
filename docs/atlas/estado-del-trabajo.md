@@ -59,33 +59,36 @@ La tabla de HU y ADR de la F4 (4.1 a 4.10, ADR 0038 y 0041 a 0051) está en el h
 **Decisión del líder del 06/11:** externos, Entra, seguridad y todo lo que dependa de él van al final. Lo demás se
 implementa de forma autónoma y se despliega en QA y pdn.
 
-Tres PR en borrador, apilados y con el CI completo en verde; **ninguno está integrado ni desplegado**. Se integran en este
-orden porque cada uno se construye sobre el anterior:
+**Corte del 07/11.** F5, F6 (lienzo, Mermaid, BPMN, SVG y arquitectura con LikeC4) y F8 sin LiteLLM están integrados y desplegados
+en QA y pdn (PR #47 a #54). Publicado en los dos Atlas:
 
-| PR | Fase | ADR | Último commit |
-|---|---|---|---|
-| #47 | F5: documentación viva (sin compartir, editor visual ni HU 5.7) | 0053 | `bb1d1d2` |
-| #48 | F6: lienzo, Mermaid, BPMN y export SVG (HU 6.6, 6.7 y 6.8) | 0054 | `6f82ddc` |
-| #49 | F8 sin LiteLLM (HU 8.1, 8.2, 8.3, 8.5 y tablero de 8.6) | 0055 | `02ff31e` |
+- Modelos LikeC4 de `flit`, `flito` y `landscape`: en QA como borrador (vienen de `staging`) y en pdn como publicados.
+- Snapshots de despliegue de `flit-gitops`. El drift ya calcula hallazgos; la capa de Argo CD dice «sin datos» hasta tener token.
+- Contratos: 29 con canal `qa` en QA, y 27 de 29 con `qa` y `pdn` en pdn. `flito-api` y `flit2-integracion` incluidos.
+  `tramites-persona-natural` y `consultas-runt-intempo` solo tienen `develop`: llegan con su producto.
 
-1. **Definir cómo se integran:** `develop`, `staging` y `release` exigen una aprobación, incluso a administradores.
-2. **Al desplegar:**
-   - Antes del código, en flit-gitops: Deployment, Service, entrada en `images:`, `Plataforma__Render__Url` y NetworkPolicy de
-     `atlas-render` en `atlas-qa` y `atlas-pdn` (detalle en ATLAS-ADR-0054 §7). Hoy no está desplegado, así que el diff de
-     contratos (HU 3.5) probablemente no funciona en QA ni en pdn (sin comprobar en los servidores).
-   - atlas-api y atlas-docs van juntos: con un atlas-docs viejo, exportar documentos falla por tiempo a las 2 horas.
-   - Mover el tag `v1` a un commit con `atlas-publicar-docs.yml`, para publicar documentos desde otros repos.
-   - El migrador carga los 13 casos y las 7 políticas de la F8 aunque `modulo.gia` siga apagado. Decidir antes si eso va a pdn.
-3. **F6 restante:** HU 6.3 a 6.5 y 6.9 necesitan los modelos LikeC4 de `flit` y `flito` (HU 6.2): pedir autorización
-   para abrir esos PR. HU 6.1 se coordina con el líder.
-4. **F-IA y F7:** F-IA requiere aprobar su ADR y definir P-04 y P-08. F7 depende de F-IA y no se construye antes, porque no
-   se podría probar. La HU 5.7 y la 8.4 esperan también al gateway.
-5. **Tiptap:** se puede evaluar desde el 19/11 para el editor visual de la HU 5.3 (hoy, `<textarea>` con vista previa).
+El líder vio la arquitectura en QA con sesión. **Falta verla en pdn con sesión.**
+
+Abiertos al corte:
+
+1. **flit-gitops #112:** `atlas-render` sigue en `Pending` en pdn por falta de CPU reservable en la 145 (6990m de 7000m). Hasta
+   integrarlo, el diff de contratos y el SVG no funcionan en pdn.
+2. **PR #56 y su promoción:** `atlas` y `atlas-eventos` a 1.1.0. Sin eso, el job `contratos` del CD de `release` falla (409) y
+   esos dos contratos siguen en 1.0.0. No afecta el despliegue.
+3. **PR #55:** alinea `staging` con `release`. `--admin` fue rechazado. Hace falta antes de la siguiente promoción.
+4. **401 intermitente al publicar**, en QA y pdn: se resuelve al relanzar y la causa sigue sin aclarar.
+5. **Sin probar:** diff y SVG por `atlas-api`, NetworkPolicy de `atlas-render` desde otro pod (desde el host sí llega), lectura real
+   de Argo CD, exportar documentos, PWA en dispositivos reales.
+6. **`flito-api`:** 175 respuestas y 52 cuerpos con `[por verificar]`, y 33 errores de lint que piden decisión (13 rutas con token
+   en la URL, 9 rutas públicas que escriben). `core-ict` 1.0.0 en `release` no cumple lo compartible: no compartirlo hasta 1.1.0.
+7. **Decisiones:** gobierno de IA recibe 403 en arquitectura (falta `atlas.arquitectura.ver`); lista de ATLAS-ADR-0056 «Por
+   verificar»; los modelos muestran en pdn servicios que aún no corren allí, y lo señala el drift.
+8. **Graph devuelve 403** al leer el perfil de un empleado en QA: va con lo de Entra.
+9. **Respaldo:** `/var/backups/atlas-pre-f5-f8-20261107.dump` en la 145; borrarlo cuando ya no haga falta.
+10. **Siguen:** F-IA (aprobar su ADR, P-04 y P-08) y luego F7. Tiptap se puede evaluar desde el 19/11.
 
 Pendientes de esos PR para preguntar:
 
-- Nivel `restringido`: solo superadmin y gobierno de IA; deja fuera al líder técnico salvo en sus aplicativos.
-- Políticas de IA: con las concesiones actuales, los empleados no pueden leerlas ni aceptarlas.
 - F8: quórum del Comité (hoy un voto basta), quien tiene `atlas.gia.gestionar` puede darse ese rol, y si evaluar y aprobar
   puede hacerlo la misma persona.
 - Licencias: `elkjs` (EPL-2.0 o GPL-3.0) y D2 (MPL-2.0).
@@ -130,6 +133,9 @@ Hecho desde el corte anterior: el tag `v1` del workflow de publicación apunta a
   (ATLAS-ADR-0052). No se separa la publicación por ambiente: el Consolidado necesita todos los canales en un Atlas.
 - 05/11: cuenta de emergencia activada en pdn; superadmin asignado a mano al líder hasta tener el mapeo de grupo.
 - 06/11: externos, Entra, seguridad y lo que dependa del líder van al final; lo demás, autónomo hasta QA y pdn.
+- 07/11: `paths-ignore` en el CD de `flito`; el líder autorizó `--admin` para los PR de esa promoción.
+- 06/11: integra el líder; se autorizan los PR de LikeC4 en `flit` y `flito`; la semilla de la F8 va a pdn; el rol de líder
+  técnico ve `restringido`; todos los empleados leen y aceptan las políticas de IA vigentes (`atlas.gia.politicas.ver`).
 - Excepción de breaking de core-ict 1.1.0 aceptada (ADR 0037); se quita cuando la 1.1.0 llegue a `release`.
 - Recomendaciones aplicadas que el líder puede cambiar: Excel exportado con el morado `#4E00EB`; Word con sello de texto
   como marca de agua; tabla de visibilidad por rol externo del ADR 0043.
