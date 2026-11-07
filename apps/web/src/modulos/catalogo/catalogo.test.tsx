@@ -174,13 +174,12 @@ describe('ficha del aplicativo', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Sentinel' })).toBeInTheDocument();
     expect(screen.getByText('[por verificar]', { selector: 'mark' })).toBeInTheDocument();
     const pestanas = screen.getByRole('tablist', { name: 'Secciones de la ficha' });
-    // «Responsables» y «Documentos» ya los llenan sus módulos (HU 2.3 y 5.4): sin su permiso, el espacio no se muestra.
+    // «Responsables», «Documentos» y «Diagramas» ya los llenan sus módulos (HU 2.3, 5.4 y 6.6): sin su permiso, el espacio no se muestra.
     expect(within(pestanas).getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Resumen',
       'Soporte de turno',
       'Contratos',
       'Versión por ambiente',
-      'Diagramas',
       'Casos de IA',
     ]);
     expect(screen.queryByRole('button', { name: /Editar/ })).toBeNull();

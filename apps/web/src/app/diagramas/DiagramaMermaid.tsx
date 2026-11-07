@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useTema } from '../../../app/tema';
-import { esMensajeVisorMermaid, LARGO_MAXIMO_MERMAID, type MensajeFuente, RUTA_VISOR_MERMAID } from '../visor/mensajes';
+import { useTema } from '../tema';
+import { esMensajeVisorMermaid, LARGO_MAXIMO_MERMAID, type MensajeFuente, RUTA_VISOR_MERMAID } from './mensajes';
 
 function Fuente({ fuente, aviso }: { fuente: string; aviso: string }) {
   return (

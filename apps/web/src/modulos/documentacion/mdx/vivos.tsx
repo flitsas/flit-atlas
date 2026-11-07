@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 
 import { ErrorApi, pedir } from '../../../app/api';
+import { type TipoDiagrama, VistaDiagrama } from '../../../app/diagramas/VistaDiagrama';
 import { useEnLinea } from '../../../pwa/conexion';
 
 /**
@@ -127,11 +128,18 @@ export function VivoSoporteDeTurno() {
   );
 }
 
-/** El módulo de diagramas llega en F6; hasta entonces el documento sigue siendo legible. */
+interface DiagramaPorCodigo {
+  diagrama: { tipo: TipoDiagrama; titulo: string };
+  version: { fuente: string; version: { titulo: string } } | null;
+}
+
+/** El diagrama lo pide con la sesión de quien lee (ATLAS-ADR-0054 §6): sin permiso o sin diagrama, lo mismo. */
 export function VivoDiagrama({ id }: { id?: string }) {
-  return (
-    <Caja etiqueta={`Diagrama ${id ?? ''}`.trim()}>
-      <p className="text-atlas-texto-suave">Este diagrama{id ? ` (${id})` : ''} se verá aquí cuando llegue el módulo de diagramas.</p>
-    </Caja>
-  );
+  const valido = !!id && CODIGO.test(id);
+  const consulta = useVivo<DiagramaPorCodigo>(['diagrama', id], `/api/v1/diagramas/por-codigo/${encodeURIComponent(id ?? '')}`, valido);
+  if (!valido) return <Invalido nombre="Diagrama" />;
+  const etiqueta = `Diagrama ${id}`;
+  if (consulta.isPending) return <Cargando etiqueta={etiqueta} />;
+  if (consulta.isError || !consulta.data.version) return <SinAcceso etiqueta={etiqueta} />;
+  return <VistaDiagrama tipo={consulta.data.diagrama.tipo} fuente={consulta.data.version.fuente} titulo={consulta.data.version.version.titulo} />;
 }

@@ -5853,6 +5853,560 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.portal.ver
+  /api/v1/diagramas:
+    get:
+      tags:
+        - Diagramas
+      summary: Diagramas visibles
+      description: 'Los diagramas que la persona puede ver, del más reciente al más antiguo. Con aplicativo, los suyos y los lienzos cuya última versión lo menciona. Requiere atlas.docs.ver; la visibilidad se aplica en la consulta.'
+      operationId: ListarDiagramas
+      parameters:
+        - name: aplicativo
+          in: query
+          description: 'Aplicativo: sus diagramas y los lienzos que lo mencionan.'
+          schema:
+            type: string
+            format: uuid
+        - name: tipo
+          in: query
+          description: 'lienzo, mermaid o bpmn.'
+          schema:
+            type: string
+        - name: texto
+          in: query
+          description: Busca en el título y el código.
+          schema:
+            type: string
+        - name: limite
+          in: query
+          description: Hasta 100; 50 por defecto.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoDiagramas'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.diagramas).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    post:
+      tags:
+        - Diagramas
+      summary: Crear un diagrama
+      description: 'Crea el diagrama con su versión 1, auditado en la misma transacción. El XML BPMN se valida y se limpia antes de guardarse. Requiere atlas.diagramas.editar global o sobre el aplicativo; si no, 403. 409 codigo_existente si el código ya está en uso.'
+      operationId: CrearDiagrama
+      requestBody:
+        description: El diagrama y su primera versión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCrearDiagrama'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.diagramas).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.diagramas.editar
+  '/api/v1/diagramas/por-codigo/{codigo}':
+    get:
+      tags:
+        - Diagramas
+      summary: Un diagrama por su código
+      description: 'Lo que usa <Diagrama/> en los documentos: el diagrama y su última versión visible. 404 si no existe o la persona no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ObtenerDiagramaPorCodigo
+      parameters:
+        - name: codigo
+          in: path
+          description: Código del diagrama.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}':
+    get:
+      tags:
+        - Diagramas
+      summary: Un diagrama con su última versión
+      description: 'El diagrama, su última versión visible, los aplicativos que menciona y si la persona puede editarlo. 404 si no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ObtenerDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    put:
+      tags:
+        - Diagramas
+      summary: Guardar una versión nueva
+      description: 'Cada guardado crea una versión inmutable con autor, fecha y nota. 409 version_desactualizada si versionBase no es la última; 409 sin_cambios si es igual a la última. Requiere atlas.diagramas.editar sobre el aplicativo.'
+      operationId: GuardarDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La versión nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudGuardarDiagrama'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.diagramas.editar
+  '/api/v1/diagramas/{id}/versiones':
+    get:
+      tags:
+        - Diagramas
+      summary: Historial de versiones
+      description: 'Las versiones que la persona puede ver, de la más reciente a la más antigua, sin la fuente. 404 si el diagrama no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ListarVersionesDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VersionDiagramaResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}/versiones/{numero}':
+    get:
+      tags:
+        - Diagramas
+      summary: Una versión con su fuente
+      description: La versión tal como se guardó. 404 si no existe o la persona no alcanza su nivel. Requiere atlas.docs.ver.
+      operationId: ObtenerVersionDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionDiagramaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}/versiones/{numero}/svg':
+    get:
+      tags:
+        - Diagramas
+      summary: Exportar una versión del lienzo a SVG
+      description: 'El SVG de la versión, generado con D2 en atlas-render y limpio de scripts y enlaces externos, como archivo para descargar. Acomoda los nodos de nuevo: no conserva las posiciones del lienzo. Auditado. 404 si no existe o la persona no alcanza su nivel; 422 exportacion_no_soportada si no es un lienzo; 503 render_no_disponible si atlas-render no está disponible. Requiere atlas.docs.ver.'
+      operationId: ExportarVersionDiagramaSvg
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}/versiones/{numero}/restauracion':
+    post:
+      tags:
+        - Diagramas
+      summary: Restaurar una versión
+      description: 'Crea una versión nueva igual a la elegida, sin reescribir la historia. 409 version_desactualizada si versionBase no es la última; 409 sin_cambios si la última ya es igual. Requiere atlas.diagramas.editar sobre el aplicativo.'
+      operationId: RestaurarVersionDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Versión a restaurar.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      requestBody:
+        description: La nota y la última versión que se vio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRestaurarDiagrama'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.diagramas.editar
+  '/api/v1/diagramas/{id}/comentarios':
+    get:
+      tags:
+        - Diagramas
+      summary: Comentarios de un diagrama
+      description: 'Los comentarios de las versiones que la persona puede ver, del más antiguo al más reciente, hasta 200. 404 si el diagrama no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ListarComentariosDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComentarioResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    post:
+      tags:
+        - Diagramas
+      summary: Comentar un diagrama
+      description: 'Comenta quien puede leer la versión. Auditado, sin el texto. 404 si el diagrama no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ComentarDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: El comentario.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudComentario'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComentarioResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.ver.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
   /api/v1/documentacion/publicaciones:
     post:
       tags:
@@ -11327,6 +11881,38 @@ components:
           items:
             type: string
       description: 'Códigos de recuperación nuevos: reemplazan a los anteriores y se muestran esta única vez.'
+    ComentarioResumen:
+      required:
+        - id
+        - versionNumero
+        - nodoClave
+        - persona
+        - texto
+        - escritoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        versionNumero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        nodoClave:
+          type:
+            - 'null'
+            - string
+          description: 'Nodo del lienzo, si es sobre uno.'
+        persona:
+          $ref: '#/components/schemas/PersonaDiagrama'
+        texto:
+          type: string
+        escritoEn:
+          type: string
+          format: date-time
+      description: Un comentario.
     ComparacionDto:
       required:
         - desde
@@ -12158,6 +12744,68 @@ components:
           type: string
           description: 'Cuerpo en MDX, sin evaluar.'
       description: Versión inmutable con su cuerpo en MDX.
+    DiagramaDetalle:
+      required:
+        - diagrama
+        - version
+        - referencias
+        - puedeEditar
+      type: object
+      properties:
+        diagrama:
+          $ref: '#/components/schemas/DiagramaResumen'
+        version:
+          oneOf:
+            - type: 'null'
+            - description: La última versión que la persona puede ver; vacío si todas son de un nivel que no alcanza.
+              $ref: '#/components/schemas/VersionDiagramaDetalle'
+        referencias:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenciaAplicativo'
+          description: Aplicativos del catálogo que menciona el lienzo en esa versión.
+        puedeEditar:
+          type: boolean
+      description: Un diagrama con su última versión y lo que la persona puede hacer.
+    DiagramaResumen:
+      required:
+        - id
+        - codigo
+        - aplicativoId
+        - tipo
+        - titulo
+        - visibilidad
+        - versionActual
+        - actualizadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+          description: 'Código único: el id de <Diagrama/> en los documentos.'
+        aplicativoId:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          description: 'lienzo, mermaid o bpmn.'
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        versionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        actualizadoEn:
+          type: string
+          format: date-time
+      description: Un diagrama sin su fuente.
     DiferenciaDto:
       required:
         - patron
@@ -12707,6 +13355,18 @@ components:
         mensaje:
           type: string
       description: 'Por qué no se pudo deprecar, con un código estable.'
+    ErrorDiagrama:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso (403); version_desactualizada, sin_cambios, codigo_existente (409); exportacion_no_soportada (422); render_no_disponible (503).'
+        mensaje:
+          type: string
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorDiff:
       required:
         - codigo
@@ -14527,6 +15187,24 @@ components:
           items:
             $ref: '#/components/schemas/ContratoResumen'
       description: 'Contratos que cumplen el filtro, ordenados por aplicativo y código.'
+    ListadoDiagramas:
+      required:
+        - elementos
+        - total
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagramaResumen'
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Total con estos filtros, sin el límite.'
+          format: int32
+      description: Diagramas que la persona puede ver.
     ListadoDocumentos:
       required:
         - total
@@ -15621,6 +16299,19 @@ components:
           type: boolean
           description: 'Crear hijos, cambiar la jerarquía y eliminarlo (atlas.catalogo.gestionar).'
       description: Qué puede hacer la persona en sesión con este aplicativo.
+    PersonaDiagrama:
+      required:
+        - id
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre; «Persona no disponible» si ya no está.
+      description: Persona de Atlas.
     PersonaDirectorio:
       required:
         - id
@@ -17819,6 +18510,29 @@ components:
           description: Siguiente revisión; tres meses después si no se dice.
           format: date
       description: 'Cierre de la revisión: queda hecha y se programa la siguiente.'
+    SolicitudComentario:
+      required:
+        - versionNumero
+        - nodoClave
+        - texto
+      type: object
+      properties:
+        versionNumero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Versión a la que se refiere; debe existir y ser visible.
+          format: int32
+        nodoClave:
+          type:
+            - 'null'
+            - string
+          description: 'Nodo del lienzo, si es sobre uno.'
+        texto:
+          type: string
+          description: Hasta 2.000 caracteres.
+      description: Escribir un comentario.
     SolicitudComparticion:
       required:
         - organizacionId
@@ -17878,6 +18592,39 @@ components:
         correo:
           type: string
       description: Correo de la cuenta externa que se quiere recuperar.
+    SolicitudCrearDiagrama:
+      required:
+        - codigo
+        - aplicativoId
+        - tipo
+        - titulo
+        - visibilidad
+        - fuente
+        - nota
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'Minúsculas, números y guiones, hasta 100 caracteres. No cambia.'
+        aplicativoId:
+          type: string
+          description: Aplicativo del catálogo. No cambia.
+          format: uuid
+        tipo:
+          type: string
+          description: 'lienzo, mermaid o bpmn. No cambia.'
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        fuente:
+          type: string
+          description: 'Fuente Mermaid (hasta 20 mil caracteres), XML BPMN o JSON del lienzo (hasta 1 millón).'
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+      description: Crear un diagrama con su primera versión.
     SolicitudDeprecacion:
       required:
         - retiroEn
@@ -18182,6 +18929,34 @@ components:
           description: 'Primer día de la ventana; vacío, mañana. Debe ser posterior a hoy.'
           format: date
       description: Ventana de la generación automática de un equipo.
+    SolicitudGuardarDiagrama:
+      required:
+        - titulo
+        - visibilidad
+        - fuente
+        - nota
+        - versionBase
+      type: object
+      properties:
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        fuente:
+          type: string
+          description: 'Fuente Mermaid, XML BPMN o JSON del lienzo.'
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        versionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La versión sobre la que se trabajó: 409 si ya hay otra más nueva.'
+          format: int32
+      description: Guardar una versión nueva.
     SolicitudGuia:
       required:
         - titulo
@@ -18557,6 +19332,23 @@ components:
           description: La última revisión que vio la persona.
           format: int32
       description: 'Restaurar una revisión: crea otra igual a ella.'
+    SolicitudRestaurarDiagrama:
+      required:
+        - nota
+        - versionBase
+      type: object
+      properties:
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        versionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La última versión que vio la persona: 409 si ya hay otra más nueva.'
+          format: int32
+      description: 'Restaurar una versión: crea otra igual a ella.'
     SolicitudSandbox:
       required:
         - paqueteId
@@ -18923,6 +19715,64 @@ components:
           description: Sus tablas en Markdown.
           $ref: '#/components/schemas/TablasRepartoDto'
       description: Una versión del reparto con su foto completa y sus tablas.
+    VersionDiagramaDetalle:
+      required:
+        - version
+        - fuente
+      type: object
+      properties:
+        version:
+          $ref: '#/components/schemas/VersionDiagramaResumen'
+        fuente:
+          type: string
+          description: 'Fuente Mermaid, XML BPMN ya limpio o JSON del lienzo.'
+      description: Una versión con su fuente.
+    VersionDiagramaResumen:
+      required:
+        - numero
+        - origen
+        - restauradaDe
+        - titulo
+        - visibilidad
+        - nota
+        - autor
+        - guardadaEn
+        - huella
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        origen:
+          type: string
+          description: 'creacion, edicion o restauracion.'
+        restauradaDe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Si es una restauración, la versión restaurada.'
+          format: int32
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        nota:
+          type: string
+        autor:
+          $ref: '#/components/schemas/PersonaDiagrama'
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+          description: 'SHA-256 de título, visibilidad y fuente.'
+      description: 'Una versión inmutable, sin la fuente.'
     VersionElegible:
       required:
         - id
@@ -19548,6 +20398,8 @@ tags:
     description: 'Catálogo de aplicativos de FLIT: productos, módulos y servicios con su repo, tecnología, ambientes, criticidad, datos personales, estado y etiquetas, y la ficha de cada uno.'
   - name: Contratos
     description: 'Contratos de integración (OpenAPI, AsyncAPI y proto) publicados desde la CI de cada repo con el token OIDC de GitHub Actions y la lista blanca del catálogo: versiones semánticas inmutables con su hash y su procedencia, el spec de cada versión y el índice de operaciones, webhooks, canales y rpc.'
+  - name: Diagramas
+    description: 'Diagramas hechos a mano en Atlas: lienzo con modelo propio, Mermaid y BPMN, con versiones inmutables, comentarios, referencias al catálogo y su nivel de visibilidad aplicado en cada consulta.'
   - name: Documentación
     description: 'Documentación técnica y funcional viva: lo que llega de los repos por la CI como versiones inmutables y lo que se escribe en Atlas con revisiones y aprobación del responsable, con su nivel de visibilidad aplicado en cada consulta.'
   - name: Equipo

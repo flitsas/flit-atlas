@@ -102,7 +102,7 @@ public static class ManifiestosNucleo
         new("atlas.docs.exportar", "Exportar documentos y colecciones.", LiderTecnico, Desarrollador, Soporte, Negocio, AsesorComercial),
     ], [TiposAlcance.Documento]);
 
-    public static ManifiestoPermisos Diagramas { get; } = new("diagramas", "Diagramas",
+    public static ManifiestoPermisos Diagramas { get; } = new("arquitectura", "Diagramas",
     [
         new("atlas.arquitectura.ver", "Ver los diagramas de arquitectura (LikeC4) según su visibilidad.", LiderTecnico, Desarrollador, AsesorComercial),
         new("atlas.arquitectura.ver_despliegue", "Ver las vistas de despliegue por ambiente y el drift.", LiderTecnico, Desarrollador),

@@ -52,7 +52,7 @@ Todo empleado activo tiene además `atlas.lector`; `atlas.superadmin` recibe tod
 | `atlas.docs.aprobar` | Aprobar y publicar documentos. | ✔ | ✔ |   |   |   |   |   |   |   |   |   |   |   | ✔ |
 | `atlas.docs.exportar` | Exportar documentos y colecciones. | ✔ | ✔ | ✔ | ✔ | ✔ |   |   |   |   |   | ✔ |   |   |   |
 
-## Diagramas (`diagramas`)
+## Diagramas (`arquitectura`)
 
 | Permiso | Descripción | `atlas.superadmin` | `atlas.lider_tecnico` | `atlas.desarrollador` | `atlas.soporte` | `atlas.negocio` | `atlas.gobierno_ia` | `atlas.auditor` | `atlas.lector` | `ext.integrador` | `ext.cliente_funcional` | `ext.asesor_comercial` | `ext.proveedor` | `ext.admin_organizacion` | `atlas.responsable` |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|

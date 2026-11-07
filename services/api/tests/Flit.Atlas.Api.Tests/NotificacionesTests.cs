@@ -363,6 +363,8 @@ public class NotificacionesTests(EntornoApi entorno)
                 ["modulo.equipo"] = true,
                 // Viene encendida, como su entrada en la PWA (ATLAS-ADR-0053).
                 ["modulo.documentacion"] = true,
+                // Viene encendida, como su entrada en la PWA (ATLAS-ADR-0054).
+                ["modulo.diagramas"] = true,
                 // La crea el migrador para cada módulo registrado, apagada por defecto (ATLAS-ADR-0026).
                 ["modulo.hola"] = false,
             },
