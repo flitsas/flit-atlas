@@ -274,6 +274,10 @@ public sealed class ModuloDiagramasTests(EntornoApi entorno)
         var desarrollador = await EmpleadoAsync(api, RolesAtlas.Desarrollador);
         var restringido = await Enviar(desarrollador, HttpMethod.Post, Ruta, Solicitud(aplicativo, visibilidad: "restringido"));
         Assert.Equal(HttpStatusCode.BadRequest, restringido.StatusCode);
+
+        // El líder técnico sí alcanza ese nivel (decisión del líder, 06/11/2026).
+        var liderTecnico = await EmpleadoAsync(api, RolesAtlas.LiderTecnico);
+        Assert.Equal(HttpStatusCode.Created, (await Enviar(liderTecnico, HttpMethod.Post, Ruta, Solicitud(otro, visibilidad: "restringido"))).StatusCode);
     }
 
     private sealed class PermisosFijos(PermisosEfectivos permisos) : IPermisosDeSesion

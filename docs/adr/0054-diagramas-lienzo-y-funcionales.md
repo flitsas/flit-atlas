@@ -140,8 +140,6 @@ muestra «No tienes acceso a este contenido»; no revela cuál de los dos es. Lo
 ## Por verificar
 
 - **[por verificar con el líder]** Leer con `atlas.docs.ver` o crear `atlas.diagramas.ver`.
-- **[por verificar con el líder]** `restringido` sigue la regla de ATLAS-ADR-0053: solo superadmin y gobierno de IA. El líder
-  técnico no puede dejar un diagrama en ese nivel, salvo en un aplicativo del que sea responsable.
 - **[por verificar con el líder]** Licencia de `elkjs` (EPL-2.0 o GPL-3.0): es copyleft débil. Se usa sin modificar; A-04 la
   nombra, pero el aviso de licencia y su aprobación quedan a su cargo.
 - **[por verificar con el líder]** Licencia de D2 (MPL-2.0, copyleft por archivo): se usa sin modificar.

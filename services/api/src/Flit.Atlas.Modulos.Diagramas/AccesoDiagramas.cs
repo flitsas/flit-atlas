@@ -18,8 +18,9 @@ internal sealed class AccesoDiagramas
     private static readonly HashSet<string> RolesTecnicos =
         new([RolesAtlas.Superadmin, RolesAtlas.LiderTecnico, RolesAtlas.Desarrollador], StringComparer.Ordinal);
 
+    /// <summary>§7.1: administración, líder técnico (decisión del líder, 06/11/2026) y gobierno de IA.</summary>
     private static readonly HashSet<string> RolesRestringido =
-        new([RolesAtlas.Superadmin, RolesAtlas.GobiernoIa], StringComparer.Ordinal);
+        new([RolesAtlas.Superadmin, RolesAtlas.LiderTecnico, RolesAtlas.GobiernoIa], StringComparer.Ordinal);
 
     private readonly PermisosEfectivos _permisos;
     private readonly IReadOnlyDictionary<Guid, AplicativoLeido> _aplicativos;
