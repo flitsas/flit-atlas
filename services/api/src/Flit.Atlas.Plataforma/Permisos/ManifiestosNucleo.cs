@@ -90,7 +90,11 @@ public static class ManifiestosNucleo
         new("atlas.sandbox.usar", "Usar el sandbox de los contratos.", LiderTecnico, Desarrollador, Soporte, Integrador),
     ], [TiposAlcance.Paquete]);
 
-    public static ManifiestoPermisos Documentacion { get; } = new("documentacion", "Documentación",
+    /// <summary>
+    /// Los exige el módulo <c>documentacion</c>, pero no llevan su prefijo (§7.4, ATLAS-ADR-0053 §1): por eso se quedan aquí, con
+    /// su propio id, como <see cref="Portal"/>.
+    /// </summary>
+    public static ManifiestoPermisos Documentacion { get; } = new("docs", "Documentación",
     [
         new("atlas.docs.ver", "Ver documentos según su nivel de visibilidad.", [.. Empleados, .. Externos]),
         new("atlas.docs.editar", "Crear y editar borradores de documentos.", LiderTecnico, Desarrollador, Responsable),
@@ -98,7 +102,7 @@ public static class ManifiestosNucleo
         new("atlas.docs.exportar", "Exportar documentos y colecciones.", LiderTecnico, Desarrollador, Soporte, Negocio, AsesorComercial),
     ], [TiposAlcance.Documento]);
 
-    public static ManifiestoPermisos Diagramas { get; } = new("diagramas", "Diagramas",
+    public static ManifiestoPermisos Diagramas { get; } = new("arquitectura", "Diagramas",
     [
         new("atlas.arquitectura.ver", "Ver los diagramas de arquitectura (LikeC4) según su visibilidad.", LiderTecnico, Desarrollador, AsesorComercial),
         new("atlas.arquitectura.ver_despliegue", "Ver las vistas de despliegue por ambiente y el drift.", LiderTecnico, Desarrollador),
@@ -114,14 +118,15 @@ public static class ManifiestosNucleo
     public static ManifiestoPermisos GobiernoDeIa { get; } = new("gia", "Gobierno de IA",
     [
         new("atlas.gia.ver", "Ver el inventario de casos de IA, políticas y costos.", GobiernoIa, Auditor),
+        new("atlas.gia.politicas.ver", "Leer y aceptar las políticas de IA vigentes.", [.. Empleados]),
         new("atlas.gia.gestionar", "Gestionar casos de uso, riesgos, políticas y llaves virtuales.", GobiernoIa),
         new("atlas.gia.auditar", "Revisar la evidencia de gobierno de IA.", GobiernoIa, Auditor),
     ]);
 
     /// <summary>
-    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/>,
+    /// Manifiestos que vienen en <c>Flit.Atlas.Plataforma</c>, en el orden de la matriz. Sin <see cref="Equipo"/>, <see cref="GobiernoDeIa"/>,
     /// <see cref="SoporteSabados"/> ni <see cref="Contratos"/>: los registran sus módulos.
     /// </summary>
     public static IReadOnlyList<ManifiestoPermisos> Todos { get; } =
-        [PermisosPlataforma.Manifiesto, Portal, Documentacion, Diagramas, Asistente, GobiernoDeIa];
+        [PermisosPlataforma.Manifiesto, Portal, Documentacion, Diagramas, Asistente];
 }

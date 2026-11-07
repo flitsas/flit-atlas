@@ -331,7 +331,7 @@ public sealed class PublicacionCiTests : IDisposable
 
         Assert.Equal(["flitsas-demo"], opciones.Propietarios);
         Assert.Equal(["push", "workflow_dispatch"], opciones.Eventos);
-        Assert.Equal([OpcionesPublicacion.WorkflowOficial], opciones.WorkflowsReutilizables);
+        Assert.Equal([OpcionesPublicacion.WorkflowOficial, OpcionesPublicacion.WorkflowOficialDocumentacion], opciones.WorkflowsReutilizables);
         Assert.Equal("https://token.actions.githubusercontent.com/.well-known/jwks", opciones.UrlLlavesEfectiva);
         Assert.Equal("https://atlas.ejemplo.com", opciones.AudienciaEfectiva("https://atlas.ejemplo.com/"));
     }

@@ -58,7 +58,7 @@ export const ESPACIOS_FICHA: readonly EspacioFicha[] = [
     titulo: 'Diagramas',
     modulo: 'Diagramas',
     fase: 'F6',
-    descripcion: 'Arquitectura en LikeC4 por ambiente, drift y diagramas funcionales.',
+    descripcion: 'Lienzos, flujos en Mermaid y procesos BPMN del aplicativo.',
   },
   {
     id: 'ia',

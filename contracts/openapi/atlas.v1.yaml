@@ -5853,6 +5853,1593 @@ paths:
           csrfAtlas: [ ]
       x-atlas-permisos:
         - atlas.portal.ver
+  /api/v1/diagramas:
+    get:
+      tags:
+        - Diagramas
+      summary: Diagramas visibles
+      description: 'Los diagramas que la persona puede ver, del más reciente al más antiguo. Con aplicativo, los suyos y los lienzos cuya última versión lo menciona. Requiere atlas.docs.ver; la visibilidad se aplica en la consulta.'
+      operationId: ListarDiagramas
+      parameters:
+        - name: aplicativo
+          in: query
+          description: 'Aplicativo: sus diagramas y los lienzos que lo mencionan.'
+          schema:
+            type: string
+            format: uuid
+        - name: tipo
+          in: query
+          description: 'lienzo, mermaid o bpmn.'
+          schema:
+            type: string
+        - name: texto
+          in: query
+          description: Busca en el título y el código.
+          schema:
+            type: string
+        - name: limite
+          in: query
+          description: Hasta 100; 50 por defecto.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoDiagramas'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.diagramas).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    post:
+      tags:
+        - Diagramas
+      summary: Crear un diagrama
+      description: 'Crea el diagrama con su versión 1, auditado en la misma transacción. El XML BPMN se valida y se limpia antes de guardarse. Requiere atlas.diagramas.editar global o sobre el aplicativo; si no, 403. 409 codigo_existente si el código ya está en uso.'
+      operationId: CrearDiagrama
+      requestBody:
+        description: El diagrama y su primera versión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCrearDiagrama'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.diagramas).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.diagramas.editar
+  '/api/v1/diagramas/por-codigo/{codigo}':
+    get:
+      tags:
+        - Diagramas
+      summary: Un diagrama por su código
+      description: 'Lo que usa <Diagrama/> en los documentos: el diagrama y su última versión visible. 404 si no existe o la persona no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ObtenerDiagramaPorCodigo
+      parameters:
+        - name: codigo
+          in: path
+          description: Código del diagrama.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}':
+    get:
+      tags:
+        - Diagramas
+      summary: Un diagrama con su última versión
+      description: 'El diagrama, su última versión visible, los aplicativos que menciona y si la persona puede editarlo. 404 si no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ObtenerDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    put:
+      tags:
+        - Diagramas
+      summary: Guardar una versión nueva
+      description: 'Cada guardado crea una versión inmutable con autor, fecha y nota. 409 version_desactualizada si versionBase no es la última; 409 sin_cambios si es igual a la última. Requiere atlas.diagramas.editar sobre el aplicativo.'
+      operationId: GuardarDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La versión nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudGuardarDiagrama'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.diagramas.editar
+  '/api/v1/diagramas/{id}/versiones':
+    get:
+      tags:
+        - Diagramas
+      summary: Historial de versiones
+      description: 'Las versiones que la persona puede ver, de la más reciente a la más antigua, sin la fuente. 404 si el diagrama no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ListarVersionesDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VersionDiagramaResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}/versiones/{numero}':
+    get:
+      tags:
+        - Diagramas
+      summary: Una versión con su fuente
+      description: La versión tal como se guardó. 404 si no existe o la persona no alcanza su nivel. Requiere atlas.docs.ver.
+      operationId: ObtenerVersionDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionDiagramaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}/versiones/{numero}/svg':
+    get:
+      tags:
+        - Diagramas
+      summary: Exportar una versión del lienzo a SVG
+      description: 'El SVG de la versión, generado con D2 en atlas-render y limpio de scripts y enlaces externos, como archivo para descargar. Acomoda los nodos de nuevo: no conserva las posiciones del lienzo. Auditado. 404 si no existe o la persona no alcanza su nivel; 422 exportacion_no_soportada si no es un lienzo; 503 render_no_disponible si atlas-render no está disponible. Requiere atlas.docs.ver.'
+      operationId: ExportarVersionDiagramaSvg
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/diagramas/{id}/versiones/{numero}/restauracion':
+    post:
+      tags:
+        - Diagramas
+      summary: Restaurar una versión
+      description: 'Crea una versión nueva igual a la elegida, sin reescribir la historia. 409 version_desactualizada si versionBase no es la última; 409 sin_cambios si la última ya es igual. Requiere atlas.diagramas.editar sobre el aplicativo.'
+      operationId: RestaurarVersionDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Versión a restaurar.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      requestBody:
+        description: La nota y la última versión que se vio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRestaurarDiagrama'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.diagramas.editar
+  '/api/v1/diagramas/{id}/comentarios':
+    get:
+      tags:
+        - Diagramas
+      summary: Comentarios de un diagrama
+      description: 'Los comentarios de las versiones que la persona puede ver, del más antiguo al más reciente, hasta 200. 404 si el diagrama no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ListarComentariosDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComentarioResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    post:
+      tags:
+        - Diagramas
+      summary: Comentar un diagrama
+      description: 'Comenta quien puede leer la versión. Auditado, sin el texto. 404 si el diagrama no existe o no puede verlo. Requiere atlas.docs.ver.'
+      operationId: ComentarDiagrama
+      parameters:
+        - name: id
+          in: path
+          description: Id del diagrama.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: El comentario.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudComentario'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComentarioResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.diagramas).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDiagrama'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.ver.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  /api/v1/documentacion/publicaciones:
+    post:
+      tags:
+        - Documentación
+      summary: Publicar un lote de documentos desde la CI
+      description: 'Solo con el token OIDC de GitHub Actions del workflow reutilizable oficial, desde un repo, rama y workflow de la lista blanca con el tipo docs. El aplicativo de cada archivo, que dice su front-matter, debe estar autorizado para el repo. El ambiente sale de la rama (develop → dev, staging → qa, release → pdn). Responde 200 con el resultado de cada archivo: creada, igual (mismo hash: no crea versión, solo mueve el canal) o rechazada con su código. La cookie de la PWA no sirve aquí.'
+      operationId: PublicarLoteDocumentos
+      requestBody:
+        description: El lote.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudLote'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoLote'
+        '403':
+          description: 'El dueño del repo, el evento o el workflow reutilizable no están permitidos (sin cuerpo), o el repo, la rama, el workflow, el aplicativo o el tipo no están en la lista blanca (con el código).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorLote'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorLote'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'Falta el token OIDC de GitHub Actions, venció, no lo firmó GitHub o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - githubActions: [ ]
+  /api/v1/documentacion/documentos:
+    get:
+      tags:
+        - Documentación
+      summary: Documentos que la persona puede ver
+      description: 'Con el nivel de visibilidad aplicado en la consulta; la búsqueda (texto) es full-text en español sobre la versión vigente, sin distinguir tildes. Los archivados solo aparecen con estado=archivado y para quien puede editarlos. Requiere atlas.docs.ver.'
+      operationId: ListarDocumentos
+      parameters:
+        - name: aplicativo
+          in: query
+          description: Solo de este aplicativo.
+          schema:
+            type: string
+            format: uuid
+        - name: tipo
+          in: query
+          description: Solo de este tipo.
+          schema:
+            type: string
+        - name: estado
+          in: query
+          description: 'borrador, en_revision, publicado o archivado. Vacío: todos menos los archivados.'
+          schema:
+            type: string
+        - name: texto
+          in: query
+          description: Búsqueda full-text en español.
+          schema:
+            type: string
+        - name: pagina
+          in: query
+          description: Desde 1.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+        - name: tamano
+          in: query
+          description: De 1 a 100; por defecto 25.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoDocumentos'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    post:
+      tags:
+        - Documentación
+      summary: Crear un documento en Atlas
+      description: 'Lo crea en borrador con su revisión 1, auditado en la misma transacción. Requiere atlas.docs.editar global o sobre el aplicativo (responsable); si no, 403.'
+      operationId: CrearDocumento
+      requestBody:
+        description: El documento y su primera revisión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDocumento'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}':
+    get:
+      tags:
+        - Documentación
+      summary: Un documento con una de sus versiones
+      description: 'Por defecto, la versión vigente (la del canal pdn o, sin él, la última); con version o canal, esa. Una versión que la persona no puede leer responde 404. Requiere atlas.docs.ver.'
+      operationId: ObtenerDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: query
+          description: Número de versión.
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+        - name: canal
+          in: query
+          description: 'dev, qa o pdn: la versión de ese canal.'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    put:
+      tags:
+        - Documentación
+      summary: Guardar un documento (revisión nueva)
+      description: 'Cada guardado crea una revisión inmutable y deja el documento en borrador; lo publicado no cambia hasta volver a publicar. 409 revision_desactualizada, sin_cambios, documento_de_repo o documento_archivado. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: GuardarDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión nueva.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/versiones':
+    get:
+      tags:
+        - Documentación
+      summary: Versiones de un documento
+      description: 'Las que la persona puede leer, de la más reciente a la más antigua, sin los cuerpos. Requiere atlas.docs.ver.'
+      operationId: ListarVersionesDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResumenVersionDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/documentacion/documentos/{id}/versiones/{numero}':
+    get:
+      tags:
+        - Documentación
+      summary: Una versión con su cuerpo
+      description: La PWA compara dos versiones con estos cuerpos. 404 si no existe o la persona no puede leerla. Requiere atlas.docs.ver.
+      operationId: ObtenerVersionDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la versión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleVersionDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/documentacion/documentos/{id}/revisiones':
+    get:
+      tags:
+        - Documentación
+      summary: Historial de revisiones
+      description: 'De la más reciente a la más antigua, sin los cuerpos. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: ListarRevisionesDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResumenRevisionDocumento'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/revisiones/{numero}':
+    get:
+      tags:
+        - Documentación
+      summary: Una revisión con su cuerpo
+      description: La revisión tal como se guardó. Requiere atlas.docs.editar sobre el aplicativo.
+      operationId: ObtenerRevisionDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Número de la revisión.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleRevisionDocumento'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/revisiones/{numero}/restauracion':
+    post:
+      tags:
+        - Documentación
+      summary: Restaurar una revisión
+      description: 'Crea una revisión nueva igual a la elegida, sin reescribir la historia, y deja el documento en borrador. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: RestaurarRevisionDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: numero
+          in: path
+          description: Revisión a restaurar.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      requestBody:
+        description: La nota y la última revisión que se vio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRestauracionDocumento'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/envio-revision':
+    post:
+      tags:
+        - Documentación
+      summary: Enviar a revisión
+      description: 'De borrador a en_revision. Revisa la lista blanca de MDX: 422 mdx_invalido con el detalle. Requiere atlas.docs.editar sobre el aplicativo.'
+      operationId: EnviarDocumentoARevision
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión que se envía.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEstadoDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.editar
+  '/api/v1/documentacion/documentos/{id}/devolucion':
+    post:
+      tags:
+        - Documentación
+      summary: Devolver a borrador
+      description: De en_revision a borrador. Requiere atlas.docs.aprobar sobre el aplicativo.
+      operationId: DevolverDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión que se devuelve.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEstadoDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.aprobar
+  '/api/v1/documentacion/documentos/{id}/publicacion':
+    post:
+      tags:
+        - Documentación
+      summary: Aprobar y publicar
+      description: 'De en_revision a publicado: congela la última revisión en una versión inmutable y la deja en el canal pdn. Lo publico_clientes solo lo aprueba el principal o el secundario; si el aplicativo no tiene responsables, el líder técnico. 403 aprobacion_requerida para los demás. Auditado, con el evento en la misma transacción. Requiere atlas.docs.aprobar sobre el aplicativo.'
+      operationId: PublicarDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La revisión que se publica.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEstadoDocumento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.aprobar
+  '/api/v1/documentacion/documentos/{id}/archivo':
+    post:
+      tags:
+        - Documentación
+      summary: Archivar
+      description: Deja de listarse a los lectores; sus versiones y revisiones siguen ahí. Los de repo se archivan desde la CI (409 documento_de_repo). Requiere atlas.docs.aprobar sobre el aplicativo.
+      operationId: ArchivarDocumento
+      parameters:
+        - name: id
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDocumento'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.aprobar
+  /api/v1/documentacion/favoritos:
+    get:
+      tags:
+        - Documentación
+      summary: Mis documentos favoritos
+      description: 'Los que la persona marcó y todavía puede ver, del más reciente al más antiguo. Requiere atlas.docs.ver.'
+      operationId: ListarFavoritosDocumentos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FavoritoDocumentoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  '/api/v1/documentacion/favoritos/{documentoId}':
+    put:
+      tags:
+        - Documentación
+      summary: Marcar un documento como favorito
+      description: Idempotente. 404 si no existe o la persona no puede verlo. Requiere atlas.docs.ver.
+      operationId: MarcarDocumentoFavorito
+      parameters:
+        - name: documentoId
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritoDocumentoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.ver.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+    delete:
+      tags:
+        - Documentación
+      summary: Quitar un documento de los favoritos
+      description: 204 aunque no fuera favorito o la persona ya no pueda verlo. Requiere atlas.docs.ver.
+      operationId: QuitarDocumentoFavorito
+      parameters:
+        - name: documentoId
+          in: path
+          description: Id del documento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.ver.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.ver
+  /api/v1/documentacion/exportaciones:
+    post:
+      tags:
+        - Documentación
+      summary: Exportar un documento o una colección
+      description: 'Deja la entrada en el S3, con el MDX convertido y los componentes vivos con los valores que la persona puede ver, y encola la generación: responde 202 sin esperarla. 404 si alguno de los documentos o versiones no existe o la persona no puede leerlo; 409 sin_version si un documento aún no tiene versión. 429 exportaciones_en_curso si ya tiene el máximo en proceso (2 por defecto), con Retry-After. Requiere atlas.docs.exportar y un ingreso reciente.'
+      operationId: SolicitarExportacionDocumentos
+      requestBody:
+        description: Qué exportar y en qué formatos.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudExportacionDocumentos'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDocumentosDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.docs.exportar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasExportaciones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
+    get:
+      tags:
+        - Documentación
+      summary: Mis exportaciones de documentos
+      description: 'Las últimas 20 de la persona, de la más reciente a la más antigua. Requiere atlas.docs.exportar.'
+      operationId: ListarExportacionesDocumentos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoExportacionesDocumentos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.exportar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.documentacion).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
+  '/api/v1/documentacion/exportaciones/{exportacionId}':
+    get:
+      tags:
+        - Documentación
+      summary: Estado de una exportación de documentos
+      description: 'pendiente, procesando, lista (con sus archivos), fallida (con el error) o vencida. Solo la ve quien la pidió (404 para los demás). Requiere atlas.docs.exportar.'
+      operationId: ObtenerExportacionDocumentos
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionDocumentosDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.exportar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
+  '/api/v1/documentacion/exportaciones/{exportacionId}/descarga':
+    get:
+      tags:
+        - Documentación
+      summary: URL firmada de descarga
+      description: 'Una URL del S3 firmada por 15 minutos para el ZIP o, con archivo, para uno de sus archivos. 409 no_lista; 410 vencida. Auditado. Requiere atlas.docs.exportar.'
+      operationId: DescargarExportacionDocumentos
+      parameters:
+        - name: exportacionId
+          in: path
+          description: Id de la exportación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: archivo
+          in: query
+          description: Ruta de un archivo de la exportación; vacío = el ZIP.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescargaExportacionDocumentos'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.documentacion).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '410':
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorExportacionDocumentos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.docs.exportar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.docs.exportar
   /api/v1/equipo/responsabilidades:
     get:
       tags:
@@ -6851,6 +8438,1593 @@ paths:
         - sesionAtlas: [ ]
       x-atlas-permisos:
         - atlas.equipo.ver
+  /api/v1/gia/casos:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Casos de uso de IA
+      description: 'El inventario, ordenado por código, con filtros por estado y revisión vencida. Requiere atlas.gia.ver.'
+      operationId: ListarCasosIa
+      parameters:
+        - name: estado
+          in: query
+          description: Filtra por estado.
+          schema:
+            type: string
+        - name: vencidos
+          in: query
+          description: Solo los que tienen la revisión vencida.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoCasos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Registrar un caso de uso
+      description: Crea el caso en borrador con su versión 1. 409 ya_existe si el código está en uso. Requiere atlas.gia.gestionar.
+      operationId: CrearCasoIa
+      requestBody:
+        description: El caso.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCrearCaso'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasoDetalle'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}':
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Un caso con su ficha
+      description: La ficha completa y lo que falta para enviarla a revisión. 404 si no existe. Requiere atlas.gia.ver.
+      operationId: ObtenerCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasoDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+    put:
+      tags:
+        - Gobierno de IA
+      summary: Guardar la ficha
+      description: 'Crea una versión inmutable. Solo en borrador: lo aprobado se reabre antes (409 estado_invalido). 409 version_desactualizada si versionBase no es la última. Requiere atlas.gia.gestionar.'
+      operationId: GuardarCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La ficha y su motivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudGuardarCaso'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasoDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}/versiones':
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Historial de la ficha
+      description: 'Las versiones de la ficha, de la más reciente a la más antigua. 404 si no existe. Requiere atlas.gia.ver.'
+      operationId: ListarVersionesCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VersionCasoResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+  '/api/v1/gia/casos/{id}/envio-revision':
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Enviar a revisión
+      description: De borrador a en_revision. 422 ficha_incompleta con los campos que faltan; 422 sin_evaluacion si no tiene una evaluación pendiente. Requiere atlas.gia.gestionar.
+      operationId: EnviarCasoIaRevision
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasoDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}/estado':
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Cambiar de estado
+      description: 'Poner en producción, suspender, reabrir (borrador) o retirar, con motivo. Reabrir quita la aprobación. Aprobar se hace votando. 409 estado_invalido si la transición no aplica. Requiere atlas.gia.gestionar.'
+      operationId: CambiarEstadoCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: El estado y el motivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEstadoCaso'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasoDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  /api/v1/gia/personas:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Buscar empleados
+      description: 'Empleados activos por nombre, hasta 20, para elegir dueños, responsables y roles de gobierno. Sin datos de contacto. Requiere atlas.gia.gestionar.'
+      operationId: BuscarPersonasGia
+      parameters:
+        - name: texto
+          in: query
+          description: Busca en el nombre.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PersonaGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.gestionar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}/evaluaciones':
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Evaluaciones de un caso
+      description: 'De la más reciente a la más antigua, con sus votos y lo que falta para aprobar. 404 si el caso no existe. Requiere atlas.gia.ver.'
+      operationId: ListarEvaluacionesCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EvaluacionDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Crear una evaluación de riesgo
+      description: Calcula los puntajes y el nivel por la peor dimensión. Solo con el caso en borrador; una evaluación pendiente anterior queda reemplazada como rechazada. Requiere atlas.gia.gestionar.
+      operationId: CrearEvaluacionCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Los escenarios.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEvaluacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluacionDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}/evaluaciones/{version}/votos':
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Votar una evaluación
+      description: 'Vota en la calidad de un rol de gobierno que la persona tenga (403 sin_rol_gobierno). Aprobar exige los requisitos del nivel (422 requisitos_pendientes) y un residual que no sea crítico (422 riesgo_critico). Cuando están todos los votos, el caso queda aprobado; un rechazo lo devuelve a borrador. Requiere atlas.gia.gestionar.'
+      operationId: VotarEvaluacionCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: path
+          description: Versión de la evaluación.
+          required: true
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      requestBody:
+        description: El voto.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudVoto'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluacionDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}/eipd':
+    get:
+      tags:
+        - Gobierno de IA
+      summary: La EIPD de un caso
+      description: 404 si el caso no existe o aún no tiene EIPD. Requiere atlas.gia.ver.
+      operationId: ObtenerEipdCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EipdDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+    put:
+      tags:
+        - Gobierno de IA
+      summary: Guardar la EIPD
+      description: 'Crea o edita la EIPD. Una decidida o en revisión no se edita, salvo una rechazada, que vuelve a borrador (409 estado_invalido). Requiere atlas.gia.gestionar.'
+      operationId: GuardarEipdCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Las secciones.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEipd'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EipdDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}/eipd/envio':
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Enviar la EIPD al OPD
+      description: De borrador a en_revision. 422 ficha_incompleta si falta alguna sección distinta de la opinión del OPD. Requiere atlas.gia.gestionar.
+      operationId: EnviarEipdCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EipdDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/casos/{id}/eipd/decision':
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Decidir la EIPD
+      description: 'Solo quien tenga el rol OPD (403 sin_rol_gobierno), con la EIPD en revisión y su opinión escrita. Requiere atlas.gia.gestionar.'
+      operationId: DecidirEipdCasoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del caso.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La decisión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudDecisionEipd'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EipdDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  /api/v1/gia/roles-gobierno:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Quién tiene cada rol de gobierno
+      description: 'Responsable de IA, OPD, Comité y Seguridad. Requiere atlas.gia.ver.'
+      operationId: ListarRolesGobiernoIa
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RolGobiernoResumen'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Asignar un rol de gobierno
+      description: A un empleado activo. Auditado. 409 ya_existe si ya lo tiene. Requiere atlas.gia.gestionar.
+      operationId: AsignarRolGobiernoIa
+      requestBody:
+        description: La persona y el rol.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudRolGobierno'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolGobiernoResumen'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/roles-gobierno/{id}':
+    delete:
+      tags:
+        - Gobierno de IA
+      summary: Quitar un rol de gobierno
+      description: Los votos ya dados se conservan. Auditado. 404 si no existe. Requiere atlas.gia.gestionar.
+      operationId: QuitarRolGobiernoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id de la asignación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  /api/v1/gia/politicas:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Políticas de IA
+      description: 'Por código y versión, sin el texto. Con atlas.gia.ver, todas las versiones; solo con atlas.gia.politicas.ver, las vigentes.'
+      operationId: ListarPoliticasIa
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PoliticaResumen'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.politicas.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.politicas.ver
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Crear una versión en borrador
+      description: 409 ya_existe si el código y la versión ya están. Requiere atlas.gia.gestionar.
+      operationId: CrearPoliticaIa
+      requestBody:
+        description: La versión.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPolitica'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaDetalle'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/politicas/{id}':
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Una versión con su texto
+      description: '404 si no existe o, sin atlas.gia.ver, si no está vigente. Requiere atlas.gia.politicas.ver.'
+      operationId: ObtenerPoliticaIa
+      parameters:
+        - name: id
+          in: path
+          description: Id de la versión.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.politicas.ver.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.politicas.ver
+    put:
+      tags:
+        - Gobierno de IA
+      summary: Guardar un borrador
+      description: 'Solo en borrador (409 estado_invalido): lo vigente no se reescribe, se crea otra versión. Requiere atlas.gia.gestionar.'
+      operationId: GuardarPoliticaIa
+      parameters:
+        - name: id
+          in: path
+          description: Id de la versión.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: El borrador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudGuardarPolitica'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaDetalle'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/politicas/{id}/publicacion':
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Publicar una versión
+      description: Solo quien tenga el rol Comité (403 sin_rol_gobierno). La deja vigente y reemplaza la anterior. 422 politica_pendiente si su texto aún lleva la marca de pendiente de redacción. Requiere atlas.gia.gestionar.
+      operationId: PublicarPoliticaIa
+      parameters:
+        - name: id
+          in: path
+          description: Id de la versión.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaDetalle'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/politicas/{id}/aceptacion':
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Leí y acepto
+      description: 'Registra persona, fecha e IP, una vez por versión. Solo sobre una versión vigente (409 estado_invalido); 409 ya_aceptada si ya la aceptó; sin atlas.gia.ver, lo que no está vigente responde 404. Requiere atlas.gia.politicas.ver.'
+      operationId: AceptarPoliticaIa
+      parameters:
+        - name: id
+          in: path
+          description: Id de la versión.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.politicas.ver.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.politicas.ver
+  '/api/v1/gia/politicas/{id}/aceptaciones':
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Quién aceptó y quién falta
+      description: 404 si no existe. Requiere atlas.gia.auditar.
+      operationId: ListarAceptacionesPoliticaIa
+      parameters:
+        - name: id
+          in: path
+          description: Id de la versión.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AceptacionesPolitica'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.auditar.
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.auditar
+  /api/v1/gia/herramientas:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Herramientas del equipo
+      description: Con el número de asientos activos. Requiere atlas.gia.ver.
+      operationId: ListarHerramientasIa
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HerramientaResumen'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Registrar una herramienta
+      description: 409 ya_existe si el código está en uso. Requiere atlas.gia.gestionar.
+      operationId: CrearHerramientaIa
+      requestBody:
+        description: La herramienta.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudHerramienta'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HerramientaResumen'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/herramientas/{id}':
+    put:
+      tags:
+        - Gobierno de IA
+      summary: Editar una herramienta
+      description: 404 si no existe. Requiere atlas.gia.gestionar.
+      operationId: GuardarHerramientaIa
+      parameters:
+        - name: id
+          in: path
+          description: Id de la herramienta.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: La herramienta.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudHerramienta'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HerramientaResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  /api/v1/gia/asientos:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Asientos
+      description: Con nombre y correo de cada persona. Requiere atlas.gia.auditar.
+      operationId: ListarAsientosIa
+      parameters:
+        - name: herramienta
+          in: query
+          description: Solo los de esta herramienta.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AsientoResumen'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.auditar.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.auditar
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Registrar un asiento
+      description: Requiere atlas.gia.gestionar.
+      operationId: CrearAsientoIa
+      requestBody:
+        description: El asiento.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAsiento'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsientoResumen'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/asientos/{id}':
+    put:
+      tags:
+        - Gobierno de IA
+      summary: Editar un asiento
+      description: Sirve para retirarlo o verificar su configuración. 404 si no existe. Requiere atlas.gia.gestionar.
+      operationId: GuardarAsientoIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del asiento.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: El asiento.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAsiento'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsientoResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  /api/v1/gia/incidentes/catalogo:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: 'Tipos, severidades y playbooks'
+      description: La lista fija del plan 02 §6.6. Requiere atlas.gia.ver.
+      operationId: CatalogoIncidentesIa
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogoIncidentes'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+  /api/v1/gia/incidentes:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Incidentes de IA
+      description: 'Del más reciente al más antiguo, hasta 200. Requiere atlas.gia.ver.'
+      operationId: ListarIncidentesIa
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IncidenteResumen'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
+    post:
+      tags:
+        - Gobierno de IA
+      summary: Registrar un incidente
+      description: El servidor asigna el código INC-IA-<año>-<NNN>. Atlas no envía avisos ni reporta a la SIC. Requiere atlas.gia.gestionar.
+      operationId: CrearIncidenteIa
+      requestBody:
+        description: El incidente.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudIncidente'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidenteResumen'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  '/api/v1/gia/incidentes/{id}':
+    put:
+      tags:
+        - Gobierno de IA
+      summary: Actualizar un incidente
+      description: 'Contenerlo, cerrarlo, registrar acciones y lecciones. 404 si no existe. Requiere atlas.gia.gestionar.'
+      operationId: GuardarIncidenteIa
+      parameters:
+        - name: id
+          in: path
+          description: Id del incidente.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: El incidente.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudIncidente'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidenteResumen'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.gia).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGia'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.gia.gestionar.'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.gestionar
+  /api/v1/gia/tablero:
+    get:
+      tags:
+        - Gobierno de IA
+      summary: Tablero de gobierno de IA
+      description: 'Casos por estado y riesgo, revisiones vencidas y los KPI del plan 02 §15. Los que dependen del gateway o de otros sistemas responden disponible=false. Requiere atlas.gia.ver.'
+      operationId: ObtenerTableroIa
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tablero'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.gia.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.gia).
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.gia.ver
   /api/v1/hola/saludos:
     get:
       tags:
@@ -8979,6 +12153,34 @@ components:
           type: string
           description: La versión vigente que se mostró.
       description: Versión de un documento legal que la persona acepta.
+    AceptacionesPolitica:
+      required:
+        - aceptaciones
+        - faltan
+      type: object
+      properties:
+        aceptaciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/AceptacionResumen'
+        faltan:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaGia'
+          description: Empleados activos sin aceptarla.
+      description: Quién aceptó una versión y cuántos faltan.
+    AceptacionResumen:
+      required:
+        - persona
+        - aceptadaEn
+      type: object
+      properties:
+        persona:
+          $ref: '#/components/schemas/PersonaGia'
+        aceptadaEn:
+          type: string
+          format: date-time
+      description: Una aceptación.
     ActividadTraspasoDto:
       required:
         - id
@@ -9235,6 +12437,30 @@ components:
           type: boolean
           description: Si la persona ve teléfonos (atlas.equipo.ver_contacto).
       description: '«¿A quién llamo?»: soporte de turno si hoy es sábado, y el principal y el secundario del aplicativo.'
+    ArchivoExportacionDocumentos:
+      required:
+        - ruta
+        - nombre
+        - formato
+        - bytes
+      type: object
+      properties:
+        ruta:
+          type: string
+          description: Ruta dentro de la exportación; es el valor de archivo en la descarga.
+        nombre:
+          type: string
+          description: Nombre con que se descarga.
+        formato:
+          type: string
+          description: 'html, pdf, word, markdown o zip.'
+        bytes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int64
+      description: Un archivo generado.
     ArchivoExportacionDto:
       required:
         - ruta
@@ -9259,6 +12485,69 @@ components:
             - string
           format: int64
       description: Un archivo generado.
+    ArchivoLote:
+      required:
+        - ruta
+        - contenido
+      type: object
+      properties:
+        ruta:
+          type: string
+          description: 'Ruta en el repo; con el aplicativo, identifica al documento.'
+        contenido:
+          type: string
+          description: El archivo completo (front-matter y MDX).
+      description: Un archivo del repo.
+    AsientoResumen:
+      required:
+        - id
+        - herramientaId
+        - personaId
+        - usuarioNombre
+        - correo
+        - tipoCuenta
+        - asignadoEn
+        - retiradoEn
+        - configuracionVerificadaEn
+        - reposAutorizados
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        herramientaId:
+          type: string
+          format: uuid
+        personaId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        usuarioNombre:
+          type: string
+        correo:
+          type: string
+        tipoCuenta:
+          type: string
+          description: corporativa o personal_autorizada.
+        asignadoEn:
+          type: string
+          format: date
+        retiradoEn:
+          type:
+            - 'null'
+            - string
+          format: date
+        configuracionVerificadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        reposAutorizados:
+          type: array
+          items:
+            type: string
+      description: Un asiento.
     AsignacionVista:
       required:
         - id
@@ -9948,6 +13237,23 @@ components:
             - string
           format: date-time
       description: Versión de un contrato en un ambiente; vacía si nunca se desplegó allí.
+    CanalDocumentoDto:
+      required:
+        - ambiente
+        - version
+      type: object
+      properties:
+        ambiente:
+          type: string
+          description: 'dev, qa o pdn.'
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de la versión.
+          format: int32
+      description: Versión de un documento en un ambiente.
     CanalDto:
       required:
         - ambiente
@@ -10162,6 +13468,115 @@ components:
           type: string
           description: 'alta, normal o baja frente a la media.'
       description: Carga de una persona en el reparto.
+    CasoDetalle:
+      required:
+        - caso
+        - ficha
+        - detallePlan
+        - versionActual
+        - aprobadoPor
+        - aprobadoEn
+        - faltantes
+        - puedeGestionar
+      type: object
+      properties:
+        caso:
+          $ref: '#/components/schemas/CasoResumen'
+        ficha:
+          $ref: '#/components/schemas/FichaCaso'
+        detallePlan:
+          type:
+            - 'null'
+            - string
+          description: 'La ficha del plan 02 tal como está, con sus marcas [por verificar]; Markdown.'
+        versionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        aprobadoPor:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PersonaGia'
+        aprobadoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        faltantes:
+          type: array
+          items:
+            type: string
+          description: Campos obligatorios sin llenar.
+        puedeGestionar:
+          type: boolean
+          description: Si la persona puede editarlo y moverlo de estado (atlas.gia.gestionar).
+      description: Un caso con su ficha y lo que falta para enviarlo a revisión.
+    CasoResumen:
+      required:
+        - id
+        - codigo
+        - nombre
+        - aplicacion
+        - estado
+        - nivelRiesgo
+        - riesgoPreliminar
+        - dueno
+        - proximaRevision
+        - revisionVencida
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        aplicacion:
+          type: string
+        estado:
+          type: string
+          description: 'borrador, en_revision, aprobado, en_produccion, suspendido o retirado.'
+        nivelRiesgo:
+          type:
+            - 'null'
+            - string
+          description: Nivel de la evaluación aprobada; vacío si no la hay.
+        riesgoPreliminar:
+          type:
+            - 'null'
+            - string
+          description: 'Lo que estimó el plan: bajo, medio, medio_alto o alto. No es una evaluación.'
+        dueno:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PersonaGia'
+        proximaRevision:
+          type:
+            - 'null'
+            - string
+          format: date
+        revisionVencida:
+          type: boolean
+          description: Si la próxima revisión ya pasó.
+      description: Un caso de uso en un listado.
+    CatalogoIncidentes:
+      required:
+        - tipos
+        - severidades
+      type: object
+      properties:
+        tipos:
+          type: array
+          items:
+            $ref: '#/components/schemas/TipoIncidenteCatalogo'
+        severidades:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeveridadCatalogo'
+      description: 'Tipos, severidades y playbooks. Atlas no notifica por sí solo.'
     ClavePushDto:
       required:
         - habilitado
@@ -10240,6 +13655,38 @@ components:
           items:
             type: string
       description: 'Códigos de recuperación nuevos: reemplazan a los anteriores y se muestran esta única vez.'
+    ComentarioResumen:
+      required:
+        - id
+        - versionNumero
+        - nodoClave
+        - persona
+        - texto
+        - escritoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        versionNumero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        nodoClave:
+          type:
+            - 'null'
+            - string
+          description: 'Nodo del lienzo, si es sobre uno.'
+        persona:
+          $ref: '#/components/schemas/PersonaDiagrama'
+        texto:
+          type: string
+        escritoEn:
+          type: string
+          format: date-time
+      description: Un comentario.
     ComparacionDto:
       required:
         - desde
@@ -10545,6 +13992,21 @@ components:
           items:
             $ref: '#/components/schemas/ContratoConsolidado'
       description: El consolidado de contratos por ambiente.
+    Conteo:
+      required:
+        - clave
+        - total
+      type: object
+      properties:
+        clave:
+          type: string
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+      description: Un conteo por categoría.
     ContratoCompartido:
       required:
         - contratoId
@@ -10915,6 +14377,31 @@ components:
           description: Cuándo vence la URL (15 minutos).
           format: date-time
       description: URL firmada para descargar un archivo de una exportación.
+    DescargaExportacionDocumentos:
+      required:
+        - url
+        - nombre
+        - bytes
+        - venceEn
+      type: object
+      properties:
+        url:
+          type: string
+          description: 'URL del almacenamiento S3, firmada y de un solo archivo; deja de servir al vencer.'
+          format: uri
+        nombre:
+          type: string
+        bytes:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int64
+        venceEn:
+          type: string
+          description: Cuándo vence la URL (15 minutos).
+          format: date-time
+      description: URL firmada para descargar un archivo.
     Desfase:
       required:
         - ambiente
@@ -11012,6 +14499,102 @@ components:
           items:
             $ref: '#/components/schemas/AvisoDelPortal'
       description: Detalle de un paquete compartido.
+    DetalleRevisionDocumento:
+      required:
+        - revision
+        - tipo
+        - contenido
+        - audiencias
+        - responsable
+      type: object
+      properties:
+        revision:
+          $ref: '#/components/schemas/ResumenRevisionDocumento'
+        tipo:
+          type: string
+        contenido:
+          type: string
+        audiencias:
+          type: array
+          items:
+            type: string
+        responsable:
+          type: string
+      description: Revisión inmutable con su cuerpo.
+    DetalleVersionDocumento:
+      required:
+        - version
+        - contenido
+      type: object
+      properties:
+        version:
+          $ref: '#/components/schemas/ResumenVersionDocumento'
+        contenido:
+          type: string
+          description: 'Cuerpo en MDX, sin evaluar.'
+      description: Versión inmutable con su cuerpo en MDX.
+    DiagramaDetalle:
+      required:
+        - diagrama
+        - version
+        - referencias
+        - puedeEditar
+      type: object
+      properties:
+        diagrama:
+          $ref: '#/components/schemas/DiagramaResumen'
+        version:
+          oneOf:
+            - type: 'null'
+            - description: La última versión que la persona puede ver; vacío si todas son de un nivel que no alcanza.
+              $ref: '#/components/schemas/VersionDiagramaDetalle'
+        referencias:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenciaAplicativo'
+          description: Aplicativos del catálogo que menciona el lienzo en esa versión.
+        puedeEditar:
+          type: boolean
+      description: Un diagrama con su última versión y lo que la persona puede hacer.
+    DiagramaResumen:
+      required:
+        - id
+        - codigo
+        - aplicativoId
+        - tipo
+        - titulo
+        - visibilidad
+        - versionActual
+        - actualizadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+          description: 'Código único: el id de <Diagrama/> en los documentos.'
+        aplicativoId:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          description: 'lienzo, mermaid o bpmn.'
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        versionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        actualizadoEn:
+          type: string
+          format: date-time
+      description: Un diagrama sin su fuente.
     DiferenciaDto:
       required:
         - patron
@@ -11109,6 +14692,24 @@ components:
           type: boolean
           description: La respuesta salió de la caché de atlas-render.
       description: 'Diff entre dos versiones de un contrato: primero los cambios que rompen compatibilidad, del más grave al menos.'
+    DocumentoAExportar:
+      required:
+        - documentoId
+        - version
+      type: object
+      properties:
+        documentoId:
+          type: string
+          format: uuid
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Número de versión; vacío = la vigente.
+          format: int32
+      description: Un documento a exportar.
     DocumentoDelAplicativo:
       required:
         - id
@@ -11127,6 +14728,101 @@ components:
         ruta:
           type: string
       description: 'Documento funcional de un aplicativo (llega con la documentación, F5).'
+    DocumentoDetalle:
+      required:
+        - documento
+        - canales
+        - version
+        - puedeEditar
+        - puedeAprobar
+      type: object
+      properties:
+        documento:
+          $ref: '#/components/schemas/DocumentoResumen'
+        canales:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanalDocumentoDto'
+        version:
+          oneOf:
+            - type: 'null'
+            - description: La versión pedida o la vigente; vacío si aún no tiene una que la persona pueda leer.
+              $ref: '#/components/schemas/DetalleVersionDocumento'
+        puedeEditar:
+          type: boolean
+          description: 'Si puede editarlo: nunca en los de repo.'
+        puedeAprobar:
+          type: boolean
+          description: 'Si puede aprobar lo que está en revisión; si es publico_clientes, solo el principal o el secundario (o, sin responsables, el líder técnico).'
+      description: Un documento con la versión pedida y lo que la persona puede hacer.
+    DocumentoResumen:
+      required:
+        - id
+        - aplicativoId
+        - origen
+        - tipo
+        - titulo
+        - visibilidad
+        - audiencias
+        - responsable
+        - estado
+        - ruta
+        - versionVigente
+        - revisionActual
+        - actualizadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        aplicativoId:
+          type: string
+          format: uuid
+        origen:
+          type: string
+          description: repo (no se edita en Atlas) o atlas.
+        tipo:
+          type: string
+          description: 'manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial, adr o nota_version.'
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'publico_clientes, interno_negocio, interno_ti o restringido.'
+        audiencias:
+          type: array
+          items:
+            type: string
+        responsable:
+          type: string
+          description: Responsable funcional.
+        estado:
+          type: string
+          description: 'borrador, en_revision, publicado o archivado.'
+        ruta:
+          type:
+            - 'null'
+            - string
+          description: 'Ruta en el repo, si es de origen repo.'
+        versionVigente:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: La versión que se lee por defecto; vacío si no tiene.
+          format: int32
+        revisionActual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Número de la última revisión; 0 en los de repo.
+          format: int32
+        actualizadoEn:
+          type: string
+          format: date-time
+      description: 'Un documento, sin el cuerpo.'
     DocumentoVigente:
       required:
         - documento
@@ -11151,6 +14847,53 @@ components:
           type: string
           description: 'SHA-256 (hex) del texto: queda en la evidencia de la aceptación.'
       description: 'Documento legal vigente (términos de uso o aviso de privacidad, Ley 1581) con su versión y su texto en Markdown.'
+    EipdDetalle:
+      required:
+        - id
+        - estado
+        - descripcion
+        - necesidad
+        - riesgos
+        - medidas
+        - opinionOpd
+        - planAccion
+        - documentoUrl
+        - decididaPor
+        - decididaEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          description: 'borrador, en_revision, aprobada o rechazada.'
+        descripcion:
+          type: string
+        necesidad:
+          type: string
+        riesgos:
+          type: string
+        medidas:
+          type: string
+        opinionOpd:
+          type: string
+        planAccion:
+          type: string
+        documentoUrl:
+          type:
+            - 'null'
+            - string
+        decididaPor:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PersonaGia'
+        decididaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: La evaluación de impacto en privacidad (plan 02 §8.4).
     EntradaPaqueteDto:
       required:
         - contratoId
@@ -11424,6 +15167,18 @@ components:
             type: string
           description: 'Con no_publicable: qué ya no se cumple en la revisión fijada.'
       description: 'Por qué no se hizo, con un código estable.'
+    ErrorDeExportacionDocumentos:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'pdf_no_disponible, entrada_invalida, tiempo_agotado o interno.'
+        mensaje:
+          type: string
+      description: Por qué falló una exportación.
     ErrorDeprecacion:
       required:
         - codigo
@@ -11436,6 +15191,18 @@ components:
         mensaje:
           type: string
       description: 'Por qué no se pudo deprecar, con un código estable.'
+    ErrorDiagrama:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso (403); version_desactualizada, sin_cambios, codigo_existente (409); exportacion_no_soportada (422); render_no_disponible (503).'
+        mensaje:
+          type: string
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorDiff:
       required:
         - codigo
@@ -11448,6 +15215,24 @@ components:
         mensaje:
           type: string
       description: 'Por qué no se pudo calcular el diff, con un código estable.'
+    ErrorDocumento:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_permiso, aprobacion_requerida (403); documento_de_repo, documento_archivado, revision_desactualizada, sin_cambios, estado_invalido, ya_publicada (409); mdx_invalido (422).'
+        mensaje:
+          type: string
+        errores:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorEquipo:
       required:
         - codigo
@@ -11481,6 +15266,18 @@ components:
             type: string
           description: 'Con no_exportable: qué impide exportar.'
       description: 'Por qué no se hizo, con un código estable.'
+    ErrorExportacionDocumentos:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_version, no_lista (409); vencida (410); almacenamiento_no_disponible (503).'
+        mensaje:
+          type: string
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorExportacionDto:
       required:
         - codigo
@@ -11505,6 +15302,25 @@ components:
         mensaje:
           type: string
       description: Error de una operación de invitaciones o de cuentas externas.
+    ErrorGia:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'no_encontrado (404); sin_rol_gobierno (403); version_desactualizada, estado_invalido, ya_existe, ya_voto, ya_aceptada (409); ficha_incompleta, requisitos_pendientes, riesgo_critico, rol_no_aplica, sin_evaluacion, politica_pendiente (422).'
+        mensaje:
+          type: string
+        detalle:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Lo que falta, si aplica.'
+      description: 'Por qué no se hizo, con un código estable.'
     ErrorGuia:
       required:
         - codigo
@@ -11517,6 +15333,18 @@ components:
         mensaje:
           type: string
       description: 'Por qué no se hizo, con un código estable.'
+    ErrorLote:
+      required:
+        - codigo
+        - mensaje
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: fuente_no_autorizada (403) o rama_sin_ambiente (422).
+        mensaje:
+          type: string
+      description: 'Por qué no se publicó el lote, con un código estable.'
     ErrorPaquete:
       required:
         - codigo
@@ -11618,6 +15446,56 @@ components:
           type: string
           description: 'Mensaje para la persona, en español.'
       description: Error de una operación de soporte.
+    EscenarioRiesgo:
+      required:
+        - dimension
+        - escenario
+        - p
+        - i
+        - controlesExistentes
+        - controlesNuevos
+        - p2
+        - i2
+      type: object
+      properties:
+        dimension:
+          type: string
+        escenario:
+          type: string
+        p:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        i:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        controlesExistentes:
+          type:
+            - 'null'
+            - string
+        controlesNuevos:
+          type:
+            - 'null'
+            - string
+        p2:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+        i2:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
     EstadoCalendarioM365Dto:
       required:
         - activo
@@ -11848,6 +15726,95 @@ components:
             $ref: '#/components/schemas/EquipoEsteSabadoDto'
           description: Cada equipo activo con sus turnos de ese sábado.
       description: 'Soporte del próximo sábado (hoy, si es sábado), por equipo: lo que muestra el widget de Inicio.'
+    EvaluacionDetalle:
+      required:
+        - id
+        - version
+        - dimensiones
+        - puntajeInherente
+        - nivelInherente
+        - puntajeResidual
+        - nivelResidual
+        - principios
+        - transferenciaInternacional
+        - decision
+        - condiciones
+        - evaluador
+        - evaluadaEn
+        - decididaEn
+        - rolesRequeridos
+        - requisitos
+        - votos
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        dimensiones:
+          type: array
+          items:
+            $ref: '#/components/schemas/EscenarioRiesgo'
+        puntajeInherente:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        nivelInherente:
+          type: string
+          description: 'bajo, medio, alto o critico: el de la peor dimensión.'
+        puntajeResidual:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        nivelResidual:
+          type: string
+        principios:
+          $ref: '#/components/schemas/PrincipiosCircular'
+        transferenciaInternacional:
+          type:
+            - 'null'
+            - string
+        decision:
+          type: string
+          description: 'pendiente, aprobado, aprobado_condiciones o rechazado.'
+        condiciones:
+          type:
+            - 'null'
+            - string
+        evaluador:
+          $ref: '#/components/schemas/PersonaGia'
+        evaluadaEn:
+          type: string
+          format: date-time
+        decididaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        rolesRequeridos:
+          type: array
+          items:
+            type: string
+          description: 'Roles cuyo voto a favor hace falta, según el nivel inherente.'
+        requisitos:
+          type: array
+          items:
+            type: string
+          description: 'Lo que falta para poder aprobar, según el nivel.'
+        votos:
+          type: array
+          items:
+            $ref: '#/components/schemas/VotoResumen'
+      description: Una evaluación con sus votos.
     EventoSolicitudDto:
       required:
         - accion
@@ -11879,6 +15846,74 @@ components:
           description: 'Cuándo lo hizo la persona en su dispositivo, si lo hizo sin conexión.'
           format: date-time
       description: Paso del historial de una solicitud de cambio.
+    ExportacionDocumentosDto:
+      required:
+        - id
+        - estado
+        - nombre
+        - documentoId
+        - formatos
+        - solicitadaEn
+        - iniciadaEn
+        - listaEn
+        - venceEn
+        - hashContenido
+        - archivos
+        - error
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          description: 'pendiente, procesando, lista, fallida o vencida.'
+        nombre:
+          type: string
+        documentoId:
+          type:
+            - 'null'
+            - string
+          description: 'El documento, si es de uno solo.'
+          format: uuid
+        formatos:
+          type: array
+          items:
+            type: string
+        solicitadaEn:
+          type: string
+          format: date-time
+        iniciadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        listaEn:
+          type:
+            - 'null'
+            - string
+          description: Cuándo quedó lista o fallida.
+          format: date-time
+        venceEn:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo se puede descargar; después se borran los archivos.
+          format: date-time
+        hashContenido:
+          type:
+            - 'null'
+            - string
+          description: SHA-256 del contenido exportado (va en la portada de cada formato).
+        archivos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArchivoExportacionDocumentos'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ErrorDeExportacionDocumentos'
+      description: Una exportación de documentos y su estado.
     ExportacionDto:
       required:
         - id
@@ -11945,6 +15980,43 @@ components:
             - type: 'null'
             - $ref: '#/components/schemas/ErrorExportacionDto'
       description: Una exportación y su estado.
+    FavoritoDocumentoDto:
+      required:
+        - id
+        - documentoId
+        - titulo
+        - tipo
+        - versionVigente
+        - ruta
+        - marcadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        documentoId:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        tipo:
+          type: string
+          description: 'manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial, adr o nota_version.'
+        versionVigente:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'La versión vigente: la que la PWA guarda sin conexión.'
+          format: int32
+        ruta:
+          type: string
+          description: Ruta de la PWA.
+        marcadoEn:
+          type: string
+          format: date-time
+      description: Un documento marcado como favorito.
     FavoritoInterno:
       required:
         - id
@@ -12219,6 +16291,170 @@ components:
           type: string
           format: date-time
       description: 'Ficha de un aplicativo: sus datos, su ruta en la jerarquía y sus hijos. Las pestañas de los demás módulos las pinta la PWA.'
+    FichaCaso:
+      required:
+        - nombre
+        - aplicacion
+        - aplicativoId
+        - repo
+        - duenoPersonaId
+        - ambientes
+        - proposito
+        - tipo
+        - usuariosAfectados
+        - decisionSobrePersonas
+        - decisionDescripcion
+        - humanoEnBucle
+        - categoriasDato
+        - tiposPii
+        - volumenMensualEstimado
+        - baseLegal
+        - baseLegalRef
+        - minimizacion
+        - presidioActivo
+        - presidioEntidades
+        - aliasUsados
+        - proveedorActual
+        - transferenciaInternacional
+        - metricasCalidad
+        - evalsRuta
+        - promptsUbicacion
+        - controles
+        - avisoUsuario
+        - planRollback
+        - enlaces
+      type: object
+      properties:
+        nombre:
+          type: string
+        aplicacion:
+          type: string
+          description: 'Aplicación o repo, como texto.'
+        aplicativoId:
+          type:
+            - 'null'
+            - string
+          description: 'Aplicativo del catálogo, si se conoce.'
+          format: uuid
+        repo:
+          type:
+            - 'null'
+            - string
+        duenoPersonaId:
+          type:
+            - 'null'
+            - string
+          description: Persona dueña del caso.
+          format: uuid
+        ambientes:
+          type: array
+          items:
+            type: string
+          description: 'dev, qa o pdn.'
+        proposito:
+          type: string
+        tipo:
+          type:
+            - 'null'
+            - string
+          description: 'ocr, chat, clasificacion, generacion, agente, embeddings u otro.'
+        usuariosAfectados:
+          type: array
+          items:
+            type: string
+          description: 'interno, cliente o ciudadano.'
+        decisionSobrePersonas:
+          type:
+            - 'null'
+            - boolean
+        decisionDescripcion:
+          type:
+            - 'null'
+            - string
+        humanoEnBucle:
+          type:
+            - 'null'
+            - string
+          description: 'ninguno, revision_posterior o aprobacion_previa.'
+        categoriasDato:
+          type: array
+          items:
+            type: string
+          description: 'publico, interno, confidencial, personal o sensible.'
+        tiposPii:
+          type: array
+          items:
+            type: string
+        volumenMensualEstimado:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+        baseLegal:
+          type:
+            - 'null'
+            - string
+        baseLegalRef:
+          type:
+            - 'null'
+            - string
+        minimizacion:
+          type:
+            - 'null'
+            - string
+        presidioActivo:
+          type:
+            - 'null'
+            - boolean
+        presidioEntidades:
+          type: array
+          items:
+            type: string
+        aliasUsados:
+          type: array
+          items:
+            type: string
+          description: 'Alias del gateway; hoy, los propuestos.'
+        proveedorActual:
+          type:
+            - 'null'
+            - string
+        transferenciaInternacional:
+          type:
+            - 'null'
+            - string
+        metricasCalidad:
+          type:
+            - 'null'
+            - string
+        evalsRuta:
+          type:
+            - 'null'
+            - string
+        promptsUbicacion:
+          type:
+            - 'null'
+            - string
+        controles:
+          type:
+            - 'null'
+            - string
+        avisoUsuario:
+          type:
+            - 'null'
+            - string
+        planRollback:
+          type:
+            - 'null'
+            - string
+        enlaces:
+          type: array
+          items:
+            type: string
+          description: 'ADR, historias y PR relacionados.'
+      description: La ficha de un caso de uso (plan 02 §7.1). Lo obligatorio se exige al enviarla a revisión.
     FichaResponsablesDto:
       required:
         - aplicativo
@@ -12651,6 +16887,65 @@ components:
           description: 'Revisión que se comparte: debe ser la publicada (aprobada por el responsable). Vacío = la publicada.'
           format: int32
       description: Una guía compartible dentro de un contrato del paquete.
+    HerramientaResumen:
+      required:
+        - id
+        - codigo
+        - nombre
+        - estado
+        - plan
+        - proveedor
+        - nivelDatoMaximo
+        - configuracionRequerida
+        - costoMensualUsd
+        - notas
+        - asientosActivos
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        estado:
+          type: string
+          description: 'aprobada, en_evaluacion o prohibida.'
+        plan:
+          type:
+            - 'null'
+            - string
+        proveedor:
+          type:
+            - 'null'
+            - string
+        nivelDatoMaximo:
+          type: string
+          description: 'publico, interno, confidencial, personal o sensible.'
+        configuracionRequerida:
+          type:
+            - 'null'
+            - string
+        costoMensualUsd:
+          pattern: '^-?(?:0|[1-9]\d*)(?:\.\d+)?$'
+          type:
+            - 'null'
+            - number
+            - string
+          format: double
+        notas:
+          type:
+            - 'null'
+            - string
+        asientosActivos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Asientos sin retirar.
+          format: int32
+      description: Una herramienta de IA del equipo.
     HistorialCanalDto:
       required:
         - ambiente
@@ -12720,6 +17015,68 @@ components:
             type: array
             items:
               type: string
+    IncidenteResumen:
+      required:
+        - id
+        - codigo
+        - tipo
+        - severidad
+        - casoUsoId
+        - descripcion
+        - detectadoEn
+        - contenidoEn
+        - cerradoEn
+        - acciones
+        - reportadoSic
+        - responsable
+        - lecciones
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        tipo:
+          type: string
+          description: INC-IA-01 a INC-IA-07.
+        severidad:
+          type: string
+          description: S1 a S4.
+        casoUsoId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        descripcion:
+          type: string
+        detectadoEn:
+          type: string
+          format: date-time
+        contenidoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        cerradoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        acciones:
+          type: array
+          items:
+            type: string
+        reportadoSic:
+          type: boolean
+          description: 'Si una persona ya reportó a la SIC: Atlas no reporta.'
+        responsable:
+          $ref: '#/components/schemas/PersonaGia'
+        lecciones:
+          type:
+            - 'null'
+            - string
+      description: Un incidente de IA.
     IndicadoresDto:
       required:
         - desde
@@ -13027,6 +17384,49 @@ components:
           type: string
           format: date-time
       description: 'Invitación de una persona externa, con su estado calculado en este momento.'
+    Kpi:
+      required:
+        - codigo
+        - nombre
+        - disponible
+        - valor
+        - total
+        - meta
+        - nota
+      type: object
+      properties:
+        codigo:
+          type: string
+        nombre:
+          type: string
+        disponible:
+          type: boolean
+          description: 'false si Atlas no tiene con qué calcularlo: nunca se muestra como cero.'
+        valor:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Lo que cumple.
+          format: int32
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Sobre cuánto se mide.
+          format: int32
+        meta:
+          type: string
+          description: Meta de la Fase 4 del plan.
+        nota:
+          type:
+            - 'null'
+            - string
+          description: 'Por qué no hay dato, o aclaración del cálculo.'
+      description: Un KPI del plan 02 §15.
     LineaCodeownersDto:
       required:
         - patron
@@ -13076,6 +17476,16 @@ components:
           items:
             $ref: '#/components/schemas/AplicativoResumen'
       description: 'Listado del catálogo filtrado, ordenado por grupo y por la ruta en la jerarquía.'
+    ListadoCasos:
+      required:
+        - elementos
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/CasoResumen'
+      description: Casos de uso.
     ListadoComparticiones:
       required:
         - puedeCompartir
@@ -13109,6 +17519,41 @@ components:
           items:
             $ref: '#/components/schemas/ContratoResumen'
       description: 'Contratos que cumplen el filtro, ordenados por aplicativo y código.'
+    ListadoDiagramas:
+      required:
+        - elementos
+        - total
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagramaResumen'
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'Total con estos filtros, sin el límite.'
+          format: int32
+      description: Diagramas que la persona puede ver.
+    ListadoDocumentos:
+      required:
+        - total
+        - elementos
+      type: object
+      properties:
+        total:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoResumen'
+      description: Una página de documentos.
     ListadoElegibles:
       required:
         - elementos
@@ -13129,6 +17574,16 @@ components:
           items:
             $ref: '#/components/schemas/ExportacionDto'
       description: 'Las exportaciones de la persona, de la más reciente a la más antigua.'
+    ListadoExportacionesDocumentos:
+      required:
+        - elementos
+      type: object
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportacionDocumentosDto'
+      description: 'Las exportaciones de documentos de la persona, de la más reciente a la más antigua.'
     ListadoGuias:
       required:
         - contratoId
@@ -14176,6 +18631,19 @@ components:
           type: boolean
           description: 'Crear hijos, cambiar la jerarquía y eliminarlo (atlas.catalogo.gestionar).'
       description: Qué puede hacer la persona en sesión con este aplicativo.
+    PersonaDiagrama:
+      required:
+        - id
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre; «Persona no disponible» si ya no está.
+      description: Persona de Atlas.
     PersonaDirectorio:
       required:
         - id
@@ -14323,6 +18791,19 @@ components:
           type: boolean
           description: Si la persona está activa en Atlas.
       description: Persona del equipo. El teléfono solo llega con atlas.equipo.ver_contacto.
+    PersonaGia:
+      required:
+        - id
+        - nombre
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+          description: Nombre; «Persona no disponible» si ya no está.
+      description: Persona de Atlas.
     PersonaNuevaDto:
       required:
         - clave
@@ -14435,6 +18916,66 @@ components:
             - string
           description: Teléfono; vacío sin atlas.equipo.ver_contacto.
       description: 'Persona de un turno. El correo y el cargo los ve todo interno con atlas.soporte.ver; el teléfono, solo con atlas.equipo.ver_contacto.'
+    PoliticaDetalle:
+      required:
+        - politica
+        - contenido
+        - fuenteGit
+        - aprobadaPor
+      type: object
+      properties:
+        politica:
+          $ref: '#/components/schemas/PoliticaResumen'
+        contenido:
+          type: string
+        fuenteGit:
+          type:
+            - 'null'
+            - string
+        aprobadaPor:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PersonaGia'
+      description: Una versión de una política con su texto en Markdown.
+    PoliticaResumen:
+      required:
+        - id
+        - codigo
+        - version
+        - titulo
+        - estado
+        - requiereAceptacion
+        - vigenteDesde
+        - pendienteDeRedaccion
+        - aceptadaPorMi
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        version:
+          type: string
+        titulo:
+          type: string
+        estado:
+          type: string
+          description: 'borrador, vigente o reemplazada.'
+        requiereAceptacion:
+          type: boolean
+        vigenteDesde:
+          type:
+            - 'null'
+            - string
+          format: date
+        pendienteDeRedaccion:
+          type: boolean
+          description: Si su texto aún lleva la marca de pendiente de redacción.
+        aceptadaPorMi:
+          type: boolean
+          description: Si la persona de la sesión ya la aceptó.
+      description: 'Una versión de una política, sin su texto.'
     PortadorToken:
       required:
         - sub
@@ -14519,6 +19060,31 @@ components:
           items:
             $ref: '#/components/schemas/PreferenciaCanalDto'
       description: Tipo de notificación con sus canales.
+    PrincipiosCircular:
+      required:
+        - idoneidad
+        - necesidad
+        - razonabilidad
+        - proporcionalidad
+      type: object
+      properties:
+        idoneidad:
+          type:
+            - 'null'
+            - string
+        necesidad:
+          type:
+            - 'null'
+            - string
+        razonabilidad:
+          type:
+            - 'null'
+            - string
+        proporcionalidad:
+          type:
+            - 'null'
+            - string
+      description: Principios de la Circular 002 (plan 02 §8.3).
     ProveedoresHabilitados:
       required:
         - microsoft
@@ -14936,6 +19502,46 @@ components:
           description: 'Cuándo la hizo la persona, si la hizo sin conexión.'
           format: date-time
       description: 'Respuesta del reemplazo: acepta o rechaza tomar el turno.'
+    ResultadoArchivo:
+      required:
+        - ruta
+        - resultado
+        - documentoId
+        - version
+        - codigo
+        - errores
+      type: object
+      properties:
+        ruta:
+          type: string
+        resultado:
+          type: string
+          description: 'creada (versión nueva), igual (ya existía con el mismo hash: solo se mueve el canal) o rechazada.'
+        documentoId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        version:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: Número de la versión que quedó en el canal.
+          format: int32
+        codigo:
+          type:
+            - 'null'
+            - string
+          description: 'Si se rechazó: front_matter_invalido, documento_invalido, mdx_invalido, ruta_invalida, ruta_de_otro_repo, aplicativo_no_autorizado, tipo_no_autorizado, fuente_no_autorizada, conflicto_concurrente o contenido_no_indexable.'
+        errores:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+      description: Qué pasó con un archivo.
     ResultadoBusquedaPersonas:
       required:
         - personas
@@ -15040,6 +19646,26 @@ components:
           description: 'El informe: lo mismo que la vista previa confirmada.'
           $ref: '#/components/schemas/VistaPreviaImportacionDto'
       description: 'Resultado de la importación, con el informe final.'
+    ResultadoLote:
+      required:
+        - ambiente
+        - resultados
+        - retiradas
+      type: object
+      properties:
+        ambiente:
+          type: string
+          description: 'dev, qa o pdn, según la rama.'
+        resultados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultadoArchivo'
+        retiradas:
+          type: array
+          items:
+            type: string
+          description: Rutas que salieron del canal de este ambiente porque ya no están en el repo.
+      description: Resultado del lote.
     ResultadoPortal:
       required:
         - tipo
@@ -15215,6 +19841,104 @@ components:
           description: Casos ambiguos (filas marcadas para revisión).
           format: int32
       description: Conteos de la vista previa o de la importación.
+    ResumenRevisionDocumento:
+      required:
+        - numero
+        - origen
+        - restauradaDe
+        - titulo
+        - visibilidad
+        - nota
+        - autorPersonaId
+        - guardadaEn
+        - huella
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        origen:
+          type: string
+          description: 'creacion, edicion o restauracion.'
+        restauradaDe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+        nota:
+          type: string
+        autorPersonaId:
+          type: string
+          format: uuid
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+      description: 'Revisión inmutable, sin el cuerpo.'
+    ResumenVersionDocumento:
+      required:
+        - numero
+        - titulo
+        - visibilidad
+        - esBorrador
+        - sha256
+        - repositorio
+        - rama
+        - commitSha
+        - revisionOrigen
+        - publicadoEn
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'publico_clientes, interno_negocio, interno_ti o restringido.'
+        esBorrador:
+          type: boolean
+          description: 'De repo y sin aprobar: solo la ven los roles técnicos y los responsables.'
+        sha256:
+          type: string
+        repositorio:
+          type:
+            - 'null'
+            - string
+        rama:
+          type:
+            - 'null'
+            - string
+        commitSha:
+          type:
+            - 'null'
+            - string
+        revisionOrigen:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Revisión congelada, si se escribió en Atlas.'
+          format: int32
+        publicadoEn:
+          type: string
+          format: date-time
+      description: 'Versión inmutable, sin el cuerpo.'
     RevisionDetalle:
       required:
         - numero
@@ -15526,6 +20250,26 @@ components:
           items:
             type: string
       description: Rol de Atlas con los permisos que concede según los manifiestos del código.
+    RolGobiernoResumen:
+      required:
+        - id
+        - persona
+        - rol
+        - asignadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        persona:
+          $ref: '#/components/schemas/PersonaGia'
+        rol:
+          type: string
+          description: 'responsable_ia, opd, comite o seguridad.'
+        asignadoEn:
+          type: string
+          format: date-time
+      description: Una persona con un rol de gobierno.
     RolInvitable:
       required:
         - codigo
@@ -15829,6 +20573,26 @@ components:
         actual:
           type: boolean
       description: Sesión activa del usuario en un dispositivo («dispositivos conectados»). La IP es un dato personal.
+    SeveridadCatalogo:
+      required:
+        - codigo
+        - nombre
+        - criterio
+        - tiempoRespuesta
+        - notificaA
+      type: object
+      properties:
+        codigo:
+          type: string
+        nombre:
+          type: string
+        criterio:
+          type: string
+        tiempoRespuesta:
+          type: string
+        notificaA:
+          type: string
+      description: Una severidad del plan 02 §6.6.
     SolicitudAceptacion:
       required:
         - token
@@ -15976,6 +20740,56 @@ components:
             type: string
           description: 'Etiquetas (hasta 20, de hasta 50 caracteres; se guardan en minúsculas).'
       description: Datos de un aplicativo nuevo o los cambios de uno existente (se reemplazan todos los campos).
+    SolicitudAsiento:
+      required:
+        - herramientaId
+        - personaId
+        - usuarioNombre
+        - correo
+        - tipoCuenta
+        - asignadoEn
+        - retiradoEn
+        - configuracionVerificadaEn
+        - reposAutorizados
+      type: object
+      properties:
+        herramientaId:
+          type:
+            - 'null'
+            - string
+          description: Al editar se ignora.
+          format: uuid
+        personaId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        usuarioNombre:
+          type: string
+        correo:
+          type: string
+        tipoCuenta:
+          type: string
+        asignadoEn:
+          type: string
+          format: date
+        retiradoEn:
+          type:
+            - 'null'
+            - string
+          format: date
+        configuracionVerificadaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        reposAutorizados:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+      description: Crear o editar un asiento.
     SolicitudAsignacion:
       required:
         - rol
@@ -16216,6 +21030,29 @@ components:
           description: Siguiente revisión; tres meses después si no se dice.
           format: date
       description: 'Cierre de la revisión: queda hecha y se programa la siguiente.'
+    SolicitudComentario:
+      required:
+        - versionNumero
+        - nodoClave
+        - texto
+      type: object
+      properties:
+        versionNumero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Versión a la que se refiere; debe existir y ser visible.
+          format: int32
+        nodoClave:
+          type:
+            - 'null'
+            - string
+          description: 'Nodo del lienzo, si es sobre uno.'
+        texto:
+          type: string
+          description: Hasta 2.000 caracteres.
+      description: Escribir un comentario.
     SolicitudComparticion:
       required:
         - organizacionId
@@ -16275,6 +21112,60 @@ components:
         correo:
           type: string
       description: Correo de la cuenta externa que se quiere recuperar.
+    SolicitudCrearCaso:
+      required:
+        - codigo
+        - ficha
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'Minúsculas, números y guiones (app-caso). No cambia.'
+        ficha:
+          $ref: '#/components/schemas/FichaCaso'
+      description: Crear un caso en borrador.
+    SolicitudCrearDiagrama:
+      required:
+        - codigo
+        - aplicativoId
+        - tipo
+        - titulo
+        - visibilidad
+        - fuente
+        - nota
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'Minúsculas, números y guiones, hasta 100 caracteres. No cambia.'
+        aplicativoId:
+          type: string
+          description: Aplicativo del catálogo. No cambia.
+          format: uuid
+        tipo:
+          type: string
+          description: 'lienzo, mermaid o bpmn. No cambia.'
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        fuente:
+          type: string
+          description: 'Fuente Mermaid (hasta 20 mil caracteres), XML BPMN o JSON del lienzo (hasta 1 millón).'
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+      description: Crear un diagrama con su primera versión.
+    SolicitudDecisionEipd:
+      required:
+        - decision
+      type: object
+      properties:
+        decision:
+          type: string
+          description: aprobada o rechazada.
+      description: Decisión del OPD sobre la EIPD.
     SolicitudDeprecacion:
       required:
         - retiroEn
@@ -16287,6 +21178,104 @@ components:
           description: 'Fecha de retiro (aaaa-mm-dd): después de hoy y a lo sumo dentro de dos años. Deprecar otra vez cambia la fecha y avisa de nuevo.'
           format: date
       description: 'Deprecar una versión: la fecha en que se retira (hora de Bogotá).'
+    SolicitudDocumento:
+      required:
+        - aplicativoId
+        - tipo
+        - titulo
+        - contenido
+        - visibilidad
+        - audiencias
+        - responsable
+        - nota
+        - revisionBase
+      type: object
+      properties:
+        aplicativoId:
+          type:
+            - 'null'
+            - string
+          description: 'Al crear: el aplicativo. Al editar se ignora.'
+          format: uuid
+        tipo:
+          type: string
+          description: 'manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial o nota_version; adr solo llega desde los repos.'
+        titulo:
+          type: string
+          description: Hasta 200 caracteres.
+        contenido:
+          type: string
+          description: 'Cuerpo en MDX, hasta 300 mil caracteres. La lista blanca se revisa al enviar a revisión y al publicar.'
+        visibilidad:
+          type: string
+          description: 'publico_clientes, interno_negocio, interno_ti o restringido: uno que la persona alcance a ver.'
+        audiencias:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+        responsable:
+          type: string
+          description: 'Responsable funcional, hasta 200 caracteres.'
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        revisionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Al editar: la revisión sobre la que se trabajó (409 si hay otra más nueva).'
+          format: int32
+      description: Lo que se guarda en una revisión nueva.
+    SolicitudEipd:
+      required:
+        - descripcion
+        - necesidad
+        - riesgos
+        - medidas
+        - opinionOpd
+        - planAccion
+        - documentoUrl
+      type: object
+      properties:
+        descripcion:
+          type:
+            - 'null'
+            - string
+          description: Descripción del tratamiento y del flujo de datos.
+        necesidad:
+          type:
+            - 'null'
+            - string
+          description: Necesidad y proporcionalidad.
+        riesgos:
+          type:
+            - 'null'
+            - string
+          description: Riesgos para los titulares.
+        medidas:
+          type:
+            - 'null'
+            - string
+        opinionOpd:
+          type:
+            - 'null'
+            - string
+          description: Opinión del OPD.
+        planAccion:
+          type:
+            - 'null'
+            - string
+          description: Plan de acción.
+        documentoUrl:
+          type:
+            - 'null'
+            - string
+          description: 'Enlace https al documento, si vive fuera.'
+      description: Las seis secciones de la EIPD.
     SolicitudEnlace:
       required:
         - enlace
@@ -16303,6 +21292,53 @@ components:
         enlace:
           type: string
       description: Enlace de activación de la cuenta de emergencia (el fragmento de la URL que imprime el comando).
+    SolicitudEstadoCaso:
+      required:
+        - estado
+        - motivo
+      type: object
+      properties:
+        estado:
+          type: string
+          description: 'en_produccion, suspendido, borrador (reabrir) o retirado.'
+        motivo:
+          type: string
+          description: 'Por qué, hasta 500 caracteres.'
+      description: Cambiar el estado de un caso.
+    SolicitudEstadoDocumento:
+      required:
+        - revision
+      type: object
+      properties:
+        revision:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La revisión sobre la que se actúa: debe ser la última (409 si no).'
+          format: int32
+      description: Un cambio de estado sobre la última revisión.
+    SolicitudEvaluacion:
+      required:
+        - dimensiones
+        - principios
+        - transferenciaInternacional
+      type: object
+      properties:
+        dimensiones:
+          type: array
+          items:
+            $ref: '#/components/schemas/EscenarioRiesgo'
+          description: Escenarios; las seis dimensiones D1 a D6 deben tener al menos uno.
+        principios:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PrincipiosCircular'
+        transferenciaInternacional:
+          type:
+            - 'null'
+            - string
+      description: 'Crear una evaluación: el servidor calcula los niveles.'
     SolicitudExportacion:
       required:
         - paqueteId
@@ -16339,6 +21375,33 @@ components:
             type: string
           description: 'openapi, postman, html, pdf, word, excel o zip; el ZIP con todo siempre se agrega.'
       description: 'Qué exportar: un paquete (en una revisión) o una versión de un contrato, y en qué formatos.'
+    SolicitudExportacionDocumentos:
+      required:
+        - documentos
+        - nombre
+        - formatos
+      type: object
+      properties:
+        documentos:
+          type:
+            - 'null'
+            - array
+          items:
+            $ref: '#/components/schemas/DocumentoAExportar'
+          description: 'Uno o, como colección, hasta 50 documentos, en el orden en que irán.'
+        nombre:
+          type:
+            - 'null'
+            - string
+          description: 'Nombre de la colección, hasta 200 caracteres; de un solo documento, su título.'
+        formatos:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'html, pdf, word, markdown o zip; el ZIP con todo siempre se agrega.'
+      description: Qué exportar y en qué formatos.
     SolicitudExportacionPortal:
       required:
         - paqueteId
@@ -16487,6 +21550,73 @@ components:
           description: 'Primer día de la ventana; vacío, mañana. Debe ser posterior a hoy.'
           format: date
       description: Ventana de la generación automática de un equipo.
+    SolicitudGuardarCaso:
+      required:
+        - ficha
+        - motivo
+        - versionBase
+      type: object
+      properties:
+        ficha:
+          $ref: '#/components/schemas/FichaCaso'
+        motivo:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        versionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La versión sobre la que se trabajó: 409 si ya hay otra más nueva.'
+          format: int32
+      description: 'Guardar la ficha: crea una versión nueva.'
+    SolicitudGuardarDiagrama:
+      required:
+        - titulo
+        - visibilidad
+        - fuente
+        - nota
+        - versionBase
+      type: object
+      properties:
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        fuente:
+          type: string
+          description: 'Fuente Mermaid, XML BPMN o JSON del lienzo.'
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        versionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La versión sobre la que se trabajó: 409 si ya hay otra más nueva.'
+          format: int32
+      description: Guardar una versión nueva.
+    SolicitudGuardarPolitica:
+      required:
+        - titulo
+        - contenido
+        - fuenteGit
+        - requiereAceptacion
+      type: object
+      properties:
+        titulo:
+          type: string
+        contenido:
+          type: string
+        fuenteGit:
+          type:
+            - 'null'
+            - string
+        requiereAceptacion:
+          type: boolean
+      description: Guardar un borrador.
     SolicitudGuia:
       required:
         - titulo
@@ -16535,6 +21665,54 @@ components:
           description: 'Al editar: la revisión sobre la que se trabajó (409 si ya hay otra más nueva). Al crear se ignora.'
           format: int32
       description: Lo que se guarda en una revisión nueva.
+    SolicitudHerramienta:
+      required:
+        - codigo
+        - nombre
+        - estado
+        - plan
+        - proveedor
+        - nivelDatoMaximo
+        - configuracionRequerida
+        - costoMensualUsd
+        - notas
+      type: object
+      properties:
+        codigo:
+          type:
+            - 'null'
+            - string
+          description: 'Minúsculas, números y guiones. Al editar se ignora.'
+        nombre:
+          type: string
+        estado:
+          type: string
+        plan:
+          type:
+            - 'null'
+            - string
+        proveedor:
+          type:
+            - 'null'
+            - string
+        nivelDatoMaximo:
+          type: string
+        configuracionRequerida:
+          type:
+            - 'null'
+            - string
+        costoMensualUsd:
+          pattern: '^-?(?:0|[1-9]\d*)(?:\.\d+)?$'
+          type:
+            - 'null'
+            - number
+            - string
+          format: double
+        notas:
+          type:
+            - 'null'
+            - string
+      description: Crear o editar una herramienta.
     SolicitudImportacion:
       required:
         - markdown
@@ -16558,6 +21736,61 @@ components:
             - string
           description: 'Estado de traspaso de los secundarios importados: habilitado (por defecto) o en_acompanamiento.'
       description: 'Confirmación de la importación: el mismo Markdown y la huella de su vista previa.'
+    SolicitudIncidente:
+      required:
+        - tipo
+        - severidad
+        - casoUsoId
+        - descripcion
+        - detectadoEn
+        - contenidoEn
+        - cerradoEn
+        - acciones
+        - reportadoSic
+        - responsablePersonaId
+        - lecciones
+      type: object
+      properties:
+        tipo:
+          type: string
+        severidad:
+          type: string
+        casoUsoId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        descripcion:
+          type: string
+        detectadoEn:
+          type: string
+          format: date-time
+        contenidoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        cerradoEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        acciones:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+        reportadoSic:
+          type: boolean
+        responsablePersonaId:
+          type: string
+          format: uuid
+        lecciones:
+          type:
+            - 'null'
+            - string
+      description: Crear o editar un incidente.
     SolicitudIngresoLocal:
       required:
         - correo
@@ -16614,6 +21847,24 @@ components:
             type: string
           description: 'exportar, sandbox.'
       description: Invitación nueva. Un proveedor exige vencimiento y alcance; el vencimiento no supera el máximo configurado.
+    SolicitudLote:
+      required:
+        - documentos
+      type: object
+      properties:
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArchivoLote'
+          description: Hasta 100 archivos; el lote va hasta 8 MB. Un repo con más los manda en varios lotes.
+        rutasVigentes:
+          type:
+            - 'null'
+            - array
+          items:
+            type: string
+          description: 'Opcional, solo en el último lote: todas las rutas que siguen en el repo. Un documento del repo que no esté aquí sale del canal de este ambiente y, sin canales, queda archivado; sus versiones no se borran. No puede ir vacía.'
+      description: Lo que publica un commit.
     SolicitudMapeoGrupo:
       required:
         - grupoId
@@ -16729,6 +21980,35 @@ components:
           type: string
           description: 'PublicKeyCredential.toJSON() de navigator.credentials.create(), como texto JSON.'
       description: Respuesta del autenticador a las opciones de POST /api/v1/identidad/cuenta/passkeys/opciones.
+    SolicitudPolitica:
+      required:
+        - codigo
+        - version
+        - titulo
+        - contenido
+        - fuenteGit
+        - requiereAceptacion
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: 'Código, por ejemplo POL-SGSI-IA-01. No cambia.'
+        version:
+          type: string
+          description: 'Versión, por ejemplo 1.0. No cambia.'
+        titulo:
+          type: string
+        contenido:
+          type: string
+          description: 'Texto en Markdown, hasta 200 mil caracteres.'
+        fuenteGit:
+          type:
+            - 'null'
+            - string
+          description: 'Ruta y commit del texto en git, si lo hay.'
+        requiereAceptacion:
+          type: boolean
+      description: Crear una versión en borrador.
     SolicitudPublicacion:
       required:
         - aplicativo
@@ -16827,6 +22107,53 @@ components:
           description: La última revisión que vio la persona (409 si ya hay otra más nueva).
           format: int32
       description: 'Restaurar una revisión: crea otra igual a ella.'
+    SolicitudRestauracionDocumento:
+      required:
+        - nota
+        - revisionBase
+      type: object
+      properties:
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        revisionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: La última revisión que vio la persona.
+          format: int32
+      description: 'Restaurar una revisión: crea otra igual a ella.'
+    SolicitudRestaurarDiagrama:
+      required:
+        - nota
+        - versionBase
+      type: object
+      properties:
+        nota:
+          type: string
+          description: 'Mensaje del cambio, hasta 500 caracteres.'
+        versionBase:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: 'La última versión que vio la persona: 409 si ya hay otra más nueva.'
+          format: int32
+      description: 'Restaurar una versión: crea otra igual a ella.'
+    SolicitudRolGobierno:
+      required:
+        - personaId
+        - rol
+      type: object
+      properties:
+        personaId:
+          type: string
+          format: uuid
+        rol:
+          type: string
+          description: 'responsable_ia, opd, comite o seguridad.'
+      description: Asignar un rol de gobierno.
     SolicitudSandbox:
       required:
         - paqueteId
@@ -16901,6 +22228,30 @@ components:
           type: string
           description: 'Contenido del documento (Markdown, hasta 100 KB).'
       description: El Markdown del documento de responsables para la vista previa.
+    SolicitudVoto:
+      required:
+        - rol
+        - voto
+        - condiciones
+        - comentario
+      type: object
+      properties:
+        rol:
+          type: string
+          description: 'responsable_ia, opd, comite o seguridad: uno que la persona tenga.'
+        voto:
+          type: string
+          description: aprobar o rechazar.
+        condiciones:
+          type:
+            - 'null'
+            - string
+          description: 'Condiciones de la aprobación, si las hay.'
+        comentario:
+          type:
+            - 'null'
+            - string
+      description: Votar sobre la evaluación.
     SoporteHoyDto:
       required:
         - fecha
@@ -16982,6 +22333,34 @@ components:
           type: string
           description: 'Las tablas con sus títulos, para copiar.'
       description: 'Las tablas del documento reconstruidas desde los datos, en Markdown.'
+    Tablero:
+      required:
+        - casosPorEstado
+        - casosPorRiesgo
+        - revisionesVencidas
+        - kpis
+      type: object
+      properties:
+        casosPorEstado:
+          type: array
+          items:
+            $ref: '#/components/schemas/Conteo'
+        casosPorRiesgo:
+          type: array
+          items:
+            $ref: '#/components/schemas/Conteo'
+          description: 'Nivel de la evaluación aprobada o, si no la hay, el estimado por el plan.'
+        revisionesVencidas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        kpis:
+          type: array
+          items:
+            $ref: '#/components/schemas/Kpi'
+      description: El tablero de gobierno de IA.
     TerminosPendientes:
       required:
         - error
@@ -17000,6 +22379,26 @@ components:
           items:
             $ref: '#/components/schemas/DocumentoVigente'
       description: Antes de entrar hay que aceptar versiones nuevas de los documentos legales.
+    TipoIncidenteCatalogo:
+      required:
+        - codigo
+        - tipo
+        - ejemplo
+        - playbook
+      type: object
+      properties:
+        codigo:
+          type: string
+        tipo:
+          type: string
+        ejemplo:
+          type: string
+        playbook:
+          type: array
+          items:
+            type: string
+          description: 'Pasos del playbook mínimo, si el plan lo trae.'
+      description: Un tipo de incidente del plan 02 §6.6.
     TraspasoDto:
       required:
         - responsabilidadId
@@ -17168,6 +22567,33 @@ components:
             - 'null'
             - string
       description: Servicio y versión del ensamblado desplegado.
+    VersionCasoResumen:
+      required:
+        - numero
+        - motivo
+        - autor
+        - guardadaEn
+        - ficha
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        motivo:
+          type: string
+        autor:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PersonaGia'
+        guardadaEn:
+          type: string
+          format: date-time
+        ficha:
+          $ref: '#/components/schemas/FichaCaso'
+      description: Una versión de la ficha.
     VersionDetalleDto:
       required:
         - resumen
@@ -17193,6 +22619,64 @@ components:
           description: Sus tablas en Markdown.
           $ref: '#/components/schemas/TablasRepartoDto'
       description: Una versión del reparto con su foto completa y sus tablas.
+    VersionDiagramaDetalle:
+      required:
+        - version
+        - fuente
+      type: object
+      properties:
+        version:
+          $ref: '#/components/schemas/VersionDiagramaResumen'
+        fuente:
+          type: string
+          description: 'Fuente Mermaid, XML BPMN ya limpio o JSON del lienzo.'
+      description: Una versión con su fuente.
+    VersionDiagramaResumen:
+      required:
+        - numero
+        - origen
+        - restauradaDe
+        - titulo
+        - visibilidad
+        - nota
+        - autor
+        - guardadaEn
+        - huella
+      type: object
+      properties:
+        numero:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        origen:
+          type: string
+          description: 'creacion, edicion o restauracion.'
+        restauradaDe:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          description: 'Si es una restauración, la versión restaurada.'
+          format: int32
+        titulo:
+          type: string
+        visibilidad:
+          type: string
+          description: 'interno_negocio, interno_ti o restringido.'
+        nota:
+          type: string
+        autor:
+          $ref: '#/components/schemas/PersonaDiagrama'
+        guardadaEn:
+          type: string
+          format: date-time
+        huella:
+          type: string
+          description: 'SHA-256 de título, visibilidad y fuente.'
+      description: 'Una versión inmutable, sin la fuente.'
     VersionElegible:
       required:
         - id
@@ -17634,6 +23118,36 @@ components:
             - description: Última corrida (en cualquier réplica); vacía si nunca corrió.
               $ref: '#/components/schemas/EstadoSincronizacion'
       description: Estado de la sincronización diaria de personas con Graph.
+    VotoResumen:
+      required:
+        - persona
+        - rol
+        - voto
+        - condiciones
+        - comentario
+        - votadoEn
+      type: object
+      properties:
+        persona:
+          $ref: '#/components/schemas/PersonaGia'
+        rol:
+          type: string
+          description: 'responsable_ia, opd, comite o seguridad.'
+        voto:
+          type: string
+          description: aprobar o rechazar.
+        condiciones:
+          type:
+            - 'null'
+            - string
+        comentario:
+          type:
+            - 'null'
+            - string
+        votadoEn:
+          type: string
+          format: date-time
+      description: Un voto.
     Yo:
       required:
         - sub
@@ -17818,8 +23332,14 @@ tags:
     description: 'Catálogo de aplicativos de FLIT: productos, módulos y servicios con su repo, tecnología, ambientes, criticidad, datos personales, estado y etiquetas, y la ficha de cada uno.'
   - name: Contratos
     description: 'Contratos de integración (OpenAPI, AsyncAPI y proto) publicados desde la CI de cada repo con el token OIDC de GitHub Actions y la lista blanca del catálogo: versiones semánticas inmutables con su hash y su procedencia, el spec de cada versión y el índice de operaciones, webhooks, canales y rpc.'
+  - name: Diagramas
+    description: 'Diagramas hechos a mano en Atlas: lienzo con modelo propio, Mermaid y BPMN, con versiones inmutables, comentarios, referencias al catálogo y su nivel de visibilidad aplicado en cada consulta.'
+  - name: Documentación
+    description: 'Documentación técnica y funcional viva: lo que llega de los repos por la CI como versiones inmutables y lo que se escribe en Atlas con revisiones y aprobación del responsable, con su nivel de visibilidad aplicado en cada consulta.'
   - name: Equipo
     description: 'Responsables principal y secundario de cada producto y módulo: reparto importado del documento, vistas por persona y por aplicativo, mapa de carga, historial versionado, traspasos, revisión trimestral, CODEOWNERS y «¿A quién llamo?».'
+  - name: Gobierno de IA
+    description: 'Inventario de casos de uso de IA, evaluación de riesgo y de impacto en privacidad con aprobación según el nivel, políticas versionadas con registro de aceptación, herramientas del equipo e incidentes.'
   - name: Hola
     description: 'Módulo de ejemplo de docs/como-crear-un-modulo.md: saludos por organización con permisos, predicado obligatorio y RLS. Apagado por defecto (bandera modulo.hola).'
   - name: Soporte

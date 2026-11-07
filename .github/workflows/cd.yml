@@ -61,6 +61,12 @@ jobs:
             contexto: .
             dockerfile: services/docs/Dockerfile
             target: docs
+          # HU 3.5 y 6.8 (ATLAS-ADR-0054 §7): diff de contratos y exporte de lienzos. Se publica aunque el ambiente aún no la
+          # despliegue: el paso de digests solo la fija si kustomization.yaml la declara.
+          - nombre: atlas-render
+            contexto: services/render
+            dockerfile: services/render/Dockerfile
+            target: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -132,6 +138,15 @@ jobs:
               '(.images[] | select(.name == strenv(img))) |= (.digest = strenv(d) | del(.newTag))' "$k"
             grep -q "$digest" "$k" || { echo "::error::${CARPETA}/kustomization.yaml no declara la imagen ${REGISTRO}/${nombre}"; exit 1; }
           done
+          # atlas-render es opcional mientras un ambiente no la dé de alta: sin su entrada, no se toca nada.
+          d="$(cat digests/atlas-render)"
+          [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Digest inválido de atlas-render: «$d»"; exit 1; }
+          export img="${REGISTRO}/atlas-render" d
+          if [ -n "$(yq '.images[] | select(.name == strenv(img)) | .name' "$k")" ]; then
+            yq -i '(.images[] | select(.name == strenv(img))) |= (.digest = strenv(d) | del(.newTag))' "$k"
+          else
+            echo "::notice::${CARPETA}/kustomization.yaml no declara atlas-render: no se fija su digest."
+          fi
           cd gitops
           if git diff --quiet; then echo "Sin cambios de digest."; exit 0; fi
           git config user.name "flit-atlas-ci"

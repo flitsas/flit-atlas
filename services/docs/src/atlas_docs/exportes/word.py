@@ -237,11 +237,16 @@ def generar(documento: Documento) -> bytes:
     marca = doc.add_paragraph().add_run("FLIT · ATLAS")
     marca.bold, marca.font.color.rgb = True, AZUL
     doc.add_heading(_limpio(documento.paquete), level=0)
-    doc.add_paragraph(f"Paquete de contratos de integración · revisión {documento.revision}")
+    doc.add_paragraph(documento.subtitulo)
+    contenido = (
+        ("Documentos", str(len(documento.guias)))
+        if documento.es_documentacion
+        else ("Contratos", "; ".join(f"{c.titulo} {c.version} ({c.tipo})" for c in documento.contratos))
+    )
     for etiqueta, valor in (
         ("Organización", documento.organizacion),
         ("Fecha", f"{documento.fecha} (hora de Bogotá)"),
-        ("Contratos", "; ".join(f"{c.titulo} {c.version} ({c.tipo})" for c in documento.contratos)),
+        contenido,
         ("SHA-256", documento.hash),
     ):
         p = doc.add_paragraph()
@@ -252,9 +257,10 @@ def generar(documento: Documento) -> bytes:
 
     # Índice
     doc.add_heading("Índice", level=1)
-    doc.add_paragraph("Cambios del paquete", style="List Number")
+    if not documento.es_documentacion:
+        doc.add_paragraph("Cambios del paquete", style="List Number")
     if documento.guias:
-        doc.add_paragraph("Guías", style="List Number")
+        doc.add_paragraph(documento.titulo_guias, style="List Number")
         for g in documento.guias:
             doc.add_paragraph(_limpio(g.titulo), style="List Bullet 2")
     for c in documento.contratos:
@@ -264,16 +270,19 @@ def generar(documento: Documento) -> bytes:
     doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
 
     # Cambios
-    doc.add_heading("Cambios del paquete", level=1)
-    if documento.changelog:
-        _tabla(doc, ["Revisión", "Fecha", "Cambio"], [[e.revision, e.fecha, e.cambio] for e in documento.changelog])
-    else:
-        doc.add_paragraph("Primera revisión del paquete.")
+    if not documento.es_documentacion:
+        doc.add_heading("Cambios del paquete", level=1)
+        if documento.changelog:
+            _tabla(doc, ["Revisión", "Fecha", "Cambio"], [[e.revision, e.fecha, e.cambio] for e in documento.changelog])
+        else:
+            doc.add_paragraph("Primera revisión del paquete.")
 
     if documento.guias:
-        doc.add_heading("Guías", level=1)
+        doc.add_heading(documento.titulo_guias, level=1)
         for g in documento.guias:
             doc.add_heading(_limpio(g.titulo), level=2)
+            if g.detalle:
+                doc.add_paragraph(_limpio(g.detalle)).runs[0].italic = True
             _markdown(doc, g.markdown)
 
     for c in documento.contratos:

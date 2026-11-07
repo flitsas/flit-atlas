@@ -190,6 +190,7 @@ public class AutorizacionTests(EntornoApi entorno)
         Assert.Contains(endpoints, e => e.Permisos.Contains(PermisosPlataforma.RolesGestionar));
         Assert.Contains(endpoints, e => e.Permisos.Contains(Identidad.Autorizacion.PermisosIdentidad.Administrar));
         Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "POST /api/v1/contratos/publicaciones");
+        Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "POST /api/v1/documentacion/publicaciones");
         // HU 3.3 y 3.4: la base de pdn para la CI y los canales que mueve el CD, también solo con el token de GitHub Actions.
         Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "GET /api/v1/contratos/publicaciones/base");
         Assert.Contains(endpoints, e => e.PublicacionCi && e.Clave == "PUT /api/v1/contratos/canales/{ambiente}");
@@ -208,6 +209,7 @@ public class AutorizacionTests(EntornoApi entorno)
         {
             [$"{OpcionesLimiteTasa.Seccion}:PorUsuario"] = "1000",
             [$"{OpcionesLimiteTasa.Seccion}:PorIp"] = "1000",
+            [$"{OpcionesLimiteTasa.Seccion}:PorExterno"] = "1000",
         });
         var catalogo = api.Services.GetRequiredService<CatalogoPermisos>();
         var definicion = catalogo.Rol(rol)!;

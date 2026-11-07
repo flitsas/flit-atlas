@@ -1,0 +1,230 @@
+name: atlas-publicar-docs
+
+# HU 5.2 · ATLAS-ADR-0053 §4, ATLAS-ADR-0009 y ATLAS-ADR-0035: workflow reutilizable con el que cada repo de FLIT valida y
+# publica su documentación en Flit Atlas. Pasos:
+#   1. Recorre las carpetas indicadas (solo .md y .mdx; las carpetas o archivos que empiezan por «_» son plantillas).
+#   2. gitleaks sobre esas carpetas: nada con forma de secreto sale del repo.
+#   3. Valida el front-matter obligatorio y las reglas de MDX de ATLAS-ADR-0053 §5. Es una primera pasada para que el PR
+#      falle pronto: el servidor valida todo otra vez y nunca confía en esto.
+#   4. En push o workflow_dispatch: POST /api/v1/documentacion/publicaciones con el token OIDC (audiencia = la URL de Atlas),
+#      en lotes de hasta 100 archivos y 4 MB. El último lote lleva las rutas vigentes si «retirar_ausentes» es true.
+#
+# Uso desde otro repo (el job que llama debe conceder id-token: write):
+#   jobs:
+#     documentacion:
+#       permissions: { contents: read, id-token: write }
+#       uses: flitsas/flit-atlas/.github/workflows/atlas-publicar-docs.yml@v1
+#       with:
+#         atlas_url: ${{ vars.ATLAS_URL }}
+# El repo debe estar en la lista blanca del catálogo con el tipo docs, para cada aplicativo que digan sus front-matter.
+
+on:
+  workflow_call:
+    inputs:
+      carpetas:
+        description: Carpetas del repo que se publican, separadas por espacios. Las que no existan se saltan.
+        type: string
+        required: false
+        default: docs/funcional docs/integraciones
+      atlas_url:
+        description: URL pública de Atlas donde se publica (sin /api), p. ej. https://atlas.flitsas.com. Vacía, solo valida.
+        type: string
+        required: false
+        default: ""
+      retirar_ausentes:
+        description: >-
+          Si true, lo que ya no está en el repo sale del canal de este ambiente en Atlas; sin canales, queda archivado. Solo se
+          hace si el recorrido encontró al menos un archivo. Sus versiones no se borran.
+        type: boolean
+        required: false
+        default: false
+      publicar:
+        description: false para solo validar. Aunque sea true, solo publica en push o workflow_dispatch.
+        type: boolean
+        required: false
+        default: true
+      runner:
+        description: Runner del job.
+        type: string
+        required: false
+        default: ubuntu-latest
+
+permissions:
+  contents: read
+
+jobs:
+  publicar:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # La misma versión y suma que el job «gitleaks» de ci.yml.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      CARPETAS: ${{ inputs.carpetas }}
+      ATLAS_URL: ${{ inputs.atlas_url }}
+      RETIRAR_AUSENTES: ${{ inputs.retirar_ausentes }}
+      PUEDE_PUBLICAR: ${{ inputs.publicar && inputs.atlas_url != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Revisar las entradas
+        run: |
+          set -euo pipefail
+          if [ -n "$ATLAS_URL" ] && [[ ! "$ATLAS_URL" =~ ^https://[^/]+$ ]]; then
+            echo "::error::atlas_url debe ser https://<host>, sin ruta ni barra final"
+            exit 1
+          fi
+          for carpeta in $CARPETAS; do
+            case "$carpeta" in
+              /*|*..*) echo "::error::La carpeta «$carpeta» debe ser relativa y sin «..»"; exit 1 ;;
+            esac
+          done
+
+      - name: Validar los documentos y armar los lotes
+        run: |
+          # >>> validar (scripts/atlas-publicar/probar-docs.sh corre este bloque tal cual sobre fixtures ficticias)
+          set -euo pipefail
+          temporal="${RUNNER_TEMP:?}/atlas-docs"
+          mkdir -p "$temporal"
+          cat > "$temporal/validar.js" <<'VALIDAR'
+          // node validar.js <salida.json> <carpeta>...: valida los archivos y deja { rutas: [...] } con los que se publican.
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const [salida, ...carpetas] = process.argv.slice(2);
+          const OBLIGATORIOS = ['aplicativo', 'tipo', 'titulo', 'visibilidad', 'audiencias', 'responsable'];
+          const COMPONENTES = new Set(['Contrato', 'Diagrama', 'Responsables', 'SoporteDeTurno', 'Alerta', 'Pestanas']);
+          const recorrer = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+            if (e.name.startsWith('_') || e.isSymbolicLink()) return [];
+            const ruta = path.posix.join(dir, e.name);
+            if (e.isDirectory()) return recorrer(ruta);
+            return /\.mdx?$/i.test(e.name) ? [ruta] : [];
+          });
+          const validar = (texto) => {
+            const errores = [];
+            const lineas = texto.replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n');
+            if (lineas[0].trimEnd() !== '---') return ['El archivo debe empezar con el front-matter («---»).'];
+            const fin = lineas.findIndex((l, i) => i > 0 && l.trimEnd() === '---');
+            if (fin < 0) return ['El front-matter no se cierra («---»).'];
+            const claves = lineas.slice(1, fin).map((l) => /^([A-Za-z_][\w-]*):/.exec(l)?.[1]).filter(Boolean);
+            for (const o of OBLIGATORIOS) if (!claves.includes(o)) errores.push(`Front-matter: falta «${o}».`);
+            let cerca = null;
+            lineas.slice(fin + 1).forEach((linea, i) => {
+              const n = fin + i + 2;
+              const marca = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(linea);
+              if (cerca) {
+                if (marca && marca[1][0] === cerca[0] && marca[1].length >= cerca.length && !marca[2].trim()) cerca = null;
+                return;
+              }
+              if (marca) { cerca = marca[1]; return; }
+              if (/^(import|export)\b/.test(linea)) errores.push(`Línea ${n}: «import» y «export» no se admiten.`);
+              const sinCodigo = linea.replace(/\\./g, '').replace(/(`+)[^`]*?\1/g, '');
+              if (/[{}]/.test(sinCodigo)) errores.push(`Línea ${n}: las expresiones entre llaves no se admiten.`);
+              for (const m of sinCodigo.matchAll(/<\/?([^\s/>]*)/g)) {
+                if (!COMPONENTES.has(m[1])) errores.push(`Línea ${n}: «<${m[1]}» no está en la lista blanca; escríbelo como \\< o en código.`);
+              }
+              for (const m of sinCodigo.matchAll(/\]\(\s*<?([a-zA-Z][a-zA-Z0-9+.-]*):/g)) {
+                if (!['https', 'mailto'].includes(m[1].toLowerCase())) errores.push(`Línea ${n}: el enlace solo admite https, mailto o una ruta interna.`);
+              }
+            });
+            return errores;
+          };
+          const rutas = carpetas.filter((c) => fs.existsSync(c) && fs.statSync(c).isDirectory()).flatMap((c) => recorrer(c.replace(/\/+$/, ''))).sort();
+          let fallos = 0;
+          for (const ruta of rutas) {
+            for (const error of validar(fs.readFileSync(ruta, 'utf8'))) {
+              console.log(`::error file=${ruta}::${error}`);
+              fallos += 1;
+            }
+          }
+          fs.writeFileSync(salida, JSON.stringify({ rutas }));
+          console.log(`${rutas.length} archivos revisados, ${fallos} problemas.`);
+          process.exit(fallos > 0 ? 1 : 0);
+          VALIDAR
+          # shellcheck disable=SC2086 # CARPETAS es una lista separada por espacios
+          node "$temporal/validar.js" "$temporal/rutas.json" $CARPETAS
+          # <<< validar
+
+      - name: Instalar gitleaks (binario fijado y verificado)
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/atlas-bin"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 --retry-all-errors -o "$dir/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $dir/gitleaks.tgz" | sha256sum -c -
+          tar -xzf "$dir/gitleaks.tgz" -C "$dir" gitleaks
+          rm "$dir/gitleaks.tgz"
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Buscar secretos en lo que se publica
+        run: |
+          set -euo pipefail
+          for carpeta in $CARPETAS; do
+            [ -d "$carpeta" ] || continue
+            gitleaks dir "$carpeta" --redact --no-banner --exit-code 1
+          done
+
+      - name: Publicar en Atlas
+        if: env.PUEDE_PUBLICAR == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const { ATLAS_URL, RETIRAR_AUSENTES, RUNNER_TEMP } = process.env;
+            const { rutas } = JSON.parse(fs.readFileSync(path.join(RUNNER_TEMP, 'atlas-docs', 'rutas.json'), 'utf8'));
+            if (rutas.length === 0) {
+              core.notice('No hay documentos que publicar.');
+              return;
+            }
+            const MAX_ARCHIVOS = 100;
+            const MAX_BYTES = 4 * 1024 * 1024;
+            const lotes = [[]];
+            let bytes = 0;
+            for (const ruta of rutas) {
+              const contenido = fs.readFileSync(ruta, 'utf8');
+              const tamano = Buffer.byteLength(contenido);
+              if (lotes.at(-1).length >= MAX_ARCHIVOS || (lotes.at(-1).length > 0 && bytes + tamano > MAX_BYTES)) {
+                lotes.push([]);
+                bytes = 0;
+              }
+              lotes.at(-1).push({ ruta, contenido });
+              bytes += tamano;
+            }
+            const motivos = {
+              401: 'token rechazado (audiencia distinta de la URL de Atlas, vencido o sin id-token: write)',
+              403: 'fuera de la lista blanca (repo, rama o workflow, con el tipo docs) o workflow reutilizable no oficial',
+              422: 'la rama no despliega ningún ambiente',
+            };
+            let rechazados = 0;
+            for (const [i, documentos] of lotes.entries()) {
+              const ultimo = i === lotes.length - 1;
+              // Un token por llamada: vive minutos, nunca sale de este paso y su audiencia es la URL a la que va (F4-SEC-27).
+              const token = await core.getIDToken(ATLAS_URL);
+              const respuesta = await fetch(`${ATLAS_URL}/api/v1/documentacion/publicaciones`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ documentos, rutasVigentes: ultimo && RETIRAR_AUSENTES === 'true' ? rutas : null }),
+              });
+              const texto = await respuesta.text();
+              if (respuesta.status !== 200) {
+                core.setFailed(`Lote ${i + 1} de ${lotes.length}: ${respuesta.status} ${motivos[respuesta.status] ?? ''}\n${texto.slice(0, 4000)}`);
+                return;
+              }
+              const { ambiente, resultados, retiradas } = JSON.parse(texto);
+              for (const r of resultados) {
+                if (r.resultado === 'rechazada') {
+                  rechazados += 1;
+                  core.error(`${r.codigo}: ${(r.errores ?? []).join(' ')}`, { file: r.ruta });
+                }
+              }
+              const contar = (nombre) => resultados.filter((r) => r.resultado === nombre).length;
+              core.notice(`Canal ${ambiente}, lote ${i + 1} de ${lotes.length}: ${contar('creada')} versiones nuevas, ${contar('igual')} sin cambios, ${contar('rechazada')} rechazados, ${retiradas.length} retirados.`);
+            }
+            if (rechazados > 0) {
+              core.setFailed(`Atlas rechazó ${rechazados} documentos.`);
+            }

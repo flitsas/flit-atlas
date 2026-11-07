@@ -55,6 +55,10 @@ channels:
         $ref: '#/components/messages/contratosExportacionSolicitadaV1'
       contratosVersionDeprecadaV1:
         $ref: '#/components/messages/contratosVersionDeprecadaV1'
+      documentacionVersionPublicadaV1:
+        $ref: '#/components/messages/documentacionVersionPublicadaV1'
+      documentacionExportacionSolicitadaV1:
+        $ref: '#/components/messages/documentacionExportacionSolicitadaV1'
     bindings:
       amqp:
         is: routingKey
@@ -70,7 +74,8 @@ channels:
     description: |
       Exchange topic y durable del productor `atlas-docs` (ATLAS-ADR-0042): los resultados de las exportaciones. atlas-api
       lo lee con la cola `atlas.api.exportaciones` (llaves `atlas.contratos.exportacion_iniciada`, `_lista` y `_fallida`),
-      con `atlas.api.exportaciones.reintentos` (30 s) y `atlas.api.exportaciones.errores` tras 5 intentos.
+      con `atlas.api.exportaciones.reintentos` (30 s) y `atlas.api.exportaciones.errores` tras 5 intentos. La misma cola
+      recibe los de los documentos (`atlas.documentacion.exportacion_*`, ATLAS-ADR-0053 §7).
     servers:
       - $ref: '#/servers/rabbitmq'
     messages:
@@ -80,6 +85,12 @@ channels:
         $ref: '#/components/messages/contratosExportacionListaV1'
       contratosExportacionFallidaV1:
         $ref: '#/components/messages/contratosExportacionFallidaV1'
+      documentacionExportacionIniciadaV1:
+        $ref: '#/components/messages/documentacionExportacionIniciadaV1'
+      documentacionExportacionListaV1:
+        $ref: '#/components/messages/documentacionExportacionListaV1'
+      documentacionExportacionFallidaV1:
+        $ref: '#/components/messages/documentacionExportacionFallidaV1'
     bindings:
       amqp:
         is: routingKey
@@ -106,6 +117,8 @@ operations:
       - $ref: '#/components/messages/contratosCanalActualizadoV1'
       - $ref: '#/components/messages/contratosExportacionSolicitadaV1'
       - $ref: '#/components/messages/contratosVersionDeprecadaV1'
+      - $ref: '#/components/messages/documentacionVersionPublicadaV1'
+      - $ref: '#/components/messages/documentacionExportacionSolicitadaV1'
     bindings:
       amqp:
         deliveryMode: 2
@@ -127,6 +140,9 @@ operations:
       - $ref: '#/components/messages/contratosExportacionIniciadaV1'
       - $ref: '#/components/messages/contratosExportacionListaV1'
       - $ref: '#/components/messages/contratosExportacionFallidaV1'
+      - $ref: '#/components/messages/documentacionExportacionIniciadaV1'
+      - $ref: '#/components/messages/documentacionExportacionListaV1'
+      - $ref: '#/components/messages/documentacionExportacionFallidaV1'
     bindings:
       amqp:
         ack: true
@@ -219,6 +235,55 @@ components:
               commit: 0123456789abcdef0123456789abcdef01234567
               tieneBreaking: false
               operaciones: 3
+
+    documentacionVersionPublicadaV1:
+      name: atlas.documentacion.version_publicada
+      x-atlas-tipo: atlas.documentacion.version_publicada
+      x-atlas-version: 1
+      title: Versión de documento publicada
+      summary: Hay una versión nueva de un documento, desde la CI de un repo o aprobada en Atlas (HU 5.1 y 5.2, ATLAS-ADR-0053).
+      description: |
+        Se emite una vez por versión nueva, en la misma transacción que la guarda; si el contenido ya existía, el canal se
+        mueve sin repetirlo. Lo consumirá el asistente (reindexar, F7). No trae el título ni el cuerpo: se leen de Atlas.
+        Es interno: `tenantId` va en ceros.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.documentacion.version_publicada
+              version:
+                const: 1
+              data:
+                $ref: '#/components/schemas/DocumentacionVersionPublicadaV1'
+      examples:
+        - name: desdeUnRepo
+          summary: Versión de un documento ficticio publicada desde develop.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e01
+            type: atlas.documentacion.version_publicada
+            version: 1
+            occurredAt: '2026-11-06T15:30:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4737
+            data:
+              documentoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e02
+              versionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e03
+              numero: 2
+              aplicativoId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1e04
+              aplicativo: api-demo
+              origen: repo
+              tipo: guia_funcional
+              visibilidad: interno_negocio
+              esBorrador: false
+              sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+              ambiente: dev
+              repositorio: flitsas-demo/api-demo
+              rama: develop
+              commit: 0123456789abcdef0123456789abcdef01234567
 
     contratosCanalActualizadoV1:
       name: atlas.contratos.canal_actualizado
@@ -484,6 +549,174 @@ components:
               retiroAnterior: null
               reemplazo: 2.0.0
 
+    documentacionExportacionSolicitadaV1:
+      name: atlas.documentacion.exportacion_solicitada
+      x-atlas-tipo: atlas.documentacion.exportacion_solicitada
+      x-atlas-version: 1
+      title: Exportación solicitada
+      summary: Alguien pidió exportar un documento o una colección (HU 5.6, ATLAS-ADR-0053).
+      description: |
+        Se emite en la misma transacción que guarda la exportación pendiente, después de dejar la entrada (con la
+        visibilidad aplicada y el MDX ya convertido) en el S3. Lo consume atlas-docs con la cola `atlas.docs.exportaciones`,
+        la misma de los contratos. No lleva contenido de los documentos.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.documentacion.exportacion_solicitada
+              version:
+                const: 1
+              producer:
+                const: atlas
+              data:
+                $ref: '#/components/schemas/DocumentacionExportacionSolicitadaV1'
+      examples:
+        - name: documentoInterno
+          summary: Exportación de un documento ficticio.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d51
+            type: atlas.documentacion.exportacion_solicitada
+            version: 1
+            occurredAt: '2026-10-24T15:30:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              exportacionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50
+              formatos: [html, pdf, word, markdown, zip]
+              entradaClave: exportaciones/0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50/entrada.json
+
+    documentacionExportacionIniciadaV1:
+      name: atlas.documentacion.exportacion_iniciada
+      x-atlas-tipo: atlas.documentacion.exportacion_iniciada
+      x-atlas-version: 1
+      title: Exportación iniciada
+      summary: atlas-docs tomó la exportación y empezó a generarla.
+      description: |
+        Lo publica atlas-docs en `flit.atlas.docs` al tomar una solicitud válida; atlas-api pasa la exportación de
+        `pendiente` a `procesando`. `tenantId` y `correlationId` son los de la solicitud.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.documentacion.exportacion_iniciada
+              version:
+                const: 1
+              producer:
+                const: atlas-docs
+              data:
+                $ref: '#/components/schemas/DocumentacionExportacionIniciadaV1'
+      examples:
+        - name: iniciada
+          summary: atlas-docs toma una exportación ficticia.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d53
+            type: atlas.documentacion.exportacion_iniciada
+            version: 1
+            occurredAt: '2026-10-24T15:30:01+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas-docs
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              exportacionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50
+
+    documentacionExportacionListaV1:
+      name: atlas.documentacion.exportacion_lista
+      x-atlas-tipo: atlas.documentacion.exportacion_lista
+      x-atlas-version: 1
+      title: Exportación lista
+      summary: Los archivos de la exportación quedaron en el S3.
+      description: |
+        Lo publica atlas-docs en `flit.atlas.docs` cuando subió todos los archivos bajo `exportaciones/<exportacionId>/`.
+        atlas-api la marca `lista`, guarda las claves (solo las de ese prefijo; un resultado sin ZIP o con claves ajenas
+        queda `fallida`), fija la retención y avisa a quien la pidió. La URL de descarga se firma después, al pedirla.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.documentacion.exportacion_lista
+              version:
+                const: 1
+              producer:
+                const: atlas-docs
+              data:
+                $ref: '#/components/schemas/DocumentacionExportacionListaV1'
+      examples:
+        - name: lista
+          summary: Exportación ficticia con el PDF y el ZIP.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d54
+            type: atlas.documentacion.exportacion_lista
+            version: 1
+            occurredAt: '2026-10-24T15:31:00+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas-docs
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              exportacionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50
+              hashContenido: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+              archivos:
+                - clave: exportaciones/0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50/integracion-demo-r3/integracion-demo-r3.pdf
+                  ruta: integracion-demo-r3/integracion-demo-r3.pdf
+                  formato: pdf
+                  bytes: 182340
+                  sha256: 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae
+                  tipo: application/pdf
+                - clave: exportaciones/0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50/integracion-demo-r3.zip
+                  ruta: integracion-demo-r3.zip
+                  formato: zip
+                  bytes: 240112
+                  sha256: fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9
+                  tipo: application/zip
+
+    documentacionExportacionFallidaV1:
+      name: atlas.documentacion.exportacion_fallida
+      x-atlas-tipo: atlas.documentacion.exportacion_fallida
+      x-atlas-version: 1
+      title: Exportación fallida
+      summary: atlas-docs no pudo generar la exportación.
+      description: |
+        Lo publica atlas-docs en `flit.atlas.docs` cuando la entrada no sirve o la generación falla de forma definitiva
+        (los fallos de infraestructura se reintentan en la cola). atlas-api la marca `fallida`, lo audita y avisa. El
+        mensaje es corto y nunca trae contenido de los documentos.
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/SobreEvento'
+          - type: object
+            properties:
+              type:
+                const: atlas.documentacion.exportacion_fallida
+              version:
+                const: 1
+              producer:
+                const: atlas-docs
+              data:
+                $ref: '#/components/schemas/DocumentacionExportacionFallidaV1'
+      examples:
+        - name: entradaInvalida
+          summary: Una entrada que atlas-docs no reconoce.
+          payload:
+            eventId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d55
+            type: atlas.documentacion.exportacion_fallida
+            version: 1
+            occurredAt: '2026-10-24T15:30:02+00:00'
+            tenantId: 00000000-0000-0000-0000-000000000000
+            producer: atlas-docs
+            correlationId: 4bf92f3577b34da6a3ce929d0e0e4736
+            data:
+              exportacionId: 0199f0a0-7c3e-7b1a-9d4e-2f6a8b0c1d50
+              codigo: entrada_invalida
+              mensaje: 'La entrada de la exportación no es válida: documentos'
   schemas:
     SobreEvento:
       type: object
@@ -533,6 +766,81 @@ components:
           type: object
           description: Contenido del evento; su esquema depende de `type` y `version`.
 
+    DocumentacionVersionPublicadaV1:
+      type: object
+      description: '`data` de atlas.documentacion.version_publicada v1: qué versión es, de dónde salió y con qué hash.'
+      additionalProperties: false
+      required:
+        - documentoId
+        - versionId
+        - numero
+        - aplicativoId
+        - aplicativo
+        - origen
+        - tipo
+        - visibilidad
+        - esBorrador
+        - sha256
+        - ambiente
+        - repositorio
+        - rama
+        - commit
+      properties:
+        documentoId:
+          type: string
+          format: uuid
+          description: Id del documento en Atlas.
+        versionId:
+          type: string
+          format: uuid
+          description: Id de la versión publicada.
+        numero:
+          type: integer
+          description: Número correlativo de la versión dentro del documento.
+        aplicativoId:
+          type: string
+          format: uuid
+          description: Id del aplicativo del catálogo.
+        aplicativo:
+          type: string
+          description: Slug del aplicativo del catálogo.
+        origen:
+          type: string
+          enum: [repo, atlas]
+          description: Si llegó por la CI o se aprobó en Atlas.
+        tipo:
+          type: string
+          description: manual_usuario, guia_funcional, guia_integracion, runbook, ficha_comercial, adr o nota_version.
+        visibilidad:
+          type: string
+          enum: [publico_clientes, interno_negocio, interno_ti, restringido]
+          description: Nivel de visibilidad de esta versión.
+        esBorrador:
+          type: boolean
+          description: De repo y sin aprobar; solo la ven los roles técnicos y los responsables.
+        sha256:
+          type: string
+          description: SHA-256 del archivo (repo) o de la foto de la revisión (Atlas).
+        ambiente:
+          type:
+            - string
+            - 'null'
+          description: Canal en el que quedó (dev, qa o pdn).
+        repositorio:
+          type:
+            - string
+            - 'null'
+          description: Repo que la publicó; vacío si se aprobó en Atlas.
+        rama:
+          type:
+            - string
+            - 'null'
+          description: Rama que la publicó; vacío si se aprobó en Atlas.
+        commit:
+          type:
+            - string
+            - 'null'
+          description: Commit que la publicó; vacío si se aprobó en Atlas.
     ContratosVersionPublicadaV1:
       type: object
       description: '`data` de atlas.contratos.version_publicada v1: qué se publicó, desde dónde y con qué hash.'
@@ -837,7 +1145,8 @@ components:
           description: La versión estable vigente más alta posterior, si la hay.
 
 # Eventos publicados: atlas.contratos.version_publicada (HU 3.2), atlas.contratos.canal_actualizado (HU 3.4),
-# atlas.contratos.exportacion_solicitada (HU 4.5) y atlas.contratos.version_deprecada (HU 4.8); recibidos de atlas-docs: atlas.contratos.exportacion_iniciada, _lista y
+# atlas.contratos.exportacion_solicitada (HU 4.5), atlas.contratos.version_deprecada (HU 4.8) y
+# atlas.documentacion.version_publicada (HU 5.1 y 5.2); recibidos de atlas-docs: atlas.contratos.exportacion_iniciada, _lista y
 # _fallida (HU 4.5). Cada evento nuevo se agrega en el mismo PR que su
 # TipoEvento, así:
 #
@@ -858,3 +1167,107 @@ components:
 #
 # y se referencia (con $ref a '#/components/messages/organizacionCreadaV1') desde channels.flitAtlas.messages y
 # operations.publicarEvento.messages.
+    DocumentacionExportacionSolicitadaV1:
+      type: object
+      description: '`data` de atlas.documentacion.exportacion_solicitada v1: qué exportar y dónde está la entrada.'
+      additionalProperties: false
+      required:
+        - exportacionId
+        - formatos
+        - entradaClave
+      properties:
+        exportacionId:
+          type: string
+          format: uuid
+          description: Id de la exportación en Atlas (uuid v7); prefijo de todo lo que se sube al S3.
+        formatos:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Formatos a generar; siempre incluye zip.
+          items:
+            type: string
+            enum: [html, pdf, word, markdown, zip]
+        entradaClave:
+          type: string
+          pattern: '^exportaciones/[0-9a-f-]{36}/entrada\.json$'
+          description: Clave del paquete a exportar en el S3; atlas-docs solo acepta exportaciones/<exportacionId>/entrada.json.
+    DocumentacionExportacionIniciadaV1:
+      type: object
+      description: '`data` de atlas.documentacion.exportacion_iniciada v1.'
+      additionalProperties: false
+      required:
+        - exportacionId
+      properties:
+        exportacionId:
+          type: string
+          format: uuid
+          description: Id de la exportación que atlas-docs empezó a generar.
+    DocumentacionExportacionListaV1:
+      type: object
+      description: '`data` de atlas.documentacion.exportacion_lista v1: hash del contenido y archivos subidos.'
+      additionalProperties: false
+      required:
+        - exportacionId
+        - hashContenido
+        - archivos
+      properties:
+        exportacionId:
+          type: string
+          format: uuid
+          description: Id de la exportación.
+        hashContenido:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 del contenido exportado en JSON canónico (ATLAS-ADR-0042); va en la portada de cada formato.
+        archivos:
+          type: array
+          minItems: 1
+          description: Cada archivo subido al S3, incluido el ZIP con todo.
+          items:
+            type: object
+            additionalProperties: false
+            required: [clave, ruta, formato, bytes, sha256, tipo]
+            properties:
+              clave:
+                type: string
+                description: Clave en el S3, bajo exportaciones/<exportacionId>/.
+              ruta:
+                type: string
+                description: Ruta dentro de la exportación (la del ZIP).
+              formato:
+                type: string
+                enum: [html, pdf, word, markdown, zip]
+                description: Formato del archivo.
+              bytes:
+                type: integer
+                minimum: 0
+                description: Tamaño en bytes.
+              sha256:
+                type: string
+                pattern: '^[0-9a-f]{64}$'
+                description: SHA-256 del archivo (también en los metadatos del objeto).
+              tipo:
+                type: string
+                description: Tipo MIME.
+    DocumentacionExportacionFallidaV1:
+      type: object
+      description: '`data` de atlas.documentacion.exportacion_fallida v1: por qué no se generó.'
+      additionalProperties: false
+      required:
+        - exportacionId
+        - codigo
+        - mensaje
+      properties:
+        exportacionId:
+          type: string
+          format: uuid
+          description: Id de la exportación.
+        codigo:
+          type: string
+          enum: [entrada_invalida, pdf_no_disponible, interno]
+          description: Motivo estable.
+        mensaje:
+          type: string
+          maxLength: 500
+          description: Frase corta en español, sin contenido del spec.

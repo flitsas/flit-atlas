@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es-CO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Visor BPMN · Flit Atlas</title>
+    <style>
+      html,
+      body,
+      #diagrama {
+        height: 100%;
+        margin: 0;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Procesos BPMN (ATLAS-ADR-0054 §5): solo dentro del iframe aislado. La marca de bpmn.io es la de bpmn-js, sin ocultar. -->
+    <div id="diagrama"></div>
+    <script type="module" src="/src/app/diagramas/entradaBpmn.ts"></script>
+  </body>
+</html>

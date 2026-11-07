@@ -2,8 +2,10 @@ import { moduloAdministracion } from '../../modulos/administracion/modulo';
 import { moduloAsistente } from '../../modulos/asistente/modulo';
 import { moduloCatalogo } from '../../modulos/catalogo/modulo';
 import { moduloContratos } from '../../modulos/contratos/modulo';
+import { moduloDiagramas } from '../../modulos/diagramas/modulo';
 import { moduloDocumentacion } from '../../modulos/documentacion/modulo';
 import { moduloEquipo } from '../../modulos/equipo/modulo';
+import { moduloGia } from '../../modulos/gia/modulo';
 import { moduloHola } from '../../modulos/hola/modulo';
 import { moduloPermisos } from '../../modulos/permisos/modulo';
 import { moduloSoporte } from '../../modulos/soporte/modulo';
@@ -21,6 +23,8 @@ export const MODULOS_REGISTRADOS: readonly ModuloAtlas[] = [
   moduloSoporte,
   moduloContratos,
   moduloDocumentacion,
+  moduloDiagramas,
+  moduloGia,
   moduloAsistente,
   moduloPermisos,
   moduloHola,

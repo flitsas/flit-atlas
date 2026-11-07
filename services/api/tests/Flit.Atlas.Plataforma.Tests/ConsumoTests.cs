@@ -44,6 +44,65 @@ public class ConsumoTests(Contenedores contenedores)
         }
     }
 
+    private sealed class ManejadorDeTipo(string cola, TipoEvento tipo) : IManejadorEventos
+    {
+        public string Cola => cola;
+
+        public string Exchange => "flit.atlas.pruebas";
+
+        public IReadOnlyList<TipoEvento> Tipos => [tipo];
+
+        public ConcurrentQueue<SobreEvento> Recibidos { get; } = new();
+
+        public Task ManejarAsync(SobreEvento sobre, IServiceProvider servicios, CancellationToken ct)
+        {
+            Recibidos.Enqueue(sobre);
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task Dos_manejadores_comparten_una_cola_y_cada_mensaje_va_al_de_su_tipo()
+    {
+        var cola = $"atlas.api.compartida.{Guid.NewGuid():N}";
+        var otro = new TipoEvento("atlas.pruebas.otro_listo", 1);
+        var primero = new ManejadorDeTipo(cola, Prueba);
+        var segundo = new ManejadorDeTipo(cola, otro);
+        var fabrica = new ConnectionFactory { Uri = new Uri(contenedores.RabbitMq.GetConnectionString()) };
+        await using var conexion = await fabrica.CreateConnectionAsync(Ct);
+        var servicios = new ServiceCollection().AddSingleton(conexion).BuildServiceProvider();
+        var consumidor = new ConsumidorEventos(servicios, [primero, segundo], Options.Create(new OpcionesConsumo { EsperaConexion = TimeSpan.FromMilliseconds(200) }),
+            TimeProvider.System, NullLogger<ConsumidorEventos>.Instance);
+        await consumidor.StartAsync(Ct);
+        try
+        {
+            await EsperarAsync(async () =>
+            {
+                await using var canal = await conexion.CreateChannelAsync(cancellationToken: Ct);
+                try
+                {
+                    return (await canal.QueueDeclarePassiveAsync(cola, Ct)).ConsumerCount == 1;
+                }
+                catch (RabbitMQ.Client.Exceptions.OperationInterruptedException)
+                {
+                    return false;
+                }
+            });
+
+            await PublicarAsync(conexion, "flit.atlas.pruebas", Prueba.Nombre, Sobre(Prueba.Nombre));
+            await PublicarAsync(conexion, "flit.atlas.pruebas", otro.Nombre, Sobre(otro.Nombre));
+
+            await EsperarAsync(() => Task.FromResult(!primero.Recibidos.IsEmpty && !segundo.Recibidos.IsEmpty));
+            Assert.Equal(Prueba.Nombre, Assert.Single(primero.Recibidos).Type);
+            Assert.Equal(otro.Nombre, Assert.Single(segundo.Recibidos).Type);
+            Assert.Equal(0u, await MensajesAsync(conexion, ConsumidorEventos.ColaErrores(cola)));
+        }
+        finally
+        {
+            await consumidor.StopAsync(CancellationToken.None);
+        }
+    }
+
     private async Task<(ConsumidorEventos Consumidor, IConnection Conexion)> IniciarAsync(ManejadorDePrueba manejador, int maximoIntentos)
     {
         var fabrica = new ConnectionFactory { Uri = new Uri(contenedores.RabbitMq.GetConnectionString()) };

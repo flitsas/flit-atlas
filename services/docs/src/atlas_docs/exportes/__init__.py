@@ -8,7 +8,16 @@ Formatos: OpenAPI (YAML y JSON), colección Postman v2.1, HTML autocontenido, PD
 Excel (openpyxl, con el formato del Excel de contratos) y un ZIP con todo, un `LEEME.md` y un manifiesto.
 """
 
+from atlas_docs.exportes.documentos import FORMATOS_DOCUMENTOS, exportar_documentos
 from atlas_docs.exportes.exportar import ResultadoExportacion, exportar
-from atlas_docs.exportes.modelo import Formato, PaqueteExportar
+from atlas_docs.exportes.modelo import EntradaDocumentos, Formato, PaqueteExportar
 
-__all__ = ["Formato", "PaqueteExportar", "ResultadoExportacion", "exportar"]
+__all__ = [
+    "FORMATOS_DOCUMENTOS",
+    "EntradaDocumentos",
+    "Formato",
+    "PaqueteExportar",
+    "ResultadoExportacion",
+    "exportar",
+    "exportar_documentos",
+]

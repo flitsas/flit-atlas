@@ -17,7 +17,7 @@ from atlas_docs.autenticacion import ScopeInsuficienteError, TokenInvalidoError,
 from atlas_docs.cola import PATRON_UUID, ConsumidorExportaciones, ManejadorExportaciones, Publicador
 from atlas_docs.config import Configuracion, cargar
 from atlas_docs.exportes import Formato, PaqueteExportar, ResultadoExportacion, exportar
-from atlas_docs.exportes.modelo import MAX_BYTES_ENTRADA
+from atlas_docs.exportes.modelo import FORMATOS_PAQUETE, MAX_BYTES_ENTRADA
 from atlas_docs.exportes.pdf import WeasyPrintNoDisponibleError
 from atlas_docs.exportes.specs import SpecInvalidoError
 from atlas_docs.guardia import CuerpoExcedidoError, GuardiaCuerpo
@@ -154,7 +154,7 @@ def crear_app(
         paquetes pequeños. Sin `exportacionId` responde el ZIP. Con `exportacionId` deja cada archivo en el S3 bajo
         `exportaciones/<exportacionId>/` y responde las claves con su SHA-256.
         """
-        pedidos = set(formatos) if formatos else set(Formato)
+        pedidos = set(formatos) if formatos else set(FORMATOS_PAQUETE)
         if exportacion_id is None:
             pedidos.add(Formato.ZIP)
         try:

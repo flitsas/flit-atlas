@@ -235,7 +235,7 @@ Los roles, alcances y vigencias se guardan y evalúan **en Atlas** (no vienen de
 | `publico_clientes` | Guías de integración, operaciones compartidas, manuales de usuario final, fichas comerciales | Externos **solo dentro de su alcance**; todos los internos |
 | `interno_negocio` | Procesos, reglas de negocio, fichas de aplicativos, manual completo, responsables | Empleados |
 | `interno_ti` | ADR técnicos, contratos internos (gRPC, colas), vistas de despliegue, drift | Roles técnicos |
-| `restringido` | Seguridad, incidentes, costos, gobierno de IA sensible | Administración y gobierno de IA |
+| `restringido` | Seguridad, incidentes, costos, gobierno de IA sensible | Administración, líder técnico y gobierno de IA |
 
 ### 7.2 Roles internos (empleados)
 
@@ -278,7 +278,7 @@ Formato `atlas.<modulo>.<accion>`. Cada módulo publica su manifiesto al arranca
 | Documentación | `atlas.docs.ver`, `atlas.docs.editar`, `atlas.docs.aprobar`, `atlas.docs.exportar` |
 | Diagramas | `atlas.arquitectura.ver`, `atlas.arquitectura.ver_despliegue`, `atlas.diagramas.editar` |
 | Asistente | `atlas.asistente.usar`, `atlas.asistente.configurar` |
-| Gobierno IA | `atlas.gia.ver`, `atlas.gia.gestionar`, `atlas.gia.auditar` |
+| Gobierno IA | `atlas.gia.ver`, `atlas.gia.politicas.ver` (leer y aceptar lo vigente, todos los empleados), `atlas.gia.gestionar`, `atlas.gia.auditar` |
 
 Entrega en la fase 1 una **matriz rol × permiso** generada desde el código (no a mano) y publicada en Atlas, más **pruebas de autorización parametrizadas** que recorren todos los endpoints con todos los roles.
 

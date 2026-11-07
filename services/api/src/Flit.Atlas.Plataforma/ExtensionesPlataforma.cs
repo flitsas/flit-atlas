@@ -84,6 +84,7 @@ public static class ExtensionesPlataforma
         servicios.TryAddScoped<Modulos.IFuentesPublicacion, Modulos.SinFuentesPublicacion>();
         // Responsables de un aplicativo (avisos de deprecación, ATLAS-ADR-0046): los registra el módulo de equipo.
         servicios.TryAddScoped<Modulos.ILectorResponsables, Modulos.SinResponsables>();
+        servicios.TryAddScoped<Modulos.ILectorContratos, Modulos.SinContratos>();
         // Documentación funcional del portal de clientes (ATLAS-ADR-0043): la registra el módulo de documentación (F5).
         servicios.TryAddScoped<Modulos.IDocumentacionDelPortal, Modulos.SinDocumentacionDelPortal>();
 

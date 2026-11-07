@@ -23,12 +23,16 @@
 <header class="portada" id="portada">
   <div class="marca">FLIT · ATLAS</div>
   <h1>{{ d.paquete }}</h1>
-  <p>Paquete de contratos de integración · revisión {{ d.revision }}</p>
+  <p>{{ d.subtitulo }}</p>
   <dl>
     <dt>Organización</dt><dd>{{ d.organizacion }}</dd>
     <dt>Fecha</dt><dd>{{ d.fecha }} (hora de Bogotá)</dd>
+    {% if d.es_documentacion %}
+    <dt>Documentos</dt><dd>{{ d.guias | length }}</dd>
+    {% else %}
     <dt>Revisión</dt><dd>{{ d.revision }}</dd>
     <dt>Contratos</dt><dd>{% for c in d.contratos %}{{ c.titulo }} {{ c.version }} ({{ c.tipo }}){% if not loop.last %}; {% endif %}{% endfor %}</dd>
+    {% endif %}
     <dt>SHA-256</dt><dd class="hash">{{ d.hash }}</dd>
   </dl>
   <p class="leyenda">{{ d.leyenda }}</p>
@@ -37,8 +41,10 @@
 <nav class="indice" id="indice" aria-label="Índice">
   <h2>Índice</h2>
   <ol>
+    {% if not d.es_documentacion %}
     <li><a href="#changelog"{{ pagina("changelog") }}>Cambios del paquete</a></li>
-    {% if d.guias %}<li><a href="#guias"{{ pagina("guias") }}>Guías</a>
+    {% endif %}
+    {% if d.guias %}<li><a href="#guias"{{ pagina("guias") }}>{{ d.titulo_guias }}</a>
       <ol>{% for g in d.guias %}<li><a href="#{{ g.ancla }}"{{ pagina(g.ancla) }}>{{ g.titulo }}</a></li>{% endfor %}</ol>
     </li>{% endif %}
     {% for c in d.contratos %}
@@ -49,6 +55,7 @@
   </ol>
 </nav>
 
+{% if not d.es_documentacion %}
 <section id="changelog">
   <h2>Cambios del paquete</h2>
   {% if d.changelog %}
@@ -59,13 +66,15 @@
   {% else %}<p>Primera revisión del paquete.</p>{% endif %}
 </section>
 {% endif %}
+{% endif %}
 
 {% if vista.guias %}
 <section{% if vista.titulo_guias %} id="guias"{% endif %}>
-  {% if vista.titulo_guias %}<h2>Guías</h2>{% endif %}
+  {% if vista.titulo_guias %}<h2>{{ d.titulo_guias }}</h2>{% endif %}
   {% for g in vista.guias %}
   <article class="guia" id="{{ g.ancla }}">
     <h3>{{ g.titulo }}</h3>
+    {% if g.detalle %}<p class="etiqueta">{{ g.detalle }}</p>{% endif %}
     {{ md(g.markdown) }}
   </article>
   {% endfor %}

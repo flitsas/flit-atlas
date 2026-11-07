@@ -1,6 +1,6 @@
 # services/render · atlas-render (Go)
 
-Servicio interno sin estado: render de D2 a SVG/PNG con sanitización, lint de OpenAPI con vacuum y diff con oasdiff (ATLAS-ADR-0005, ATLAS-ADR-0010, ATLAS-ADR-0036). No se expone a internet. Fases **F3** y **F6**. Hoy expone las sondas de salud, las métricas y el diff de contratos (HU 3.5).
+Servicio interno sin estado: render de D2 a SVG con sanitización, lint de OpenAPI con vacuum y diff con oasdiff (ATLAS-ADR-0005, ATLAS-ADR-0010, ATLAS-ADR-0036, ATLAS-ADR-0054). No se expone a internet. Fases **F3** y **F6**. Hoy expone las sondas de salud, las métricas, el diff de contratos (HU 3.5) y el exporte de lienzos a SVG (HU 6.8). Imagen: `docker build -t atlas-render services/render`.
 
 | Variable | Uso |
 |---|---|
@@ -21,8 +21,19 @@ ATLAS_RENDER_PORT=4033 go run ./cmd/atlas-render
 | Método y ruta | Uso |
 |---|---|
 | `GET /health/live` · `GET /health/ready` | Sondas |
-| `GET /metrics` | Métricas Prometheus (`atlas_render_diff_*`, Go y proceso) |
+| `GET /metrics` | Métricas Prometheus (`atlas_render_diff_*`, `atlas_render_lienzo_*`, Go y proceso) |
 | `POST /internal/v1/contratos/diff` | Diff entre dos specs (lo llama `atlas-api` con `IRenderDiff`) |
+| `POST /internal/v1/diagramas/lienzo/svg` | SVG de un lienzo con D2 (lo llama `atlas-api` con `IRenderLienzo`) |
+
+### Exporte de lienzos
+
+Entrada (`application/json`), hasta 500 nodos y 1.000 relaciones: el modelo, nunca texto D2.
+
+```json
+{ "nodos": [{ "id": "a", "tipo": "sistema", "etiqueta": "Trámites" }], "relaciones": [{ "origen": "a", "destino": "a", "etiqueta": "" }] }
+```
+
+Salida: `image/svg+xml`, limpio con una lista blanca de elementos. `X-Atlas-Cache` dice `acierto` o `fallo`: la caché es por el hash del modelo y la versión de D2. Errores en `application/problem+json`: 400, 413, 415, 422, 500, 503 y 504. D2 acomoda de nuevo, sin las posiciones del lienzo. No hay PNG: D2 lo genera con un navegador (ATLAS-ADR-0054 §7).
 
 ### Diff de contratos
 

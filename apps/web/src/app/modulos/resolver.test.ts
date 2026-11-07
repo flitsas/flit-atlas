@@ -134,8 +134,8 @@ describe('registro', () => {
     expect(externo.barraInferior.map((e) => e.etiqueta)).toEqual(['Inicio', 'Buscar', 'Portal', 'Asistente']);
     expect(externo.mas.map((e) => e.etiqueta)).toEqual(['Documentación']);
     // «Roles y permisos» (HU 1.4), Invitaciones, Organizaciones (HU 1.5) y «Asignación de roles» también van en «Más», el Consolidado de contratos (HU 3.4) y los Paquetes (HU 4.1); «hola» (HU 1.9) está apagado por defecto.
-    expect(nav.mas.map((e) => e.etiqueta)).toEqual(['Catálogo', 'Equipo', 'Responsables', 'Contratos', 'Consolidado', 'Paquetes', 'Documentación', 'Roles y permisos', 'Invitaciones', 'Organizaciones', 'Asignación de roles']);
-    const mvp = MODULOS_REGISTRADOS.filter((m) => !['permisos', 'hola', 'administracion'].includes(m.id));
+    expect(nav.mas.map((e) => e.etiqueta)).toEqual(['Catálogo', 'Equipo', 'Responsables', 'Contratos', 'Consolidado', 'Paquetes', 'Documentación', 'Diagramas', 'Roles y permisos', 'Invitaciones', 'Organizaciones', 'Asignación de roles']);
+    const mvp = MODULOS_REGISTRADOS.filter((m) => !['permisos', 'hola', 'administracion', 'gia'].includes(m.id));
     // Encendidos por defecto; cada uno pasa a «disponible» cuando llega su HU (equipo, con el directorio de la HU 2.2).
     expect(mvp.every((m) => m.banderaPorDefecto)).toBe(true);
     // Sin el permiso, la administración no aparece.
@@ -177,10 +177,10 @@ describe('pestañas de la ficha del aplicativo (ATLAS-ADR-0028)', () => {
     expect(producto.visibles.map((p) => p.id)).toEqual(['carga', 'responsables']);
   });
 
-  it('hoy solo el equipo aporta su pestaña («responsables», HU 2.3): los demás espacios siguen como «próximamente»', () => {
-    const { visibles, sinPermiso } = resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.equipo.ver'] });
-    expect(visibles.map((p) => [p.id, p.modulo.id])).toEqual([['responsables', 'equipo']]);
-    expect(resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: [] }).sinPermiso).toEqual(new Set(['responsables']));
+  it('hoy el equipo, la documentación y los diagramas aportan su pestaña (HU 2.3, 5.4 y 6.6): los demás espacios siguen como «próximamente»', () => {
+    const { visibles, sinPermiso } = resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: ['atlas.equipo.ver', 'atlas.docs.ver'] });
+    expect(visibles.map((p) => [p.id, p.modulo.id])).toEqual([['responsables', 'equipo'], ['documentos', 'documentacion'], ['diagramas', 'diagramas']]);
+    expect(resolverPestanasFicha(MODULOS_REGISTRADOS, { banderas: {}, permisos: [] }).sinPermiso).toEqual(new Set(['responsables', 'documentos', 'diagramas']));
     expect(sinPermiso.size).toBe(0);
   });
 });

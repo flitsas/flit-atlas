@@ -140,6 +140,7 @@ public sealed class ModuloContratos : IModuloAtlas
     public void RegistrarServicios(IServiceCollection servicios, IConfiguration configuracion)
     {
         servicios.AgregarProveedorBusqueda<BusquedaContratos>();
+        servicios.AddScoped<ILectorContratos, LectorContratos>();
         servicios.AddOptions<OpcionesCanales>().BindConfiguration(OpcionesCanales.Seccion).PostConfigure(o => o.Normalizar());
         // Paquetes (HU 4.1): en QA también las candidatas rc; en pdn solo estables, y si alguien configura otra cosa no arranca.
         servicios.AddOptions<Paquetes.OpcionesPaquetes>().BindConfiguration(Paquetes.OpcionesPaquetes.Seccion)
