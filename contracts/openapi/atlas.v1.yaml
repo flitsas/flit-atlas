@@ -2,7 +2,7 @@ openapi: '3.1.1'
 info:
   title: Flit Atlas
   description: 'API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie `__Host-atlas` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado exigen además la cabecera `X-Atlas-Csrf` y el mismo origen. Los clientes que no son el navegador (atlas-cli, MCP, servicios internos) usan tokens Bearer del servidor OpenIddict de Atlas solo en las operaciones que declaran el esquema `tokenAtlas`; el protocolo (`/connect/*`) se describe en `/.well-known/openid-configuration` (ATLAS-ADR-0024). La CI de cada repo publica con el token OIDC de GitHub Actions solo en las operaciones que declaran `githubActions` (ATLAS-ADR-0035). Este archivo se genera desde el código: no se edita a mano.'
-  version: 1.0.0
+  version: '1.1.0'
 servers:
   - url: https://atlas.flitsas.com
     description: Producción (pdn)
