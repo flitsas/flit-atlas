@@ -87,7 +87,7 @@ internal static class ContratoOpenApi
         documento.Info = new OpenApiInfo
         {
             Title = "Flit Atlas",
-            Version = "1.0.0",
+            Version = "1.1.0",
             Description =
                 "API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie " +
                 $"`{ClaimsAtlas.NombreCookie}` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado " +
