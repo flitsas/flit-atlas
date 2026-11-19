@@ -32,6 +32,9 @@ public partial class EmergenciaTests(EntornoApi entorno)
 
     private const string Correo = "admin.emergencia@atlas.local";
 
+    /// <summary>El remitente de <see cref="EntornoApi"/>: a ese buzón llegan las alertas.</summary>
+    private const string BuzonAlertas = "atlas@ejemplo.com";
+
     /// <summary>Tipos de evento de la cuenta de emergencia; <see cref="Todo_el_flujo_queda_en_la_auditoria_y_el_token_no_aparece_en_logs"/> los recorre.</summary>
     public static readonly string[] TiposDeEventoProbados =
     [
@@ -330,6 +333,61 @@ public partial class EmergenciaTests(EntornoApi entorno)
         Assert.DoesNotContain(datos, d => d != null && d.Contains(token, StringComparison.Ordinal));
         var eventos = await identidad.EventosSeguridad.Select(e => e.Datos).ToListAsync(Ct);
         Assert.DoesNotContain(eventos, d => d != null && d.Contains(token, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// ATLAS-ADR-0053: cada evento de la cuenta de emergencia llega como alerta al buzón configurado, también los del comando
+    /// (que no levanta los trabajos en segundo plano), con el tipo y el id, y sin el enlace ni la IP.
+    /// </summary>
+    [Fact]
+    public async Task Cada_evento_de_emergencia_llega_como_alerta_al_buzon_configurado()
+    {
+        var baseNueva = await entorno.BaseNuevaAsync();
+        await using var api = entorno.Api(baseDeDatos: baseNueva);
+        var buzon = api.Services.GetRequiredService<BuzonDePrueba>();
+
+        var (_, _, enlace) = await ComandoAsync(api);
+        var delComando = buzon.Para(BuzonAlertas);
+        Assert.Contains(delComando, m => m.Texto.Contains("identidad." + TiposEventoSeguridad.EmergenciaCuentaCreada, StringComparison.Ordinal));
+        Assert.Contains(delComando, m => m.Texto.Contains("identidad." + TiposEventoSeguridad.EmergenciaEnlaceEmitido, StringComparison.Ordinal));
+
+        using var navegador = Publico(api);
+        var (clave, _) = await ActivarConContrasenaAsync(navegador, enlace);
+        await navegador.EnviarAsync(HttpMethod.Post, "/api/v1/identidad/salir");
+        using var luego = Publico(api);
+        Assert.Equal(HttpStatusCode.NoContent, (await EntrarConContrasenaAsync(luego, Correo, clave)).StatusCode);
+
+        var alertas = buzon.Para(BuzonAlertas);
+        foreach (var tipo in TiposDeEventoProbados)
+        {
+            Assert.Contains(alertas, m => m.Texto.Contains("identidad." + tipo, StringComparison.Ordinal));
+        }
+        var token = enlace.Split('.')[1];
+        Assert.All(alertas, m =>
+        {
+            Assert.Contains("cuenta de emergencia", m.Asunto, StringComparison.Ordinal);
+            Assert.DoesNotContain(token, m.Texto + m.Html, StringComparison.Ordinal);
+            Assert.DoesNotContain("2001:db8", m.Texto + m.Html, StringComparison.Ordinal);
+            Assert.DoesNotContain(Correo, m.Texto + m.Html, StringComparison.Ordinal);
+            Assert.DoesNotContain("<a ", m.Html, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>ATLAS-ADR-0053: si el correo no sale, el comando termina bien y queda el evento <c>correo_no_enviado</c>.</summary>
+    [Fact]
+    public async Task Si_la_alerta_no_sale_el_comando_termina_y_queda_el_evento()
+    {
+        var baseNueva = await entorno.BaseNuevaAsync();
+        await using var api = entorno.Api(baseDeDatos: baseNueva);
+        api.Services.GetRequiredService<BuzonDePrueba>().Fallar = true;
+
+        var (codigo, _, enlace) = await ComandoAsync(api);
+
+        Assert.Equal(0, codigo);
+        Assert.NotEmpty(enlace);
+        await using var identidad = entorno.Identidad(baseNueva);
+        var fallidos = await identidad.EventosSeguridad.Where(e => e.Tipo == TiposEventoSeguridad.CorreoNoEnviado).ToListAsync(Ct);
+        Assert.Contains(fallidos, e => e.Datos!.Contains(AlertaEmergencia.Motivo, StringComparison.Ordinal));
     }
 
     [Fact]

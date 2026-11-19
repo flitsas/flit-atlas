@@ -3,6 +3,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
 using Flit.Atlas.Identidad.Datos;
+using Flit.Atlas.Identidad.Emergencia;
 using Flit.Atlas.Identidad.Entra;
 using Flit.Atlas.Identidad.Sesiones;
 using Flit.Atlas.Plataforma.Datos;
@@ -126,9 +127,11 @@ public sealed record DatosEventoSeguridad
 /// <summary>
 /// Registra los eventos de seguridad (ATLAS-ADR-0022): una fila en <c>identidad_evento_seguridad</c> y otra en
 /// <c>plataforma_auditoria</c>, en la <b>misma transacción</b> (si la auditoría falla, tampoco queda el evento). Las
-/// dos tablas son de solo inserción. Los de la cuenta de emergencia también quedan como advertencia en el log (ATLAS-ADR-0027).
+/// dos tablas son de solo inserción. Los de la cuenta de emergencia también quedan como advertencia en el log (ATLAS-ADR-0027)
+/// y salen como alerta por correo (ATLAS-ADR-0053).
 /// </summary>
-public sealed partial class RegistroSeguridad(PlataformaDbContext plataforma, TimeProvider reloj, IHttpContextAccessor contexto, ILogger<RegistroSeguridad> log)
+public sealed partial class RegistroSeguridad(
+    PlataformaDbContext plataforma, TimeProvider reloj, IHttpContextAccessor contexto, AlertaEmergencia alerta, ILogger<RegistroSeguridad> log)
 {
     public async Task RegistrarAsync(string tipo, DatosEventoSeguridad datos, CancellationToken ct = default)
     {
@@ -193,6 +196,7 @@ public sealed partial class RegistroSeguridad(PlataformaDbContext plataforma, Ti
         {
             // Para las alertas sobre los logs: solo el tipo y el id del evento (nada personal ni secreto).
             AltaSeveridad(log, TiposEventoSeguridad.PrefijoAuditoria + tipo, id);
+            alerta.Avisar(tipo, id, ahora);
         }
     }
 

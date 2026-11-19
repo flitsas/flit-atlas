@@ -167,7 +167,7 @@ public sealed partial class CorreosExternos(IEnviadorCorreo enviador, IConfigura
         return http is null ? "https://localhost:4032" : $"{http.Request.Scheme}://{http.Request.Host}";
     }
 
-    private static string Fecha(DateTimeOffset momento) =>
+    internal static string Fecha(DateTimeOffset momento) =>
         TimeZoneInfo.ConvertTime(momento, Bogota).ToString("dd/MM/yyyy 'a las' HH:mm", CultureInfo.InvariantCulture);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se envió un correo de cuentas externas: {Motivo}")]

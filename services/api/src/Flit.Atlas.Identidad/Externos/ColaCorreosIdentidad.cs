@@ -20,7 +20,7 @@ public sealed record CorreoPendiente(MensajeCorreo Mensaje, DatosEventoSeguridad
 public sealed class ColaCorreosIdentidad
 {
     private readonly Channel<CorreoPendiente> _pendientes = Channel.CreateBounded<CorreoPendiente>(
-        new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
+        new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropWrite });
 
     private int _enCurso;
 
@@ -52,26 +52,47 @@ internal sealed partial class TrabajoCorreosIdentidad(
     {
         await foreach (var correo in cola.Lector.ReadAllAsync(stoppingToken).ConfigureAwait(false))
         {
-            try
+            await ProcesarAsync(correo, cola, alcances, log, stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Envía lo que haya en la cola y termina. Es para el comando de emergencia, que no levanta los trabajos en segundo
+    /// plano: sin esto, las alertas de sus eventos se perderían al terminar el proceso (ATLAS-ADR-0053).
+    /// </summary>
+    internal static async Task AtenderPendientesAsync(IServiceProvider servicios, CancellationToken ct)
+    {
+        var cola = servicios.GetRequiredService<ColaCorreosIdentidad>();
+        var alcances = servicios.GetRequiredService<IServiceScopeFactory>();
+        var log = servicios.GetRequiredService<ILogger<TrabajoCorreosIdentidad>>();
+        while (cola.Lector.TryRead(out var correo))
+        {
+            await ProcesarAsync(correo, cola, alcances, log, ct).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task ProcesarAsync(
+        CorreoPendiente correo, ColaCorreosIdentidad cola, IServiceScopeFactory alcances, ILogger log, CancellationToken ct)
+    {
+        try
+        {
+            await using var alcance = alcances.CreateAsyncScope();
+            var enviado = await alcance.ServiceProvider.GetRequiredService<CorreosExternos>()
+                .EnviarAsync(correo.Mensaje, ct).ConfigureAwait(false);
+            if (!enviado)
             {
-                await using var alcance = alcances.CreateAsyncScope();
-                var enviado = await alcance.ServiceProvider.GetRequiredService<CorreosExternos>()
-                    .EnviarAsync(correo.Mensaje, stoppingToken).ConfigureAwait(false);
-                if (!enviado)
-                {
-                    await alcance.ServiceProvider.GetRequiredService<RegistroSeguridad>().RegistrarAsync(TiposEventoSeguridad.CorreoNoEnviado,
-                        correo.Datos with { Detalle = new { motivo = correo.Motivo } }, stoppingToken).ConfigureAwait(false);
-                }
+                await alcance.ServiceProvider.GetRequiredService<RegistroSeguridad>().RegistrarAsync(TiposEventoSeguridad.CorreoNoEnviado,
+                    correo.Datos with { Detalle = new { motivo = correo.Motivo } }, ct).ConfigureAwait(false);
             }
-            catch (Exception error) when (error is not OperationCanceledException)
-            {
-                // Nunca se escapa: tumbaría el host (BackgroundServiceExceptionBehavior = StopHost).
-                Fallo(log, error.GetType().Name);
-            }
-            finally
-            {
-                cola.Terminado();
-            }
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // Nunca se escapa: tumbaría el host (BackgroundServiceExceptionBehavior = StopHost).
+            Fallo(log, error.GetType().Name);
+        }
+        finally
+        {
+            cola.Terminado();
         }
     }
 

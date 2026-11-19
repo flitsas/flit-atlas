@@ -26,6 +26,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
 using StackExchange.Redis;
@@ -233,6 +234,9 @@ public static class ExtensionesIdentidad
         // La recuperación pedida por la persona y los avisos de seguridad salen fuera de la petición (ATLAS-ADR-0049).
         servicios.AddSingleton<ColaCorreosIdentidad>();
         servicios.AddHostedService<TrabajoCorreosIdentidad>();
+        servicios.AddSingleton(sp => new AlertaEmergencia(
+            sp.GetRequiredService<ColaCorreosIdentidad>(), sp.GetRequiredService<IOptions<OpcionesCorreo>>(), ambiente,
+            sp.GetRequiredService<ILogger<AlertaEmergencia>>()));
         servicios.AddScoped<DocumentosLegales>();
         servicios.AddScoped<FactoresExternos>();
         servicios.AddScoped<SesionExterna>();

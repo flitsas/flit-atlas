@@ -174,8 +174,8 @@ caída de RabbitMQ deja atlas-api **no listo** (no recibe tráfico) pero vivo: n
 Para el arranque de un ambiente o si Entra ID no responde: el procedimiento está en `deploy/README.md` («Cuenta de
 administrador de emergencia»). Resumen: `kubectl -n atlas-<ambiente> exec -it deploy/atlas-api -- dotnet Flit.Atlas.Api.dll
 emergencia activar`, abrir el enlace de un solo uso (1 h) de inmediato, registrar passkey o contraseña con TOTP, hacer
-solo lo necesario y cerrar la sesión. Cada uso deja `identidad.emergencia.*` en la auditoría y una advertencia en el log
-(alerta en §12): también los dos eventos del comando (`identidad.emergencia.cuenta_creada` y `…enlace_emitido`), que el
+solo lo necesario y cerrar la sesión. Cada uso envía una alerta al buzón de `Plataforma__Correo__Remitente`
+(ATLAS-ADR-0053) y deja `identidad.emergencia.*` en la auditoría y una advertencia en el log: también los dos eventos del comando (`identidad.emergencia.cuenta_creada` y `…enlace_emitido`), que el
 comando exporta por OpenTelemetry con solo el tipo y el id (ATLAS-ADR-0049; la consola del `kubectl exec` solo muestra la
 salida del comando). Volver a correr el comando invalida el enlace anterior y deja la cuenta sin factores.
 

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.Atlas.Identidad.Externos;
 using Flit.Atlas.Identidad.Seguridad;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -62,6 +63,7 @@ public static class ComandoEmergencia
         catch (CuentaEmergenciaException ex)
         {
             await errores.WriteLineAsync(ex.Message);
+            await TrabajoCorreosIdentidad.AtenderPendientesAsync(servicios, ct);
             return 1;
         }
 
@@ -77,6 +79,9 @@ public static class ComandoEmergencia
         await salida.WriteLineAsync();
         await salida.WriteLineAsync("Ábrelo ya y registra una passkey (o contraseña con aplicación de autenticación). No lo copies en chats,");
         await salida.WriteLineAsync("tickets ni documentos. Volver a correr el comando invalida este enlace y cierra las sesiones de la cuenta.");
+        await salida.FlushAsync(ct);
+        // Después de mostrar el enlace: un servidor de correo lento no lo demora (ATLAS-ADR-0053).
+        await TrabajoCorreosIdentidad.AtenderPendientesAsync(servicios, ct);
         return 0;
     }
 }
