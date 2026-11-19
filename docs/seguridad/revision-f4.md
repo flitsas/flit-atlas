@@ -215,6 +215,7 @@ mayor quedan para que el coordinador los asigne, con su prueba omitida.
 
 **Corregido en `2078282`** (rama `f4/seguridad-identidad`, ATLAS-ADR-0049). **F4-SEC-01 · Alta (7.4, `AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N`) · La contraseña correcta reinicia el contador y deja
 adivinar el TOTP sin bloqueo.**
+
 - *Dónde:* `Identidad/Seguridad/VerificadorContrasena.cs:67-70` (`ResetAccessFailedCountAsync` también cuando el factor
   válido es la contraseña, llamado desde `Externos/EndpointsCuentasExternas.cs:314`); el paso del TOTP se lee sin
   borrarse y un fallo no lo invalida (`EndpointsCuentasExternas.cs:340, 372-375`).
@@ -358,6 +359,7 @@ respondía 204. No explotable entre orígenes sin CORS (el preflight lo bloquea)
 `__Host-atlas`. Regresión: `Pentest_un_Bearer_inventado_no_exime_de_la_antifalsificacion_a_una_peticion_con_la_cookie`.
 
 **F4-SEC-34 · Informativos agrupados.**
+
 - `cola.py:148` validaba el `exportacionId` con `re.match` y `$`, que acepta un salto de línea final: **corregido** a
   `re.fullmatch`. `cola.py:146` registra `type` sin quitar saltos de línea (productor de confianza).
 - atlas-docs no revisa `typ` del JWT (`at+jwt`, RFC 9068 §4) (`autenticacion.py:53-56`) **[por verificar el `typ` que
