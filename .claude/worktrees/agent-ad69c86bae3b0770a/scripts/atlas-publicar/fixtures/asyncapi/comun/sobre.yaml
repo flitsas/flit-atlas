@@ -1,0 +1,16 @@
+# Sobre ficticio que comparten los mensajes del Organismo Demo (fixture de probar.sh, HU 3.10). No es un documento
+# AsyncAPI: lo referencian los contratos.
+Sobre:
+  type: object
+  required: [eventId, occurredAt, data]
+  properties:
+    eventId:
+      type: string
+      format: uuid
+    occurredAt:
+      $ref: '#/Fecha'
+    data:
+      type: object
+Fecha:
+  type: string
+  format: date-time

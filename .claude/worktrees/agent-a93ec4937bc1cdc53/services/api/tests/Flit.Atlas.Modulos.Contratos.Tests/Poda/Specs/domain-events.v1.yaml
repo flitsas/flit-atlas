@@ -1,0 +1,154 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT Domain Events
+  description: |
+    Eventos de dominio del motor de trámites.
+    N 03 (ADR-0022): webhook OT de cambio de estado del trámite con el vocabulario
+    de estados de negocio (borrador | anulado | preparado | entregado | aprobado | rechazado).
+    HU #13623 (Épica #13614): aviso de sincronización de trámites hacia FLITO.
+  version: 1.2.0
+
+channels:
+  ot-webhook/vehicle_state_changed:
+    description: |
+      Webhook saliente hacia el Organismo de Tránsito suscrito (admin.ot_webhook_subscriptions).
+      Se emite EXACTAMENTE UNA VEZ por transición confirmada de procedure_instances.status
+      (outbox transaccional tramites.procedure_state_change_outbox, RNF01): una transición que
+      hace rollback no notifica. Entrega HTTP POST firmada (X-Webhook-Signature: HMAC-SHA256
+      del cuerpo crudo) con X-Correlation-Id; reintentos con tope (attempts) y dead-letter.
+    publish:
+      operationId: vehicleStateChanged
+      message:
+        $ref: '#/components/messages/VehicleStateChanged'
+
+  flito-webhook/tramite.cambio:
+    description: |
+      Aviso saliente hacia FLITO (Épica #13614, contraparte de la Épica FLITO #13576): un trámite radicado cambió y
+      FLITO debe traer el cambio del feed v3.1 (GET /api/v1/external/tramites/sync), que sigue siendo la fuente de
+      verdad. El aviso es solo una señal y no lleva datos del trámite.
+      Se registra en la misma transacción del cambio (integrations.flito_sync_signals, una fila por trámite,
+      coalescente) y se despacha cuando el cambio tiene más de 5 s (ventana de estabilidad del feed). Mismo filtro
+      que el feed: sin borradores nunca radicados ni migrados desde FLIT 1; los borrados viajan con eliminado = true.
+      core-api firma el cuerpo y lo deja como trabajo notificaciones.webhook.send (origen = flito); core-notificaciones
+      hace el POST con reintentos (10 s, 1 min, 10 min) y luego notificaciones.webhooks.salientes.dlq. Una sola clave
+      HMAC por ambiente para todos los tenants, entregada fuera de banda.
+      Destino: POST /api/flito/sync/flit2/avisos en el host de FLITO de cada ambiente. FLITO responde 200 al validar
+      la firma. Entrega al menos una vez: el receptor deduplica por (id, syncVersion).
+    publish:
+      operationId: flitoTramiteCambio
+      message:
+        $ref: '#/components/messages/FlitoTramiteCambio'
+
+components:
+  messages:
+    FlitoTramiteCambio:
+      name: tramite.cambio
+      title: Aviso de cambio de trámite a FLITO
+      contentType: application/json
+      headers:
+        type: object
+        required: [X-Webhook-Signature, X-Correlation-Id]
+        properties:
+          X-Webhook-Signature:
+            type: string
+            pattern: '^sha256=[0-9a-f]{64}$'
+            description: HMAC-SHA256 del cuerpo crudo con la clave del ambiente, en hexadecimal.
+          X-Correlation-Id:
+            type: string
+            format: uuid
+      payload:
+        $ref: '#/components/schemas/FlitoTramiteCambioPayload'
+      examples:
+        - name: radicado
+          summary: Datos ficticios.
+          payload:
+            eventId: 0192f0a1-7b2c-7d10-9f21-3a4b5c6d7e8f
+            tipo: tramite.cambio
+            id: 0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f
+            syncVersion: 48213
+            fechaUltimoCambio: '2026-10-16T15:20:04.512345+00:00'
+            eliminado: false
+            tenantId: 0ad1c0de-0000-4000-8000-000000000001
+    VehicleStateChanged:
+      name: vehicle_state_changed
+      title: Cambio de estado del trámite
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/VehicleStateChangedPayload'
+
+  schemas:
+    FlitoTramiteCambioPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, tipo, id, syncVersion, fechaUltimoCambio, eliminado, tenantId]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: UUIDv7 nuevo por aviso. Un reintento de entrega repite el mismo cuerpo y el mismo eventId.
+        tipo:
+          type: string
+          const: tramite.cambio
+        id:
+          type: string
+          format: uuid
+          description: Trámite (tramites.procedure_instances.id), el mismo id del feed.
+        syncVersion:
+          type: integer
+          format: int64
+          description: sync_version del trámite al despachar. Dos avisos del mismo trámite pueden traer la misma versión.
+        fechaUltimoCambio:
+          type: string
+          format: date-time
+          description: sync_changed_at del trámite (RFC 3339 con microsegundos y desfase, p. ej. 2026-10-16T15:20:04.512345+00:00).
+        eliminado:
+          type: boolean
+          description: true cuando el trámite tiene borrado lógico (tombstone del feed).
+        tenantId:
+          type: string
+          format: uuid
+          description: Compañía dueña del trámite. Informativo; la autenticidad la da la firma.
+
+    TramiteEstado:
+      type: string
+      description: Estado de negocio del trámite (ADR-0022, N 03 RF01).
+      enum:
+        - borrador
+        - anulado
+        - preparado
+        - entregado
+        - aprobado
+        - rechazado
+
+    VehicleStateChangedPayload:
+      type: object
+      required:
+        - event_type
+        - procedure_instance_id
+        - to_status
+        - changed_at
+      properties:
+        event_type:
+          type: string
+          const: vehicle_state_changed
+        procedure_instance_id:
+          type: string
+          format: uuid
+          description: Instancia de trámite transicionada (tramites.procedure_instances.id).
+        from_status:
+          oneOf:
+            - $ref: '#/components/schemas/TramiteEstado'
+            - type: 'null'
+          description: Estado origen; null solo en la creación de la instancia.
+        to_status:
+          $ref: '#/components/schemas/TramiteEstado'
+        changed_at:
+          type: string
+          format: date-time
+          description: Momento de la transición (occurred_at de la fila de outbox).
+        reason:
+          type: string
+          maxLength: 500
+          description: >-
+            Motivo de la transición (RF05). Obligatorio de negocio para anulado y
+            rechazado; puede ser null en las demás transiciones.

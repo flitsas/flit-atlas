@@ -1,0 +1,1760 @@
+openapi: 3.1.0
+info:
+  title: API externa ICT · Autenticación (BackApiExternalAuth)
+  version: 1.5.0
+  description: |-
+    Autenticación de los gestores externos: entrega el token que piden las demás operaciones de la API ICT.
+
+    Fuente: swagger de tsoa del repo y hojas «1 - Auth» del Excel de contratos ICT.
+
+    Archivo generado con `python -m atlas_docs.legado` (ATLAS-ADR-0037); no se edita a mano. Las operaciones con `x-public` son las que se pueden compartir con clientes; las `x-internal` las quita la poda de Atlas.
+  contact:
+    name: FLIT S.A.S.
+  x-flit-visibilidad: compartible
+  x-flit-fuente:
+    repo: flitsas/BackApiExternalAuth
+    swagger: swagger.json
+    excel: Contratos_Integraciones_31Jul2025.xlsx
+    hojas:
+    - 1 - Auth
+  x-flit-changelog:
+  - version: 1.5.0
+    fecha: '2025-05-16'
+    hoja: 1 - Auth
+    colaborador: Equipo de integraciones de FLIT
+    cambio: Versión 1.5 de la hoja «1 - Auth» del Excel de contratos ICT.
+  x-flit-ambientes:
+    dev: por confirmar
+    qa: ict.qa.flitsas.online
+    pdn: por confirmar
+servers:
+- url: https://{host}
+  description: QA. Host tomado del Excel [por verificar]; el Excel no trae URL de dev ni de pdn.
+  variables:
+    host:
+      default: ict.qa.flitsas.online
+      description: Host de la API ICT en el ambiente.
+  x-flit-ambiente: qa
+tags:
+- name: Health
+  description: Este controlador implementa el estado de salud del servicio
+- name: Company Parameters
+  description: Este controlador administra toda la gestión relacionada con los clientes de FLIT
+- name: Controlador para la autenticación de usuarios en la integración de terceros
+  description: Controlador para la autenticación de usuarios en la integración de terceros
+paths:
+  /api/v1/health:
+    get:
+      operationId: HealthCheck
+      summary: Verifica el estado de salud del servicio.
+      description: |-
+        Verifica el estado de salud del servicio.
+
+        Este endpoint se utiliza para comprobar si el servicio está funcionando correctamente.
+      tags:
+      - Health
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Respuesta exitosa.
+      x-internal: true
+  /api/v1/ping:
+    get:
+      operationId: Ping
+      summary: Realiza una prueba de ping en el servicio.
+      description: |-
+        Realiza una prueba de ping en el servicio.
+
+        Utiliza este endpoint para realizar una prueba de ping en el servicio y verificar su disponibilidad.
+      tags:
+      - Health
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Respuesta exitosa.
+      x-internal: true
+  /api/v1/company-parameters:
+    get:
+      operationId: ListPaginated
+      summary: Retorna los datos de todos los clientes
+      description: Retorna los clientes de FLIT
+      tags:
+      - Company Parameters
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginationResultModel_CompanyParametersDto-Array_'
+              example:
+                meta:
+                  itemsPerPage: 1
+                  totalItems: 1
+                  currentPage: 1
+                  totalPages: 1
+                  sortBy:
+                  - - texto
+                  filter: {}
+                links:
+                  first: texto
+                  previous: texto
+                  current: texto
+                  next: texto
+                  last: texto
+                data:
+                - companyNit: texto
+                  companyName: texto
+                  companyAddress: texto
+                  companyPhone: texto
+                  companyPhoneExtension: texto
+                  companyEmail: texto
+                  companyWebsite: texto
+                  status: true
+                  sellerHasMobileSignature: true
+                  sellerHasSignatureOnScreen: true
+                  sellerHasSignatureForPad: true
+                  sellerHasPrefilledSignature: true
+                  sellerHasUnicusValidation: true
+                  buyerHasMobileSignature: true
+                  buyerHasSignatureOnScreen: true
+                  buyerHasSignatureByPad: true
+                  buyerHasPrefilledSignature: true
+                  buyerHasUnicusValidation: true
+                  ownerHasMobileSignature: true
+                  ownerHasSignatureOnScreen: true
+                  ownerHasSignatureByPad: true
+                  ownerHasPrefilledSignature: true
+                  ownerHasUnicusValidation: true
+                  transferRequiresAttachedSellerIdField: 1
+                  transferRequiresAttachedBuyerIdField: 1
+                  transferRequiresPriorityField: 1
+                  transferRequiresCardSendField: 1
+                  registrationRequiresAttachedOwnerIdField: 1
+                  registrationRequiresPriorityField: 1
+                  registrationRequiresCardSendField: 1
+                  registrationRequiresAttachedCepdField: 1
+                  transferAllowsOnlyOwnVehicles: true
+                  registrationAllowsOnlyOwnVehicles: true
+                  documentType: texto
+                  validatesContractsAndPowers: true
+                  allowsContravenerChange: true
+                  allowsContravenerConsultation: true
+                  hasInfractionModule: true
+                  hasResolutionModule: true
+                  hasRightPetitionModule: true
+                  transferAllowsSelectProcessorBuyer: true
+                  transferAllowsSelectProcessorSeller: true
+                  registrationAllowsSelectProcessorOwner: true
+                  hasOtherserviceModule: true
+                  notifyEmailBySmtpApi: 1
+                  hasLogo: true
+                  idAttachedLogo: texto
+                  urlAttachedLogo: texto
+                  hasIntegrationTransactionModule: true
+                  createdAt: '2025-01-31T15:00:00Z'
+                  updatedAt: '2025-01-31T15:00:00Z'
+                  id: texto
+        '400':
+          description: Solicitud incorrecta. El servidor no puede o no procesará la solicitud debido a algo que se percibe
+            como un error del cliente (por ejemplo, sintaxis de solicitud mal formada, enrutamiento de solicitud no válido
+            o enrutamiento de consulta engañoso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultErrorResponse'
+              example:
+                errors:
+                - texto
+        '404':
+          description: No encontrado. El servidor no pudo encontrar el recurso solicitado. Este código se envía con mayor
+            frecuencia cuando el servidor web no encuentra una página web u otro recurso solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              example:
+                message: Requested entity with id 99 not found
+      x-internal: true
+    post:
+      operationId: CreateNew
+      summary: Registra un cliente
+      description: Registra el detalle de los datos de un cliente de FLIT.
+      tags:
+      - Company Parameters
+      security: []
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyParametersRequestDto'
+            example:
+              companyNit: texto
+              companyName: texto
+              companyAddress: texto
+              companyPhone: texto
+              companyPhoneExtension: texto
+              companyEmail: texto
+              companyWebsite: texto
+              status: true
+              sellerHasMobileSignature: true
+              sellerHasSignatureOnScreen: true
+              sellerHasSignatureForPad: true
+              sellerHasPrefilledSignature: true
+              sellerHasUnicusValidation: true
+              buyerHasMobileSignature: true
+              buyerHasSignatureOnScreen: true
+              buyerHasSignatureByPad: true
+              buyerHasPrefilledSignature: true
+              buyerHasUnicusValidation: true
+              ownerHasMobileSignature: true
+              ownerHasSignatureOnScreen: true
+              ownerHasSignatureByPad: true
+              ownerHasPrefilledSignature: true
+              ownerHasUnicusValidation: true
+              transferRequiresAttachedSellerIdField: 1
+              transferRequiresAttachedBuyerIdField: 1
+              transferRequiresPriorityField: 1
+              transferRequiresCardSendField: 1
+              registrationRequiresAttachedOwnerIdField: 1
+              registrationRequiresPriorityField: 1
+              registrationRequiresCardSendField: 1
+              registrationRequiresAttachedCepdField: 1
+              transferAllowsOnlyOwnVehicles: true
+              registrationAllowsOnlyOwnVehicles: true
+              documentType: texto
+              validatesContractsAndPowers: true
+              allowsContravenerChange: true
+              allowsContravenerConsultation: true
+              hasInfractionModule: true
+              hasResolutionModule: true
+              hasRightPetitionModule: true
+              transferAllowsSelectProcessorBuyer: true
+              transferAllowsSelectProcessorSeller: true
+              registrationAllowsSelectProcessorOwner: true
+              hasOtherserviceModule: true
+              notifyEmailBySmtpApi: 1
+              hasLogo: true
+              idAttachedLogo: texto
+              urlAttachedLogo: texto
+              hasIntegrationTransactionModule: true
+        description: Cuerpo de la petición.
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyParametersDto'
+              example:
+                companyNit: texto
+                companyName: texto
+                companyAddress: texto
+                companyPhone: texto
+                companyPhoneExtension: texto
+                companyEmail: texto
+                companyWebsite: texto
+                status: true
+                sellerHasMobileSignature: true
+                sellerHasSignatureOnScreen: true
+                sellerHasSignatureForPad: true
+                sellerHasPrefilledSignature: true
+                sellerHasUnicusValidation: true
+                buyerHasMobileSignature: true
+                buyerHasSignatureOnScreen: true
+                buyerHasSignatureByPad: true
+                buyerHasPrefilledSignature: true
+                buyerHasUnicusValidation: true
+                ownerHasMobileSignature: true
+                ownerHasSignatureOnScreen: true
+                ownerHasSignatureByPad: true
+                ownerHasPrefilledSignature: true
+                ownerHasUnicusValidation: true
+                transferRequiresAttachedSellerIdField: 1
+                transferRequiresAttachedBuyerIdField: 1
+                transferRequiresPriorityField: 1
+                transferRequiresCardSendField: 1
+                registrationRequiresAttachedOwnerIdField: 1
+                registrationRequiresPriorityField: 1
+                registrationRequiresCardSendField: 1
+                registrationRequiresAttachedCepdField: 1
+                transferAllowsOnlyOwnVehicles: true
+                registrationAllowsOnlyOwnVehicles: true
+                documentType: texto
+                validatesContractsAndPowers: true
+                allowsContravenerChange: true
+                allowsContravenerConsultation: true
+                hasInfractionModule: true
+                hasResolutionModule: true
+                hasRightPetitionModule: true
+                transferAllowsSelectProcessorBuyer: true
+                transferAllowsSelectProcessorSeller: true
+                registrationAllowsSelectProcessorOwner: true
+                hasOtherserviceModule: true
+                notifyEmailBySmtpApi: 1
+                hasLogo: true
+                idAttachedLogo: texto
+                urlAttachedLogo: texto
+                hasIntegrationTransactionModule: true
+                createdAt: '2025-01-31T15:00:00Z'
+                updatedAt: '2025-01-31T15:00:00Z'
+                id: texto
+        '400':
+          description: Solicitud incorrecta. El servidor no puede o no procesará la solicitud debido a algo que se percibe
+            como un error del cliente (por ejemplo, sintaxis de solicitud mal formada, enrutamiento de solicitud no válido
+            o enrutamiento de consulta engañoso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultErrorResponse'
+              example:
+                errors:
+                - texto
+        '404':
+          description: No encontrado. El servidor no pudo encontrar el recurso solicitado. Este código se envía con mayor
+            frecuencia cuando el servidor web no encuentra una página web u otro recurso solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              example:
+                message: Requested entity with id 99 not found
+      x-internal: true
+  /api/v1/company-parameters/{id}:
+    get:
+      operationId: FindOne
+      summary: Retorna los datos de un cliente
+      description: Retorna el detalle de los datos de un cliente de FLIT.
+      tags:
+      - Company Parameters
+      security: []
+      parameters:
+      - description: Id del nit del cliente
+        in: path
+        name: id
+        required: true
+        schema:
+          $ref: '#/components/schemas/Identity'
+        example: texto
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyParametersDto'
+              example:
+                companyNit: texto
+                companyName: texto
+                companyAddress: texto
+                companyPhone: texto
+                companyPhoneExtension: texto
+                companyEmail: texto
+                companyWebsite: texto
+                status: true
+                sellerHasMobileSignature: true
+                sellerHasSignatureOnScreen: true
+                sellerHasSignatureForPad: true
+                sellerHasPrefilledSignature: true
+                sellerHasUnicusValidation: true
+                buyerHasMobileSignature: true
+                buyerHasSignatureOnScreen: true
+                buyerHasSignatureByPad: true
+                buyerHasPrefilledSignature: true
+                buyerHasUnicusValidation: true
+                ownerHasMobileSignature: true
+                ownerHasSignatureOnScreen: true
+                ownerHasSignatureByPad: true
+                ownerHasPrefilledSignature: true
+                ownerHasUnicusValidation: true
+                transferRequiresAttachedSellerIdField: 1
+                transferRequiresAttachedBuyerIdField: 1
+                transferRequiresPriorityField: 1
+                transferRequiresCardSendField: 1
+                registrationRequiresAttachedOwnerIdField: 1
+                registrationRequiresPriorityField: 1
+                registrationRequiresCardSendField: 1
+                registrationRequiresAttachedCepdField: 1
+                transferAllowsOnlyOwnVehicles: true
+                registrationAllowsOnlyOwnVehicles: true
+                documentType: texto
+                validatesContractsAndPowers: true
+                allowsContravenerChange: true
+                allowsContravenerConsultation: true
+                hasInfractionModule: true
+                hasResolutionModule: true
+                hasRightPetitionModule: true
+                transferAllowsSelectProcessorBuyer: true
+                transferAllowsSelectProcessorSeller: true
+                registrationAllowsSelectProcessorOwner: true
+                hasOtherserviceModule: true
+                notifyEmailBySmtpApi: 1
+                hasLogo: true
+                idAttachedLogo: texto
+                urlAttachedLogo: texto
+                hasIntegrationTransactionModule: true
+                createdAt: '2025-01-31T15:00:00Z'
+                updatedAt: '2025-01-31T15:00:00Z'
+                id: texto
+        '400':
+          description: Solicitud incorrecta. El servidor no puede o no procesará la solicitud debido a algo que se percibe
+            como un error del cliente (por ejemplo, sintaxis de solicitud mal formada, enrutamiento de solicitud no válido
+            o enrutamiento de consulta engañoso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultErrorResponse'
+              example:
+                errors:
+                - texto
+        '404':
+          description: No encontrado. El servidor no pudo encontrar el recurso solicitado. Este código se envía con mayor
+            frecuencia cuando el servidor web no encuentra una página web u otro recurso solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              example:
+                message: Requested entity with id 99 not found
+      x-internal: true
+    put:
+      operationId: UpdateOne
+      summary: Actualiza los datos de un cliente
+      description: Actualiza el detalle de los datos de un cliente de FLIT.
+      tags:
+      - Company Parameters
+      security: []
+      parameters:
+      - description: Id del NIT del cliente
+        in: path
+        name: id
+        required: true
+        schema:
+          $ref: '#/components/schemas/Identity'
+        example: texto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyParametersRequestDto'
+            example:
+              companyNit: texto
+              companyName: texto
+              companyAddress: texto
+              companyPhone: texto
+              companyPhoneExtension: texto
+              companyEmail: texto
+              companyWebsite: texto
+              status: true
+              sellerHasMobileSignature: true
+              sellerHasSignatureOnScreen: true
+              sellerHasSignatureForPad: true
+              sellerHasPrefilledSignature: true
+              sellerHasUnicusValidation: true
+              buyerHasMobileSignature: true
+              buyerHasSignatureOnScreen: true
+              buyerHasSignatureByPad: true
+              buyerHasPrefilledSignature: true
+              buyerHasUnicusValidation: true
+              ownerHasMobileSignature: true
+              ownerHasSignatureOnScreen: true
+              ownerHasSignatureByPad: true
+              ownerHasPrefilledSignature: true
+              ownerHasUnicusValidation: true
+              transferRequiresAttachedSellerIdField: 1
+              transferRequiresAttachedBuyerIdField: 1
+              transferRequiresPriorityField: 1
+              transferRequiresCardSendField: 1
+              registrationRequiresAttachedOwnerIdField: 1
+              registrationRequiresPriorityField: 1
+              registrationRequiresCardSendField: 1
+              registrationRequiresAttachedCepdField: 1
+              transferAllowsOnlyOwnVehicles: true
+              registrationAllowsOnlyOwnVehicles: true
+              documentType: texto
+              validatesContractsAndPowers: true
+              allowsContravenerChange: true
+              allowsContravenerConsultation: true
+              hasInfractionModule: true
+              hasResolutionModule: true
+              hasRightPetitionModule: true
+              transferAllowsSelectProcessorBuyer: true
+              transferAllowsSelectProcessorSeller: true
+              registrationAllowsSelectProcessorOwner: true
+              hasOtherserviceModule: true
+              notifyEmailBySmtpApi: 1
+              hasLogo: true
+              idAttachedLogo: texto
+              urlAttachedLogo: texto
+              hasIntegrationTransactionModule: true
+        description: Cuerpo de la petición.
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyParametersDto'
+              example:
+                companyNit: texto
+                companyName: texto
+                companyAddress: texto
+                companyPhone: texto
+                companyPhoneExtension: texto
+                companyEmail: texto
+                companyWebsite: texto
+                status: true
+                sellerHasMobileSignature: true
+                sellerHasSignatureOnScreen: true
+                sellerHasSignatureForPad: true
+                sellerHasPrefilledSignature: true
+                sellerHasUnicusValidation: true
+                buyerHasMobileSignature: true
+                buyerHasSignatureOnScreen: true
+                buyerHasSignatureByPad: true
+                buyerHasPrefilledSignature: true
+                buyerHasUnicusValidation: true
+                ownerHasMobileSignature: true
+                ownerHasSignatureOnScreen: true
+                ownerHasSignatureByPad: true
+                ownerHasPrefilledSignature: true
+                ownerHasUnicusValidation: true
+                transferRequiresAttachedSellerIdField: 1
+                transferRequiresAttachedBuyerIdField: 1
+                transferRequiresPriorityField: 1
+                transferRequiresCardSendField: 1
+                registrationRequiresAttachedOwnerIdField: 1
+                registrationRequiresPriorityField: 1
+                registrationRequiresCardSendField: 1
+                registrationRequiresAttachedCepdField: 1
+                transferAllowsOnlyOwnVehicles: true
+                registrationAllowsOnlyOwnVehicles: true
+                documentType: texto
+                validatesContractsAndPowers: true
+                allowsContravenerChange: true
+                allowsContravenerConsultation: true
+                hasInfractionModule: true
+                hasResolutionModule: true
+                hasRightPetitionModule: true
+                transferAllowsSelectProcessorBuyer: true
+                transferAllowsSelectProcessorSeller: true
+                registrationAllowsSelectProcessorOwner: true
+                hasOtherserviceModule: true
+                notifyEmailBySmtpApi: 1
+                hasLogo: true
+                idAttachedLogo: texto
+                urlAttachedLogo: texto
+                hasIntegrationTransactionModule: true
+                createdAt: '2025-01-31T15:00:00Z'
+                updatedAt: '2025-01-31T15:00:00Z'
+                id: texto
+        '400':
+          description: Solicitud incorrecta. El servidor no puede o no procesará la solicitud debido a algo que se percibe
+            como un error del cliente (por ejemplo, sintaxis de solicitud mal formada, enrutamiento de solicitud no válido
+            o enrutamiento de consulta engañoso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultErrorResponse'
+              example:
+                errors:
+                - texto
+        '404':
+          description: No encontrado. El servidor no pudo encontrar el recurso solicitado. Este código se envía con mayor
+            frecuencia cuando el servidor web no encuentra una página web u otro recurso solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              example:
+                message: Requested entity with id 99 not found
+      x-internal: true
+    delete:
+      operationId: DeleteOne
+      summary: Elimina un cliente
+      description: Elimina el detalle de los datos de un cliente de FLIT.
+      tags:
+      - Company Parameters
+      security: []
+      parameters:
+      - description: Id del NIT del cliente
+        in: path
+        name: id
+        required: true
+        schema:
+          $ref: '#/components/schemas/Identity'
+        example: texto
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyParametersDto'
+              example:
+                companyNit: texto
+                companyName: texto
+                companyAddress: texto
+                companyPhone: texto
+                companyPhoneExtension: texto
+                companyEmail: texto
+                companyWebsite: texto
+                status: true
+                sellerHasMobileSignature: true
+                sellerHasSignatureOnScreen: true
+                sellerHasSignatureForPad: true
+                sellerHasPrefilledSignature: true
+                sellerHasUnicusValidation: true
+                buyerHasMobileSignature: true
+                buyerHasSignatureOnScreen: true
+                buyerHasSignatureByPad: true
+                buyerHasPrefilledSignature: true
+                buyerHasUnicusValidation: true
+                ownerHasMobileSignature: true
+                ownerHasSignatureOnScreen: true
+                ownerHasSignatureByPad: true
+                ownerHasPrefilledSignature: true
+                ownerHasUnicusValidation: true
+                transferRequiresAttachedSellerIdField: 1
+                transferRequiresAttachedBuyerIdField: 1
+                transferRequiresPriorityField: 1
+                transferRequiresCardSendField: 1
+                registrationRequiresAttachedOwnerIdField: 1
+                registrationRequiresPriorityField: 1
+                registrationRequiresCardSendField: 1
+                registrationRequiresAttachedCepdField: 1
+                transferAllowsOnlyOwnVehicles: true
+                registrationAllowsOnlyOwnVehicles: true
+                documentType: texto
+                validatesContractsAndPowers: true
+                allowsContravenerChange: true
+                allowsContravenerConsultation: true
+                hasInfractionModule: true
+                hasResolutionModule: true
+                hasRightPetitionModule: true
+                transferAllowsSelectProcessorBuyer: true
+                transferAllowsSelectProcessorSeller: true
+                registrationAllowsSelectProcessorOwner: true
+                hasOtherserviceModule: true
+                notifyEmailBySmtpApi: 1
+                hasLogo: true
+                idAttachedLogo: texto
+                urlAttachedLogo: texto
+                hasIntegrationTransactionModule: true
+                createdAt: '2025-01-31T15:00:00Z'
+                updatedAt: '2025-01-31T15:00:00Z'
+                id: texto
+        '400':
+          description: Solicitud incorrecta. El servidor no puede o no procesará la solicitud debido a algo que se percibe
+            como un error del cliente (por ejemplo, sintaxis de solicitud mal formada, enrutamiento de solicitud no válido
+            o enrutamiento de consulta engañoso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultErrorResponse'
+              example:
+                errors:
+                - texto
+        '404':
+          description: No encontrado. El servidor no pudo encontrar el recurso solicitado. Este código se envía con mayor
+            frecuencia cuando el servidor web no encuentra una página web u otro recurso solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              example:
+                message: Requested entity with id 99 not found
+      x-internal: true
+  /api/v1/company-parameters/findByCompanyNit/{companyNit}:
+    get:
+      operationId: FindByCompanyNit
+      summary: Retorna los datos de un cliente
+      description: Retorna el detalle de los datos de un cliente de FLIT.
+      tags:
+      - Company Parameters
+      security: []
+      parameters:
+      - description: nit del cliente
+        in: path
+        name: companyNit
+        required: true
+        schema:
+          type: string
+          examples:
+          - texto
+        example: '8908787'
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - allOf:
+                  - $ref: '#/components/schemas/CompanyParametersDto'
+                - type: 'null'
+                examples:
+                - companyNit: texto
+                  companyName: texto
+                  companyAddress: texto
+                  companyPhone: texto
+                  companyPhoneExtension: texto
+                  companyEmail: texto
+                  companyWebsite: texto
+                  status: true
+                  sellerHasMobileSignature: true
+                  sellerHasSignatureOnScreen: true
+                  sellerHasSignatureForPad: true
+                  sellerHasPrefilledSignature: true
+                  sellerHasUnicusValidation: true
+                  buyerHasMobileSignature: true
+                  buyerHasSignatureOnScreen: true
+                  buyerHasSignatureByPad: true
+                  buyerHasPrefilledSignature: true
+                  buyerHasUnicusValidation: true
+                  ownerHasMobileSignature: true
+                  ownerHasSignatureOnScreen: true
+                  ownerHasSignatureByPad: true
+                  ownerHasPrefilledSignature: true
+                  ownerHasUnicusValidation: true
+                  transferRequiresAttachedSellerIdField: 1
+                  transferRequiresAttachedBuyerIdField: 1
+                  transferRequiresPriorityField: 1
+                  transferRequiresCardSendField: 1
+                  registrationRequiresAttachedOwnerIdField: 1
+                  registrationRequiresPriorityField: 1
+                  registrationRequiresCardSendField: 1
+                  registrationRequiresAttachedCepdField: 1
+                  transferAllowsOnlyOwnVehicles: true
+                  registrationAllowsOnlyOwnVehicles: true
+                  documentType: texto
+                  validatesContractsAndPowers: true
+                  allowsContravenerChange: true
+                  allowsContravenerConsultation: true
+                  hasInfractionModule: true
+                  hasResolutionModule: true
+                  hasRightPetitionModule: true
+                  transferAllowsSelectProcessorBuyer: true
+                  transferAllowsSelectProcessorSeller: true
+                  registrationAllowsSelectProcessorOwner: true
+                  hasOtherserviceModule: true
+                  notifyEmailBySmtpApi: 1
+                  hasLogo: true
+                  idAttachedLogo: texto
+                  urlAttachedLogo: texto
+                  hasIntegrationTransactionModule: true
+                  createdAt: '2025-01-31T15:00:00Z'
+                  updatedAt: '2025-01-31T15:00:00Z'
+                  id: texto
+              example:
+                companyNit: texto
+                companyName: texto
+                companyAddress: texto
+                companyPhone: texto
+                companyPhoneExtension: texto
+                companyEmail: texto
+                companyWebsite: texto
+                status: true
+                sellerHasMobileSignature: true
+                sellerHasSignatureOnScreen: true
+                sellerHasSignatureForPad: true
+                sellerHasPrefilledSignature: true
+                sellerHasUnicusValidation: true
+                buyerHasMobileSignature: true
+                buyerHasSignatureOnScreen: true
+                buyerHasSignatureByPad: true
+                buyerHasPrefilledSignature: true
+                buyerHasUnicusValidation: true
+                ownerHasMobileSignature: true
+                ownerHasSignatureOnScreen: true
+                ownerHasSignatureByPad: true
+                ownerHasPrefilledSignature: true
+                ownerHasUnicusValidation: true
+                transferRequiresAttachedSellerIdField: 1
+                transferRequiresAttachedBuyerIdField: 1
+                transferRequiresPriorityField: 1
+                transferRequiresCardSendField: 1
+                registrationRequiresAttachedOwnerIdField: 1
+                registrationRequiresPriorityField: 1
+                registrationRequiresCardSendField: 1
+                registrationRequiresAttachedCepdField: 1
+                transferAllowsOnlyOwnVehicles: true
+                registrationAllowsOnlyOwnVehicles: true
+                documentType: texto
+                validatesContractsAndPowers: true
+                allowsContravenerChange: true
+                allowsContravenerConsultation: true
+                hasInfractionModule: true
+                hasResolutionModule: true
+                hasRightPetitionModule: true
+                transferAllowsSelectProcessorBuyer: true
+                transferAllowsSelectProcessorSeller: true
+                registrationAllowsSelectProcessorOwner: true
+                hasOtherserviceModule: true
+                notifyEmailBySmtpApi: 1
+                hasLogo: true
+                idAttachedLogo: texto
+                urlAttachedLogo: texto
+                hasIntegrationTransactionModule: true
+                createdAt: '2025-01-31T15:00:00Z'
+                updatedAt: '2025-01-31T15:00:00Z'
+                id: texto
+        '400':
+          description: Solicitud incorrecta. El servidor no puede o no procesará la solicitud debido a algo que se percibe
+            como un error del cliente (por ejemplo, sintaxis de solicitud mal formada, enrutamiento de solicitud no válido
+            o enrutamiento de consulta engañoso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultErrorResponse'
+              example:
+                errors:
+                - texto
+        '404':
+          description: No encontrado. El servidor no pudo encontrar el recurso solicitado. Este código se envía con mayor
+            frecuencia cuando el servidor web no encuentra una página web u otro recurso solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              example:
+                message: Requested entity with id 99 not found
+      x-internal: true
+  /api/v1/auth/login:
+    post:
+      operationId: LoginService
+      summary: Servicio de autenticacion para el uso de servicios
+      description: |-
+        Servicio de autenticacion para el uso de servicios.
+
+        Authenticate user and return token
+      tags:
+      - Controlador para la autenticación de usuarios en la integración de terceros
+      security: []
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginServiceRequestDto'
+            example:
+              username: usuario@ejemplo.com
+              password: $CLAVE
+              companyManagerId: 1
+        description: Cuerpo de la petición según la hoja «1 - Auth» del Excel.
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginServiceRespuesta'
+              example:
+                token: $TOKEN
+        '400':
+          description: Solicitud incorrecta. El servidor no puede o no procesará la solicitud debido a algo que se percibe
+            como un error del cliente (por ejemplo, sintaxis de solicitud mal formada, enrutamiento de solicitud no válido
+            o enrutamiento de consulta engañoso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultErrorResponse'
+              example:
+                errors:
+                - texto
+        '404':
+          description: No encontrado. El servidor no pudo encontrar el recurso solicitado. Este código se envía con mayor
+            frecuencia cuando el servidor web no encuentra una página web u otro recurso solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              examples:
+                excel-1:
+                  summary: Ejemplo de error del Excel (saneado)
+                  value:
+                    message: Requested entity with id 99 not found
+        '401':
+          description: No autorizado. Se requiere autenticación para acceder al recurso solicitado. El cliente debe autenticarse
+            para obtener acceso. A diferencia de 403 Forbidden, este código indica que la autenticación es posible, pero ha
+            fallado o aún no se ha proporcionado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              examples:
+                excel-1:
+                  summary: Ejemplo de error del Excel (saneado)
+                  value:
+                    message: Incorrect username or password.
+        '500':
+          description: Error interno del servidor. El servidor encontró una condición inesperada que le impidió cumplir con
+            la solicitud. Es un error genérico que indica que algo salió mal en el servidor, pero el servidor no puede ser
+            más específico sobre el problema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultResponse'
+              examples:
+                excel-1:
+                  summary: Ejemplo de error del Excel (saneado)
+                  value:
+                    message: An unexpected error occurred.
+      x-flit-hoja-excel: 1 - Auth
+      x-public: true
+      x-flit-sin-autenticacion: true
+components:
+  schemas:
+    DefaultResponse:
+      properties:
+        message:
+          type: string
+          examples:
+          - Requested entity with id 99 not found
+      required:
+      - message
+      type: object
+      additionalProperties: false
+      description: Esquema `DefaultResponse` del código (tsoa).
+      examples:
+      - message: Requested entity with id 99 not found
+    Identity:
+      anyOf:
+      - type: string
+      - type: number
+        format: double
+      description: Esquema `Identity` del código (tsoa).
+      examples:
+      - texto
+    CompanyParametersDto:
+      properties:
+        companyNit:
+          type: string
+          examples:
+          - texto
+        companyName:
+          type: string
+          examples:
+          - texto
+        companyAddress:
+          type: string
+          examples:
+          - texto
+        companyPhone:
+          type: string
+          examples:
+          - texto
+        companyPhoneExtension:
+          type: string
+          examples:
+          - texto
+        companyEmail:
+          type: string
+          examples:
+          - texto
+        companyWebsite:
+          type: string
+          examples:
+          - texto
+        status:
+          type: boolean
+          examples:
+          - true
+        sellerHasMobileSignature:
+          type: boolean
+          examples:
+          - true
+        sellerHasSignatureOnScreen:
+          type: boolean
+          examples:
+          - true
+        sellerHasSignatureForPad:
+          type: boolean
+          examples:
+          - true
+        sellerHasPrefilledSignature:
+          type: boolean
+          examples:
+          - true
+        sellerHasUnicusValidation:
+          type: boolean
+          examples:
+          - true
+        buyerHasMobileSignature:
+          type: boolean
+          examples:
+          - true
+        buyerHasSignatureOnScreen:
+          type: boolean
+          examples:
+          - true
+        buyerHasSignatureByPad:
+          type: boolean
+          examples:
+          - true
+        buyerHasPrefilledSignature:
+          type: boolean
+          examples:
+          - true
+        buyerHasUnicusValidation:
+          type: boolean
+          examples:
+          - true
+        ownerHasMobileSignature:
+          type: boolean
+          examples:
+          - true
+        ownerHasSignatureOnScreen:
+          type: boolean
+          examples:
+          - true
+        ownerHasSignatureByPad:
+          type: boolean
+          examples:
+          - true
+        ownerHasPrefilledSignature:
+          type: boolean
+          examples:
+          - true
+        ownerHasUnicusValidation:
+          type: boolean
+          examples:
+          - true
+        transferRequiresAttachedSellerIdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferRequiresAttachedBuyerIdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferRequiresPriorityField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferRequiresCardSendField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresAttachedOwnerIdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresPriorityField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresCardSendField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresAttachedCepdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferAllowsOnlyOwnVehicles:
+          type: boolean
+          examples:
+          - true
+        registrationAllowsOnlyOwnVehicles:
+          type: boolean
+          examples:
+          - true
+        documentType:
+          type: string
+          examples:
+          - texto
+        validatesContractsAndPowers:
+          type: boolean
+          examples:
+          - true
+        allowsContravenerChange:
+          type: boolean
+          examples:
+          - true
+        allowsContravenerConsultation:
+          type: boolean
+          examples:
+          - true
+        hasInfractionModule:
+          type: boolean
+          examples:
+          - true
+        hasResolutionModule:
+          type: boolean
+          examples:
+          - true
+        hasRightPetitionModule:
+          type: boolean
+          examples:
+          - true
+        transferAllowsSelectProcessorBuyer:
+          type: boolean
+          examples:
+          - true
+        transferAllowsSelectProcessorSeller:
+          type: boolean
+          examples:
+          - true
+        registrationAllowsSelectProcessorOwner:
+          type: boolean
+          examples:
+          - true
+        hasOtherserviceModule:
+          type: boolean
+          examples:
+          - true
+        notifyEmailBySmtpApi:
+          type: number
+          format: double
+          examples:
+          - 1
+        hasLogo:
+          type: boolean
+          examples:
+          - true
+        idAttachedLogo:
+          type: string
+          examples:
+          - texto
+        urlAttachedLogo:
+          type: string
+          examples:
+          - texto
+        hasIntegrationTransactionModule:
+          type: boolean
+          examples:
+          - true
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+          - '2025-01-31T15:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          examples:
+          - '2025-01-31T15:00:00Z'
+        id:
+          $ref: '#/components/schemas/Identity'
+      type: object
+      additionalProperties: false
+      description: Esquema `CompanyParametersDto` del código (tsoa).
+      examples:
+      - companyNit: texto
+        companyName: texto
+        companyAddress: texto
+        companyPhone: texto
+        companyPhoneExtension: texto
+        companyEmail: texto
+        companyWebsite: texto
+        status: true
+        sellerHasMobileSignature: true
+        sellerHasSignatureOnScreen: true
+        sellerHasSignatureForPad: true
+        sellerHasPrefilledSignature: true
+        sellerHasUnicusValidation: true
+        buyerHasMobileSignature: true
+        buyerHasSignatureOnScreen: true
+        buyerHasSignatureByPad: true
+        buyerHasPrefilledSignature: true
+        buyerHasUnicusValidation: true
+        ownerHasMobileSignature: true
+        ownerHasSignatureOnScreen: true
+        ownerHasSignatureByPad: true
+        ownerHasPrefilledSignature: true
+        ownerHasUnicusValidation: true
+        transferRequiresAttachedSellerIdField: 1
+        transferRequiresAttachedBuyerIdField: 1
+        transferRequiresPriorityField: 1
+        transferRequiresCardSendField: 1
+        registrationRequiresAttachedOwnerIdField: 1
+        registrationRequiresPriorityField: 1
+        registrationRequiresCardSendField: 1
+        registrationRequiresAttachedCepdField: 1
+        transferAllowsOnlyOwnVehicles: true
+        registrationAllowsOnlyOwnVehicles: true
+        documentType: texto
+        validatesContractsAndPowers: true
+        allowsContravenerChange: true
+        allowsContravenerConsultation: true
+        hasInfractionModule: true
+        hasResolutionModule: true
+        hasRightPetitionModule: true
+        transferAllowsSelectProcessorBuyer: true
+        transferAllowsSelectProcessorSeller: true
+        registrationAllowsSelectProcessorOwner: true
+        hasOtherserviceModule: true
+        notifyEmailBySmtpApi: 1
+        hasLogo: true
+        idAttachedLogo: texto
+        urlAttachedLogo: texto
+        hasIntegrationTransactionModule: true
+        createdAt: '2025-01-31T15:00:00Z'
+        updatedAt: '2025-01-31T15:00:00Z'
+        id: texto
+    PaginationMetaContract:
+      properties:
+        itemsPerPage:
+          type: number
+          format: double
+          examples:
+          - 1
+        totalItems:
+          type: number
+          format: double
+          examples:
+          - 1
+        currentPage:
+          type: number
+          format: double
+          examples:
+          - 1
+        totalPages:
+          type: number
+          format: double
+          examples:
+          - 1
+        sortBy:
+          items:
+            items:
+              type: string
+              examples:
+              - texto
+            type: array
+            examples:
+            - - texto
+          type: array
+          examples:
+          - - - texto
+        filter:
+          properties: {}
+          additionalProperties:
+            anyOf:
+            - type: string
+            - items:
+                type: string
+              type: array
+            examples:
+            - texto
+          type: object
+          examples:
+          - {}
+      required:
+      - itemsPerPage
+      - totalItems
+      - currentPage
+      - totalPages
+      type: object
+      additionalProperties: false
+      description: Esquema `PaginationMetaContract` del código (tsoa).
+      examples:
+      - itemsPerPage: 1
+        totalItems: 1
+        currentPage: 1
+        totalPages: 1
+        sortBy:
+        - - texto
+        filter: {}
+    PaginationLinkContract:
+      properties:
+        first:
+          type: string
+          examples:
+          - texto
+        previous:
+          type: string
+          examples:
+          - texto
+        current:
+          type: string
+          examples:
+          - texto
+        next:
+          type: string
+          examples:
+          - texto
+        last:
+          type: string
+          examples:
+          - texto
+      required:
+      - current
+      type: object
+      additionalProperties: false
+      description: Esquema `PaginationLinkContract` del código (tsoa).
+      examples:
+      - first: texto
+        previous: texto
+        current: texto
+        next: texto
+        last: texto
+    PaginationResultModel_CompanyParametersDto-Array_:
+      properties:
+        meta:
+          $ref: '#/components/schemas/PaginationMetaContract'
+        links:
+          $ref: '#/components/schemas/PaginationLinkContract'
+        data:
+          items:
+            $ref: '#/components/schemas/CompanyParametersDto'
+          type: array
+          examples:
+          - - companyNit: texto
+              companyName: texto
+              companyAddress: texto
+              companyPhone: texto
+              companyPhoneExtension: texto
+              companyEmail: texto
+              companyWebsite: texto
+              status: true
+              sellerHasMobileSignature: true
+              sellerHasSignatureOnScreen: true
+              sellerHasSignatureForPad: true
+              sellerHasPrefilledSignature: true
+              sellerHasUnicusValidation: true
+              buyerHasMobileSignature: true
+              buyerHasSignatureOnScreen: true
+              buyerHasSignatureByPad: true
+              buyerHasPrefilledSignature: true
+              buyerHasUnicusValidation: true
+              ownerHasMobileSignature: true
+              ownerHasSignatureOnScreen: true
+              ownerHasSignatureByPad: true
+              ownerHasPrefilledSignature: true
+              ownerHasUnicusValidation: true
+              transferRequiresAttachedSellerIdField: 1
+              transferRequiresAttachedBuyerIdField: 1
+              transferRequiresPriorityField: 1
+              transferRequiresCardSendField: 1
+              registrationRequiresAttachedOwnerIdField: 1
+              registrationRequiresPriorityField: 1
+              registrationRequiresCardSendField: 1
+              registrationRequiresAttachedCepdField: 1
+              transferAllowsOnlyOwnVehicles: true
+              registrationAllowsOnlyOwnVehicles: true
+              documentType: texto
+              validatesContractsAndPowers: true
+              allowsContravenerChange: true
+              allowsContravenerConsultation: true
+              hasInfractionModule: true
+              hasResolutionModule: true
+              hasRightPetitionModule: true
+              transferAllowsSelectProcessorBuyer: true
+              transferAllowsSelectProcessorSeller: true
+              registrationAllowsSelectProcessorOwner: true
+              hasOtherserviceModule: true
+              notifyEmailBySmtpApi: 1
+              hasLogo: true
+              idAttachedLogo: texto
+              urlAttachedLogo: texto
+              hasIntegrationTransactionModule: true
+              createdAt: '2025-01-31T15:00:00Z'
+              updatedAt: '2025-01-31T15:00:00Z'
+              id: texto
+      required:
+      - data
+      type: object
+      additionalProperties: false
+      description: Esquema `PaginationResultModel_CompanyParametersDto-Array_` del código (tsoa).
+      examples:
+      - meta:
+          itemsPerPage: 1
+          totalItems: 1
+          currentPage: 1
+          totalPages: 1
+          sortBy:
+          - - texto
+          filter: {}
+        links:
+          first: texto
+          previous: texto
+          current: texto
+          next: texto
+          last: texto
+        data:
+        - companyNit: texto
+          companyName: texto
+          companyAddress: texto
+          companyPhone: texto
+          companyPhoneExtension: texto
+          companyEmail: texto
+          companyWebsite: texto
+          status: true
+          sellerHasMobileSignature: true
+          sellerHasSignatureOnScreen: true
+          sellerHasSignatureForPad: true
+          sellerHasPrefilledSignature: true
+          sellerHasUnicusValidation: true
+          buyerHasMobileSignature: true
+          buyerHasSignatureOnScreen: true
+          buyerHasSignatureByPad: true
+          buyerHasPrefilledSignature: true
+          buyerHasUnicusValidation: true
+          ownerHasMobileSignature: true
+          ownerHasSignatureOnScreen: true
+          ownerHasSignatureByPad: true
+          ownerHasPrefilledSignature: true
+          ownerHasUnicusValidation: true
+          transferRequiresAttachedSellerIdField: 1
+          transferRequiresAttachedBuyerIdField: 1
+          transferRequiresPriorityField: 1
+          transferRequiresCardSendField: 1
+          registrationRequiresAttachedOwnerIdField: 1
+          registrationRequiresPriorityField: 1
+          registrationRequiresCardSendField: 1
+          registrationRequiresAttachedCepdField: 1
+          transferAllowsOnlyOwnVehicles: true
+          registrationAllowsOnlyOwnVehicles: true
+          documentType: texto
+          validatesContractsAndPowers: true
+          allowsContravenerChange: true
+          allowsContravenerConsultation: true
+          hasInfractionModule: true
+          hasResolutionModule: true
+          hasRightPetitionModule: true
+          transferAllowsSelectProcessorBuyer: true
+          transferAllowsSelectProcessorSeller: true
+          registrationAllowsSelectProcessorOwner: true
+          hasOtherserviceModule: true
+          notifyEmailBySmtpApi: 1
+          hasLogo: true
+          idAttachedLogo: texto
+          urlAttachedLogo: texto
+          hasIntegrationTransactionModule: true
+          createdAt: '2025-01-31T15:00:00Z'
+          updatedAt: '2025-01-31T15:00:00Z'
+          id: texto
+    DefaultErrorResponse:
+      properties:
+        errors:
+          items: {}
+          type: array
+          examples:
+          - - texto
+      required:
+      - errors
+      type: object
+      additionalProperties: false
+      description: Esquema `DefaultErrorResponse` del código (tsoa).
+      examples:
+      - errors:
+        - texto
+    CompanyParametersRequestDto:
+      properties:
+        companyNit:
+          type: string
+          examples:
+          - texto
+        companyName:
+          type: string
+          examples:
+          - texto
+        companyAddress:
+          type: string
+          examples:
+          - texto
+        companyPhone:
+          type: string
+          examples:
+          - texto
+        companyPhoneExtension:
+          type: string
+          examples:
+          - texto
+        companyEmail:
+          type: string
+          examples:
+          - texto
+        companyWebsite:
+          type: string
+          examples:
+          - texto
+        status:
+          type: boolean
+          examples:
+          - true
+        sellerHasMobileSignature:
+          type: boolean
+          examples:
+          - true
+        sellerHasSignatureOnScreen:
+          type: boolean
+          examples:
+          - true
+        sellerHasSignatureForPad:
+          type: boolean
+          examples:
+          - true
+        sellerHasPrefilledSignature:
+          type: boolean
+          examples:
+          - true
+        sellerHasUnicusValidation:
+          type: boolean
+          examples:
+          - true
+        buyerHasMobileSignature:
+          type: boolean
+          examples:
+          - true
+        buyerHasSignatureOnScreen:
+          type: boolean
+          examples:
+          - true
+        buyerHasSignatureByPad:
+          type: boolean
+          examples:
+          - true
+        buyerHasPrefilledSignature:
+          type: boolean
+          examples:
+          - true
+        buyerHasUnicusValidation:
+          type: boolean
+          examples:
+          - true
+        ownerHasMobileSignature:
+          type: boolean
+          examples:
+          - true
+        ownerHasSignatureOnScreen:
+          type: boolean
+          examples:
+          - true
+        ownerHasSignatureByPad:
+          type: boolean
+          examples:
+          - true
+        ownerHasPrefilledSignature:
+          type: boolean
+          examples:
+          - true
+        ownerHasUnicusValidation:
+          type: boolean
+          examples:
+          - true
+        transferRequiresAttachedSellerIdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferRequiresAttachedBuyerIdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferRequiresPriorityField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferRequiresCardSendField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresAttachedOwnerIdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresPriorityField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresCardSendField:
+          type: number
+          format: double
+          examples:
+          - 1
+        registrationRequiresAttachedCepdField:
+          type: number
+          format: double
+          examples:
+          - 1
+        transferAllowsOnlyOwnVehicles:
+          type: boolean
+          examples:
+          - true
+        registrationAllowsOnlyOwnVehicles:
+          type: boolean
+          examples:
+          - true
+        documentType:
+          type: string
+          examples:
+          - texto
+        validatesContractsAndPowers:
+          type: boolean
+          examples:
+          - true
+        allowsContravenerChange:
+          type: boolean
+          examples:
+          - true
+        allowsContravenerConsultation:
+          type: boolean
+          examples:
+          - true
+        hasInfractionModule:
+          type: boolean
+          examples:
+          - true
+        hasResolutionModule:
+          type: boolean
+          examples:
+          - true
+        hasRightPetitionModule:
+          type: boolean
+          examples:
+          - true
+        transferAllowsSelectProcessorBuyer:
+          type: boolean
+          examples:
+          - true
+        transferAllowsSelectProcessorSeller:
+          type: boolean
+          examples:
+          - true
+        registrationAllowsSelectProcessorOwner:
+          type: boolean
+          examples:
+          - true
+        hasOtherserviceModule:
+          type: boolean
+          examples:
+          - true
+        notifyEmailBySmtpApi:
+          type: number
+          format: double
+          examples:
+          - 1
+        hasLogo:
+          type: boolean
+          examples:
+          - true
+        idAttachedLogo:
+          type: string
+          examples:
+          - texto
+        urlAttachedLogo:
+          type: string
+          examples:
+          - texto
+        hasIntegrationTransactionModule:
+          type: boolean
+          examples:
+          - true
+      type: object
+      additionalProperties: false
+      description: Esquema `CompanyParametersRequestDto` del código (tsoa).
+      examples:
+      - companyNit: texto
+        companyName: texto
+        companyAddress: texto
+        companyPhone: texto
+        companyPhoneExtension: texto
+        companyEmail: texto
+        companyWebsite: texto
+        status: true
+        sellerHasMobileSignature: true
+        sellerHasSignatureOnScreen: true
+        sellerHasSignatureForPad: true
+        sellerHasPrefilledSignature: true
+        sellerHasUnicusValidation: true
+        buyerHasMobileSignature: true
+        buyerHasSignatureOnScreen: true
+        buyerHasSignatureByPad: true
+        buyerHasPrefilledSignature: true
+        buyerHasUnicusValidation: true
+        ownerHasMobileSignature: true
+        ownerHasSignatureOnScreen: true
+        ownerHasSignatureByPad: true
+        ownerHasPrefilledSignature: true
+        ownerHasUnicusValidation: true
+        transferRequiresAttachedSellerIdField: 1
+        transferRequiresAttachedBuyerIdField: 1
+        transferRequiresPriorityField: 1
+        transferRequiresCardSendField: 1
+        registrationRequiresAttachedOwnerIdField: 1
+        registrationRequiresPriorityField: 1
+        registrationRequiresCardSendField: 1
+        registrationRequiresAttachedCepdField: 1
+        transferAllowsOnlyOwnVehicles: true
+        registrationAllowsOnlyOwnVehicles: true
+        documentType: texto
+        validatesContractsAndPowers: true
+        allowsContravenerChange: true
+        allowsContravenerConsultation: true
+        hasInfractionModule: true
+        hasResolutionModule: true
+        hasRightPetitionModule: true
+        transferAllowsSelectProcessorBuyer: true
+        transferAllowsSelectProcessorSeller: true
+        registrationAllowsSelectProcessorOwner: true
+        hasOtherserviceModule: true
+        notifyEmailBySmtpApi: 1
+        hasLogo: true
+        idAttachedLogo: texto
+        urlAttachedLogo: texto
+        hasIntegrationTransactionModule: true
+    LoginServiceRequestDto:
+      properties:
+        username:
+          type: string
+          description: Email asociado a cuenta del gestor externo
+          examples:
+          - usuario@ejemplo.com
+        password:
+          type: string
+          description: contraseña de autenticación
+          examples:
+          - $CLAVE
+        companyManagerId:
+          type: number
+          format: double
+          examples:
+          - 1
+      required:
+      - username
+      - password
+      - companyManagerId
+      type: object
+      additionalProperties: false
+      description: Esquema `LoginServiceRequestDto` del código (tsoa).
+      examples:
+      - username: usuario@ejemplo.com
+        password: $CLAVE
+        companyManagerId: 1
+    LoginServiceRespuesta:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Clave de seguridad que sera solicitada para todas las operaciones.
+          examples:
+          - $TOKEN
+      required:
+      - token
+      description: Esquema `LoginServiceRespuesta` del código (tsoa).
+      examples:
+      - token: $TOKEN
+  securitySchemes: {}

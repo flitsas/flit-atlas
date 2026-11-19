@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- CA1707: los nombres de las pruebas son frases en español separadas por guion bajo. -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <!-- HU 4.5: RabbitMQ real para la prueba de punta a punta de las exportaciones. -->
+    <PackageReference Include="Testcontainers.RabbitMq" />
+    <PackageReference Include="Testcontainers.Redis" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Flit.Atlas.Api\Flit.Atlas.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- El generador del .xlsx ficticio de la rotación (HU 2.7) es el mismo de las pruebas del módulo. -->
+    <Compile Include="..\Flit.Atlas.Modulos.Soporte.Tests\ExcelFicticio.cs" Link="Soporte\ExcelFicticio.cs" />
+    <!-- Graph (calendario) y el flujo de Teams simulados de la HU 2.10, los mismos de las pruebas del módulo. -->
+    <Compile Include="..\Flit.Atlas.Modulos.Soporte.Tests\M365Simulado.cs" Link="Soporte\M365Simulado.cs" />
+    <!-- GitHub Actions (OIDC y JWKS) simulado y los specs ficticios de la HU 3.1 y 3.2, los mismos de las pruebas de
+         Plataforma y del módulo. -->
+    <Compile Include="..\Flit.Atlas.Plataforma.Tests\GitHubActionsSimulado.cs" Link="Contratos\GitHubActionsSimulado.cs" />
+    <Compile Include="..\Flit.Atlas.Modulos.Contratos.Tests\SpecsDeEjemplo.cs" Link="Contratos\SpecsDeEjemplo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Documento de responsables ficticio (personas «Persona Demo»), el mismo de las pruebas del módulo. -->
+    <None Include="..\Flit.Atlas.Modulos.Equipo.Tests\Datos\responsables-ficticio.md" Link="Datos\responsables-ficticio.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

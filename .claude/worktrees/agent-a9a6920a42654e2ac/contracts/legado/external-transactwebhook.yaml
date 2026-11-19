@@ -1,0 +1,234 @@
+openapi: 3.1.0
+info:
+  title: API externa ICT · Webhooks (BackApiExternalTransactWebHook)
+  version: 1.0.0
+  description: |-
+    Notificaciones que FLIT envía a la URL del gestor cuando cambia el estado de un trámite o de una placa.
+
+    Fuente: swagger de tsoa del repo y hojas «4 - WebHookTransaction», «7 - WebHookPlate» del Excel de contratos ICT.
+
+    Archivo generado con `python -m atlas_docs.legado` (ATLAS-ADR-0037); no se edita a mano. Las operaciones con `x-public` son las que se pueden compartir con clientes; las `x-internal` las quita la poda de Atlas.
+  contact:
+    name: FLIT S.A.S.
+  x-flit-visibilidad: compartible
+  x-flit-fuente:
+    repo: flitsas/BackApiExternalTransactWebHook
+    swagger: swagger.json
+    excel: Contratos_Integraciones_31Jul2025.xlsx
+    hojas:
+    - 4 - WebHookTransaction
+    - 7 - WebHookPlate
+  x-flit-changelog: []
+  x-flit-ambientes:
+    dev: por confirmar
+    qa: por confirmar
+    pdn: por confirmar
+tags:
+- name: Health
+  description: Este controlador implementa el estado de salud del servicio
+- name: Webhooks
+  description: Notificaciones que FLIT envía a la URL que registró el gestor.
+paths:
+  /api/v1/health:
+    get:
+      operationId: HealthCheck
+      summary: Verifica el estado de salud del servicio.
+      description: |-
+        Verifica el estado de salud del servicio.
+
+        Este endpoint se utiliza para comprobar si el servicio está funcionando correctamente.
+      tags:
+      - Health
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Respuesta exitosa.
+      x-internal: true
+  /api/v1/ping:
+    get:
+      operationId: Ping
+      summary: Realiza una prueba de ping en el servicio.
+      description: |-
+        Realiza una prueba de ping en el servicio.
+
+        Utiliza este endpoint para realizar una prueba de ping en el servicio y verificar su disponibilidad.
+      tags:
+      - Health
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: Respuesta exitosa.
+      x-internal: true
+webhooks:
+  estadoTramite:
+    post:
+      operationId: notificarEstadoTramite
+      summary: Notificación «WebHookTransaction» que FLIT envía al gestor
+      description: 'FLIT hace `POST` a la URL que el gestor registró (`url_web_hook` / `UrlWebHook`) cuando cambia el estado.
+        Fuente: hoja «4 - WebHookTransaction» del Excel. [por verificar] qué token envía FLIT en la cabecera `Authorization`
+        de la notificación (el Excel solo dice `Bearer`).'
+      tags:
+      - Webhooks
+      security:
+      - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificacionEstadoTramite'
+            example:
+              transactionFlit: 1290
+              managerIdTransaction: GESTOR-0001
+              status: 4
+              statusDescription: En validación
+              statusMessage: Errores en el proceso de validación
+              statusObservation: El documento del comprador está vacío
+        description: Cuerpo de la petición según la hoja «4 - WebHookTransaction» del Excel.
+      responses:
+        '200':
+          description: El gestor recibió la notificación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaNotificacion'
+              example:
+                Status: 1
+                Message: Registered Successfully
+      x-flit-hoja-excel: 4 - WebHookTransaction
+      x-public: true
+  estadoPlaca:
+    post:
+      operationId: notificarEstadoPlaca
+      summary: Notificación «WebHookPlate» que FLIT envía al gestor
+      description: 'FLIT hace `POST` a la URL que el gestor registró (`url_web_hook` / `UrlWebHook`) cuando cambia el estado.
+        Fuente: hoja «7 - WebHookPlate» del Excel. [por verificar] qué token envía FLIT en la cabecera `Authorization` de
+        la notificación (el Excel solo dice `Bearer`).'
+      tags:
+      - Webhooks
+      security:
+      - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificacionEstadoPlaca'
+            example:
+              plate: ABC123
+              transactionFlit: 123
+        description: Cuerpo de la petición según la hoja «7 - WebHookPlate» del Excel.
+      responses:
+        '200':
+          description: El gestor recibió la notificación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaNotificacion'
+              example:
+                Status: 1
+                Message: Registered Successfully
+      x-flit-hoja-excel: 7 - WebHookPlate
+      x-flit-pendiente: depende de SearchPlate, que no tiene servicio verificado; queda interno hasta que el líder lo confirme
+      x-internal: true
+components:
+  schemas:
+    NotificacionEstadoTramite:
+      type: object
+      properties:
+        transactionFlit:
+          type: number
+          description: Id del tramite asociado entregado en la creacion
+          examples:
+          - 1290
+        managerIdTransaction:
+          type: string
+          maxLength: 20
+          description: Id Propio o interno de la herramienta del Gestor
+          examples:
+          - GESTOR-0001
+        status:
+          type: number
+          description: Código del estado del trámite
+          examples:
+          - 4
+        statusDescription:
+          type: string
+          maxLength: 250
+          description: Nombre o descripción del estado del trámite
+          examples:
+          - En validación
+        statusMessage:
+          type: string
+          maxLength: 250
+          description: Mensaje general del estado(es opcional)
+          examples:
+          - Errores en el proceso de validación
+        statusObservation:
+          type: string
+          maxLength: 1000
+          description: Descripción detalla del estado o novedad(es opcional)
+          examples:
+          - El documento del comprador está vacío
+      required:
+      - transactionFlit
+      description: Esquema `NotificacionEstadoTramite` del código (tsoa).
+      examples:
+      - transactionFlit: 1290
+        managerIdTransaction: GESTOR-0001
+        status: 4
+        statusDescription: En validación
+        statusMessage: Errores en el proceso de validación
+        statusObservation: El documento del comprador está vacío
+    RespuestaNotificacion:
+      type: object
+      properties:
+        Status:
+          description: Estado de proceso de registro de documento(1-Registrado, 2-No Registrado)
+          type: integer
+          examples:
+          - 1
+        Message:
+          maxLength: 250
+          description: Mensaje asociado a la respuesta del estado del registro
+          type: string
+          examples:
+          - Registered Successfully
+      description: Esquema `RespuestaNotificacion` del código (tsoa).
+      examples:
+      - Status: 1
+        Message: Registered Successfully
+    NotificacionEstadoPlaca:
+      type: object
+      properties:
+        plate:
+          type: string
+          maxLength: 6
+          description: Placa asociada al registro
+          examples:
+          - ABC123
+        transactionFlit:
+          type: integer
+          examples:
+          - 123
+        ManagerIdTransaction:
+          type: string
+          maxLength: 20
+          description: Id Propio o interno de la herramienta del Gestor
+          examples:
+          - texto
+      required:
+      - plate
+      description: Esquema `NotificacionEstadoPlaca` del código (tsoa).
+      examples:
+      - plate: ABC123
+        transactionFlit: 123
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Token JWT que entrega `POST /api/v1/auth/login` de `external-auth`; viaja en la cabecera `Authorization:
+        Bearer $TOKEN`. [por verificar] cumplimiento de RFC8725 en el emisor.'

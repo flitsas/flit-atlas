@@ -1,0 +1,88 @@
+openapi: 3.0.3
+info:
+  title: Trámites Demo
+  description: API ficticia de trámites del Organismo Demo, solo para pruebas del diff de atlas-render.
+  version: 2.0.0
+servers:
+  - url: https://api.ejemplo.com/tramites
+paths:
+  /tramites:
+    get:
+      operationId: listarTramites
+      summary: Lista los trámites
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lista de trámites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tramite"
+    post:
+      operationId: crearTramite
+      summary: Crea un trámite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NuevoTramite"
+      responses:
+        "201":
+          description: Trámite creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tramite"
+  /tramites/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: obtenerTramite
+      summary: Obtiene un trámite
+      responses:
+        "200":
+          description: El trámite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tramite"
+        "404":
+          description: No existe
+components:
+  schemas:
+    NuevoTramite:
+      type: object
+      required: [placa, tipo]
+      properties:
+        placa:
+          type: string
+          maxLength: 6
+        tipo:
+          type: string
+          enum: [traspaso, matricula_inicial]
+        observacion:
+          type: string
+    Tramite:
+      type: object
+      required: [id, placa, valor]
+      properties:
+        id:
+          type: string
+        placa:
+          type: string
+        valor:
+          type: integer
+        nombreTitular:
+          type: string

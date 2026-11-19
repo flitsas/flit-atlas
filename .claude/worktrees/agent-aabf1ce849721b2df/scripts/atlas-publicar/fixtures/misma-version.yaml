@@ -1,0 +1,56 @@
+openapi: 3.1.0
+info:
+  title: Trámites Demo
+  description: API ficticia del Organismo Demo para probar el workflow atlas-publicar (HU 3.3).
+  version: 1.0.0
+servers:
+  - url: https://api.ejemplo.com/tramites
+paths:
+  /tramites:
+    get:
+      operationId: listarTramites
+      summary: Lista los trámites
+      responses:
+        "200":
+          description: Lista de trámites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tramite"
+  /tramites/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: obtenerTramite
+      summary: Obtiene un trámite
+      responses:
+        "200":
+          description: El trámite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tramite"
+    delete:
+      operationId: anularTramite
+      summary: Anula un trámite
+      responses:
+        "204":
+          description: Anulado
+components:
+  schemas:
+    Tramite:
+      type: object
+      required: [id, placa]
+      properties:
+        id:
+          type: string
+        placa:
+          type: string
+        observacion:
+          type: string

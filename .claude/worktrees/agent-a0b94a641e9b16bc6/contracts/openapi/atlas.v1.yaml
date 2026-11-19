@@ -1,0 +1,1854 @@
+openapi: '3.1.1'
+info:
+  title: Flit Atlas
+  description: 'API de Flit Atlas para su PWA (BFF, ATLAS-ADR-0008). La sesión viaja en la cookie `__Host-atlas` (HttpOnly, Secure, SameSite=Strict); las peticiones que cambian estado exigen además la cabecera `X-Atlas-Csrf` y el mismo origen. Los clientes que no son el navegador (atlas-cli, MCP, servicios internos) usan tokens Bearer del servidor OpenIddict de Atlas solo en las operaciones que declaran el esquema `tokenAtlas`; el protocolo (`/connect/*`) se describe en `/.well-known/openid-configuration` (ATLAS-ADR-0024). Este archivo se genera desde el código: no se edita a mano.'
+  version: 1.0.0
+servers:
+  - url: https://atlas.flitsas.com
+    description: Producción (pdn)
+  - url: https://qa.atlas.flitsas.com
+    description: Pruebas (qa)
+paths:
+  /api/v1/plataforma/yo:
+    get:
+      tags:
+        - Plataforma
+      summary: Usuario en sesión
+      description: 'Persona, organización, proveedor de ingreso, roles vigentes y permisos efectivos de la sesión actual. Roles y permisos se calculan en el servidor en cada petición con las asignaciones vigentes: un rol vencido o retirado ya no aparece (ATLAS-ADR-0023).'
+      operationId: ObtenerUsuarioActual
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Yo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+  /api/v1/version:
+    get:
+      tags:
+        - Plataforma
+      summary: Versión de atlas-api
+      description: Nombre del servicio y versión del ensamblado desplegado. No requiere sesión.
+      operationId: ObtenerVersion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionApi'
+  /api/v1/identidad/proveedores:
+    get:
+      tags:
+        - Identidad
+      summary: Proveedores de ingreso habilitados
+      description: Qué botones de ingreso muestra la PWA en este ambiente. No requiere sesión.
+      operationId: ListarProveedoresDeIngreso
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProveedoresHabilitados'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+  /api/v1/identidad/entrar/microsoft:
+    get:
+      tags:
+        - Identidad
+      summary: Iniciar sesión con Microsoft
+      description: 'Navegación completa del navegador (no fetch). Redirige a Entra ID (OIDC con PKCE); al volver por /api/auth/callback/azure-ad crea una sesión nueva y lleva a «volver», que solo puede ser una ruta local de la PWA. Con reautenticar=true, Entra vuelve a pedir las credenciales (prompt=login).'
+      operationId: EntrarConMicrosoft
+      parameters:
+        - name: volver
+          in: query
+          description: Ruta local de la PWA a la que se vuelve después del ingreso (por defecto «/»).
+          schema:
+            type: string
+        - name: reautenticar
+          in: query
+          description: true cuando una acción sensible pidió reautenticación (responde 401 con codigo reautenticacion_requerida).
+          schema:
+            type: boolean
+      responses:
+        '302':
+          description: Found
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+  /api/v1/identidad/salir:
+    post:
+      tags:
+        - Identidad
+      summary: Cerrar sesión
+      description: 'Revoca la sesión en el servidor, borra la cookie y envía Clear-Site-Data para que el navegador limpie caché, almacenamiento y cookies del origen. Responde 204 aunque no haya sesión.'
+      operationId: CerrarSesion
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - csrfAtlas: [ ]
+  /api/v1/identidad/token/yo:
+    get:
+      tags:
+        - Identidad
+      summary: Portador del token de acceso
+      description: 'Para clientes que no son el navegador (atlas-cli, MCP, servicios internos): devuelve a quién representa el token Bearer y con qué scopes y audiencias. Exige un token de Atlas con al menos un scope de módulo; la cookie de la PWA no sirve aquí.'
+      operationId: ObtenerPortadorDelToken
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortadorToken'
+        '401':
+          description: 'Falta el token Bearer de Atlas, venció, fue revocado o es para otra audiencia (la cookie de la PWA no sirve aquí).'
+        '403':
+          description: 'El token no tiene ninguno de los scopes que exige la operación (atlas.mcp, atlas.publicar, atlas.widget).'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - tokenAtlas:
+            - atlas.mcp
+            - atlas.publicar
+            - atlas.widget
+  /api/v1/identidad/sesiones:
+    get:
+      tags:
+        - Identidad
+      summary: Dispositivos conectados
+      description: 'Sesiones activas del usuario, de la más reciente a la más antigua; «actual» marca la de esta petición.'
+      operationId: ListarMisSesiones
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SesionDispositivo'
+        '401':
+          description: No hay una sesión activa o venció.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+  '/api/v1/identidad/sesiones/{id}':
+    delete:
+      tags:
+        - Identidad
+      summary: Cerrar una sesión
+      description: Cierra una sesión del propio usuario. Si es la actual equivale a salir (Clear-Site-Data); si es la de otro dispositivo exige un ingreso de menos de 10 minutos (401 con codigo reautenticacion_requerida).
+      operationId: CerrarMiSesion
+      parameters:
+        - name: id
+          in: path
+          description: 'Id de la sesión, tal como lo lista «dispositivos conectados».'
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/identidad/sesiones/cerrar-otras:
+    post:
+      tags:
+        - Identidad
+      summary: Cerrar las demás sesiones
+      description: Cierra todas las sesiones del usuario salvo la actual. Exige reautenticación.
+      operationId: CerrarMisOtrasSesiones
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoCierre'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  '/api/v1/identidad/admin/personas/{personaId}/sesiones/cerrar':
+    post:
+      tags:
+        - Identidad
+      summary: Cerrar todas las sesiones de una persona
+      description: 'Administración: requiere atlas.identidad.administrar. Cambia el sello de seguridad de la persona y revoca todas sus sesiones, sin suspenderla. Exige reautenticación.'
+      operationId: CerrarSesionesDePersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoCierre'
+        '404':
+          description: Not Found
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
+  '/api/v1/identidad/admin/personas/{personaId}/suspender':
+    post:
+      tags:
+        - Identidad
+      summary: Suspender a una persona
+      description: 'Administración: requiere atlas.identidad.administrar. Marca la persona como suspendida, invalida sus sesiones de inmediato y le impide volver a entrar. 409 si intentas suspenderte. Exige reautenticación.'
+      operationId: SuspenderPersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '409':
+          description: Conflict
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
+  '/api/v1/identidad/admin/personas/{personaId}/reactivar':
+    post:
+      tags:
+        - Identidad
+      summary: Reactivar a una persona
+      description: 'Administración: requiere atlas.identidad.administrar. Devuelve a activa una persona suspendida; vuelve a entrar con un ingreso nuevo. Exige reautenticación.'
+      operationId: ReactivarPersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.identidad.administrar.'
+        '429':
+          description: Demasiadas peticiones desde esta IP o este usuario (problem+json con codigo «limite_de_tasa»).
+          headers:
+            Retry-After:
+              description: Segundos que hay que esperar antes de reintentar.
+              schema:
+                minimum: 1
+                type: integer
+                format: int32
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    format: int32
+                  title:
+                    maxLength: 200
+                    type: string
+                  codigo:
+                    maxLength: 50
+                    type: string
+                  reintentarEnSegundos:
+                    type: integer
+                    format: int32
+                description: Problem Details (RFC 9457) con el código que interpreta la PWA.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.identidad.administrar
+  /api/v1/plataforma/roles:
+    get:
+      tags:
+        - Permisos
+      summary: Roles de Atlas
+      description: 'Roles internos, externos e implícitos con los permisos que concede cada uno. Requiere atlas.roles.ver.'
+      operationId: ListarRoles
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RolConPermisos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+  /api/v1/plataforma/permisos/matriz:
+    get:
+      tags:
+        - Permisos
+      summary: Matriz rol × permiso
+      description: 'Matriz generada desde los manifiestos de permisos del código: los roles (en el orden de las columnas) y, por módulo, cada permiso con los roles que lo conceden. atlas.superadmin los recibe todos. Es la misma de docs/permisos/matriz-rol-permiso.md. Requiere atlas.roles.ver.'
+      operationId: ObtenerMatrizDePermisos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatrizPermisos'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+  '/api/v1/plataforma/asignaciones/{id}':
+    delete:
+      tags:
+        - Permisos
+      summary: Retirar una asignación de rol
+      description: 'Retira una asignación manual o de invitación, lo deja en la auditoría e invalida las sesiones de la persona. Las de grupos de Entra responden 409: se quitan en Entra o eliminando el mapeo. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: RetirarAsignacion
+      parameters:
+        - name: id
+          in: path
+          description: Id de la asignación.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
+  '/api/v1/plataforma/personas/{personaId}/asignaciones':
+    get:
+      tags:
+        - Permisos
+      summary: Roles asignados a una persona
+      description: 'Asignaciones manuales, de grupos de Entra y de invitaciones, con alcance y vigencia. Por defecto solo las vigentes. No incluye atlas.lector (lo tiene todo empleado) ni los roles implícitos. Requiere atlas.roles.ver.'
+      operationId: ListarAsignacionesDePersona
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: todas
+          in: query
+          description: true para incluir las vencidas y las que aún no empiezan.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AsignacionVista'
+        '404':
+          description: Not Found
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+    post:
+      tags:
+        - Permisos
+      summary: Asignar un rol a una persona
+      description: 'Suma un rol con organización, alcance y vigencia a las asignaciones de la persona (las de grupos de Entra no cambian). Un rol externo solo va a una persona externa, en su organización y con vencimiento de máximo 90 días; un rol interno, a un empleado. Queda en la auditoría. Los permisos cambian desde la siguiente petición de la persona. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: AsignarRol
+      parameters:
+        - name: personaId
+          in: path
+          description: Persona de Atlas (plataforma_persona).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: 'Rol, organización, alcance y vigencia de la asignación.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAsignacion'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsignacionVista'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
+  /api/v1/plataforma/mapeos-grupos-entra:
+    get:
+      tags:
+        - Permisos
+      summary: Grupos de Entra que otorgan roles
+      description: Mapeos grupo de Entra → rol interno que se aplican en cada ingreso de un empleado. Requiere atlas.roles.ver.
+      operationId: ListarMapeosDeGruposEntra
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MapeoGrupoVista'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.roles.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.ver
+    post:
+      tags:
+        - Permisos
+      summary: Mapear un grupo de Entra a un rol
+      description: 'Los miembros del grupo reciben el rol interno en su siguiente ingreso, sumado a sus asignaciones manuales. Queda en la auditoría. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: CrearMapeoDeGrupoEntra
+      requestBody:
+        description: Grupo de Entra y rol interno que otorga.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudMapeoGrupo'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapeoGrupoVista'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
+  '/api/v1/plataforma/mapeos-grupos-entra/{id}':
+    delete:
+      tags:
+        - Permisos
+      summary: Eliminar un mapeo de grupo de Entra
+      description: 'Si ningún otro grupo otorga el mismo rol, retira ya ese rol a quienes lo tenían por grupo e invalida sus sesiones; si otro grupo lo otorga, se resuelve en el siguiente ingreso. Queda en la auditoría. Requiere atlas.roles.gestionar y reautenticación.'
+      operationId: EliminarMapeoDeGrupoEntra
+      parameters:
+        - name: id
+          in: path
+          description: Id del mapeo.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorRoles'
+        '401':
+          description: 'No hay una sesión activa, o el último ingreso tiene más de 10 minutos (problem+json con codigo «reautenticacion_requerida»: la PWA lleva a reingresar).'
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.roles.gestionar.'
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.roles.gestionar
+  /api/v1/plataforma/banderas:
+    get:
+      tags:
+        - Plataforma
+      summary: Banderas de módulo
+      description: 'Módulos activos para la organización de la persona, como «modulo.<id>» → activo (ATLAS-ADR-0016). Un módulo que no aparece usa el valor por defecto de su manifiesto en la PWA.'
+      operationId: ObtenerBanderasDeModulo
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: boolean
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+  /api/v1/plataforma/notificaciones:
+    get:
+      tags:
+        - Plataforma
+      summary: Bandeja de notificaciones
+      description: 'Notificaciones de la persona, de la más reciente a la más vieja (máximo 100), y cuántas no ha leído.'
+      operationId: ListarNotificaciones
+      parameters:
+        - name: limite
+          in: query
+          description: 'Cuántas notificaciones devolver (1 a 100, por defecto 30).'
+          schema:
+            pattern: '^-?(?:0|[1-9]\d*)$'
+            type:
+              - integer
+              - string
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandejaDto'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+  '/api/v1/plataforma/notificaciones/{id}/leida':
+    post:
+      tags:
+        - Plataforma
+      summary: Marcar una notificación como leída
+      description: Marca como leída una notificación de la persona. 404 si no existe o es de otra persona.
+      operationId: MarcarNotificacionLeida
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/notificaciones/leidas:
+    post:
+      tags:
+        - Plataforma
+      summary: Marcar todas como leídas
+      description: Marca como leídas todas las notificaciones pendientes de la persona.
+      operationId: MarcarNotificacionesLeidas
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/notificaciones/preferencias:
+    get:
+      tags:
+        - Plataforma
+      summary: Preferencias de notificación
+      description: 'Cada tipo de notificación con el estado de sus canales (app, push, correo y Teams).'
+      operationId: ListarPreferenciasDeNotificacion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PreferenciaTipoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+    put:
+      tags:
+        - Plataforma
+      summary: Guardar preferencias de notificación
+      description: Activa o apaga canales por tipo. El canal app no se puede apagar; correo y Teams aún no están disponibles.
+      operationId: GuardarPreferenciasDeNotificacion
+      requestBody:
+        description: Cambios de preferencia a aplicar.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/CambioPreferencia'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/push/clave:
+    get:
+      tags:
+        - Plataforma
+      summary: Llave pública VAPID
+      description: Llave con la que el navegador suscribe el dispositivo a Web Push.
+      operationId: ObtenerClavePush
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClavePushDto'
+        '401':
+          description: No hay una sesión activa o venció.
+      security:
+        - sesionAtlas: [ ]
+  /api/v1/plataforma/push/suscripciones:
+    post:
+      tags:
+        - Plataforma
+      summary: Registrar el dispositivo para push
+      description: 'Crea o actualiza la suscripción del dispositivo y la deja a nombre de la persona en sesión. Solo se aceptan servicios de push conocidos (FCM, Mozilla, Apple y Windows).'
+      operationId: RegistrarSuscripcionPush
+      requestBody:
+        description: Suscripción que entrega el navegador (PushSubscription.toJSON) y el resumen del dispositivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuscripcionDto'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/push/suscripciones/baja:
+    post:
+      tags:
+        - Plataforma
+      summary: Quitar el dispositivo de push
+      description: Borra la suscripción del dispositivo; la PWA la llama al desactivar push y al cerrar sesión.
+      operationId: DarDeBajaSuscripcionPush
+      requestBody:
+        description: Endpoint de la suscripción del dispositivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BajaSuscripcionDto'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/plataforma/push/prueba:
+    post:
+      tags:
+        - Plataforma
+      summary: Enviar una notificación de prueba
+      description: Crea una notificación de prueba en la bandeja y la envía por push a los dispositivos de la persona.
+      operationId: EnviarPushDePrueba
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PruebaPushDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host.
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+  /api/v1/hola/saludos:
+    get:
+      tags:
+        - Hola
+      summary: Saludos de tu organización
+      description: 'Los saludos que puedes ver, del más reciente al más viejo (máximo 50). Un externo solo ve los de su organización.'
+      operationId: ListarSaludos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SaludoDto'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.hola.ver.
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.hola).
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.hola.ver
+    post:
+      tags:
+        - Hola
+      summary: Escribir un saludo
+      description: Crea un saludo en la organización de la persona en sesión.
+      operationId: CrearSaludo
+      requestBody:
+        description: Texto del saludo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoSaludo'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaludoDto'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: 'Falta la cabecera X-Atlas-Csrf o el Origin no es el mismo host, o la sesión no tiene el permiso atlas.hola.gestionar.'
+        '404':
+          description: El módulo está apagado para la organización de la sesión (bandera modulo.hola).
+      security:
+        - sesionAtlas: [ ]
+          csrfAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.hola.gestionar
+  '/api/v1/hola/saludos/{id}':
+    get:
+      tags:
+        - Hola
+      summary: Un saludo
+      description: Un saludo por su id. 404 si no existe o es de una organización que no puedes ver.
+      operationId: ObtenerSaludo
+      parameters:
+        - name: id
+          in: path
+          description: Id del saludo.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaludoDto'
+        '404':
+          description: 'No existe o no lo puedes ver, o el módulo está apagado para la organización de la sesión (bandera modulo.hola).'
+        '401':
+          description: No hay una sesión activa o venció.
+        '403':
+          description: La sesión no tiene el permiso atlas.hola.ver.
+      security:
+        - sesionAtlas: [ ]
+      x-atlas-permisos:
+        - atlas.hola.ver
+components:
+  schemas:
+    AlcanceVista:
+      required:
+        - tipo
+        - id
+      type: object
+      properties:
+        tipo:
+          type: string
+          description: Tipo de alcance.
+        id:
+          type:
+            - 'null'
+            - string
+          description: Id del recurso; vacío si es global.
+      description: 'Alcance de una asignación: global o un recurso (organizacion, aplicativo, paquete, documento, ambiente…).'
+    AsignacionVista:
+      required:
+        - id
+        - personaId
+        - rol
+        - rolNombre
+        - tipoRol
+        - organizacionId
+        - alcance
+        - vigenteDesde
+        - vigenteHasta
+        - origen
+        - vigente
+        - asignadoPor
+        - creadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        personaId:
+          type: string
+          format: uuid
+        rol:
+          type: string
+        rolNombre:
+          type: string
+        tipoRol:
+          type: string
+          description: interno o externo.
+        organizacionId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        alcance:
+          $ref: '#/components/schemas/AlcanceVista'
+        vigenteDesde:
+          type: string
+          format: date-time
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          format: date-time
+        origen:
+          type: string
+          description: 'manual, grupo_entra o invitacion.'
+        vigente:
+          type: boolean
+          description: Si concede permisos en este momento (empezó y no ha vencido).
+        asignadoPor:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        creadoEn:
+          type: string
+          format: date-time
+      description: 'Asignación de un rol a una persona, con su organización, alcance y vigencia.'
+    BajaSuscripcionDto:
+      required:
+        - endpoint
+      type: object
+      properties:
+        endpoint:
+          type: string
+      description: Suscripción que se da de baja.
+    BandejaDto:
+      required:
+        - noLeidas
+        - elementos
+      type: object
+      properties:
+        noLeidas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificacionDto'
+      description: 'Bandeja de la persona: total sin leer y las más recientes primero.'
+    CambioPreferencia:
+      required:
+        - tipo
+        - canal
+        - activa
+      type: object
+      properties:
+        tipo:
+          type: string
+        canal:
+          type: string
+          description: push (app no se puede apagar).
+        activa:
+          type: boolean
+      description: 'Cambio de una preferencia: activar o apagar un canal para un tipo.'
+    ClavePushDto:
+      required:
+        - habilitado
+        - clavePublica
+      type: object
+      properties:
+        habilitado:
+          type: boolean
+        clavePublica:
+          type:
+            - 'null'
+            - string
+      description: Llave pública VAPID para suscribir el dispositivo; habilitado es falso si el ambiente no tiene llaves.
+    ErrorRoles:
+      required:
+        - error
+        - mensaje
+      type: object
+      properties:
+        error:
+          type: string
+          description: Código estable del error.
+        mensaje:
+          type: string
+      description: Error de una operación de administración de roles.
+    HttpValidationProblemDetails:
+      type: object
+      properties:
+        type:
+          type:
+            - 'null'
+            - string
+        title:
+          type:
+            - 'null'
+            - string
+        status:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - 'null'
+            - integer
+            - string
+          format: int32
+        detail:
+          type:
+            - 'null'
+            - string
+        instance:
+          type:
+            - 'null'
+            - string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    MapeoGrupoVista:
+      required:
+        - id
+        - grupoId
+        - grupoNombre
+        - rol
+        - creadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        grupoId:
+          type: string
+          format: uuid
+        grupoNombre:
+          type: string
+        rol:
+          type: string
+        creadoEn:
+          type: string
+          format: date-time
+      description: Grupo de Entra ID que otorga un rol interno a sus miembros al entrar.
+    MatrizPermisos:
+      required:
+        - roles
+        - modulos
+      type: object
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RolMatriz'
+        modulos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuloMatriz'
+      description: Matriz rol × permiso generada desde los manifiestos de permisos del código (ATLAS-ADR-0023).
+    ModuloMatriz:
+      required:
+        - id
+        - nombre
+        - permisos
+      type: object
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        permisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermisoMatriz'
+      description: Módulo y los permisos que declara en su manifiesto.
+    NotificacionDto:
+      required:
+        - id
+        - tipo
+        - titulo
+        - cuerpo
+        - enlace
+        - creadaEn
+        - leidaEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+        titulo:
+          type: string
+        cuerpo:
+          type: string
+        enlace:
+          type:
+            - 'null'
+            - string
+        creadaEn:
+          type: string
+          format: date-time
+        leidaEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: Notificación del centro de notificaciones.
+    NuevoSaludo:
+      required:
+        - texto
+      type: object
+      properties:
+        texto:
+          maxLength: 280
+          minLength: 1
+          type: string
+          description: Texto del saludo; se recortan los espacios de los extremos.
+      description: Saludo nuevo; queda en la organización de la persona en sesión.
+    PermisoMatriz:
+      required:
+        - codigo
+        - descripcion
+        - roles
+      type: object
+      properties:
+        codigo:
+          type: string
+        descripcion:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+      description: Permiso atlas.<modulo>.<accion> y los roles que lo conceden.
+    PortadorToken:
+      required:
+        - sub
+        - cliente
+        - tipoPrincipal
+        - personaId
+        - organizacionId
+        - scopes
+        - audiencias
+        - expiraEn
+      type: object
+      properties:
+        sub:
+          type: string
+          description: 'sub del token: el id del usuario de Atlas o, para un servicio, su client_id.'
+        cliente:
+          type:
+            - 'null'
+            - string
+          description: Cliente que obtuvo el token.
+        tipoPrincipal:
+          type: string
+          description: 'empleado, externo o servicio.'
+        personaId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        organizacionId:
+          type:
+            - 'null'
+            - string
+          format: uuid
+        scopes:
+          type: array
+          items:
+            type: string
+        audiencias:
+          type: array
+          items:
+            type: string
+        expiraEn:
+          type:
+            - 'null'
+            - string
+          format: date-time
+      description: 'Quién es el portador del token de acceso: un usuario de Atlas (código con PKCE) o un servicio (client_credentials).'
+    PreferenciaCanalDto:
+      required:
+        - canal
+        - activa
+        - disponible
+        - editable
+      type: object
+      properties:
+        canal:
+          type: string
+          description: 'app, push, correo o teams.'
+        activa:
+          type: boolean
+        disponible:
+          type: boolean
+        editable:
+          type: boolean
+      description: Estado de un canal para un tipo de notificación.
+    PreferenciaTipoDto:
+      required:
+        - tipo
+        - nombre
+        - descripcion
+        - canales
+      type: object
+      properties:
+        tipo:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        canales:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreferenciaCanalDto'
+      description: Tipo de notificación con sus canales.
+    ProveedoresHabilitados:
+      required:
+        - microsoft
+        - simulado
+      type: object
+      properties:
+        microsoft:
+          type: boolean
+        simulado:
+          type: boolean
+      description: Proveedores de ingreso que ofrece este ambiente. El simulado solo existe en local y dev.
+    PruebaPushDto:
+      required:
+        - dispositivos
+      type: object
+      properties:
+        dispositivos:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          description: Dispositivos a los que llegó el push.
+          format: int32
+      description: Resultado de la notificación de prueba.
+    ResultadoCierre:
+      required:
+        - cerradas
+      type: object
+      properties:
+        cerradas:
+          pattern: '^-?(?:0|[1-9]\d*)$'
+          type:
+            - integer
+            - string
+          format: int32
+      description: Cuántas sesiones activas se cerraron.
+    RolConPermisos:
+      required:
+        - codigo
+        - nombre
+        - tipo
+        - descripcion
+        - asignable
+        - permisos
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: Código del rol (atlas.* o ext.*).
+        nombre:
+          type: string
+        tipo:
+          type: string
+          description: 'interno, externo o implicito.'
+        descripcion:
+          type: string
+        asignable:
+          type: boolean
+          description: Si se puede asignar a mano (los implícitos y atlas.lector no).
+        permisos:
+          type: array
+          items:
+            type: string
+      description: Rol de Atlas con los permisos que concede según los manifiestos del código.
+    RolMatriz:
+      required:
+        - codigo
+        - nombre
+        - tipo
+        - descripcion
+        - asignable
+      type: object
+      properties:
+        codigo:
+          type: string
+        nombre:
+          type: string
+        tipo:
+          type: string
+        descripcion:
+          type: string
+        asignable:
+          type: boolean
+      description: 'Rol de Atlas: interno (§7.2), externo (§7.3) o implícito por propiedad.'
+    SaludoDto:
+      required:
+        - id
+        - texto
+        - organizacionId
+        - creadoEn
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        texto:
+          maxLength: 280
+          type: string
+          description: Texto del saludo.
+        organizacionId:
+          type: string
+          description: Organización a la que pertenece el saludo.
+          format: uuid
+        creadoEn:
+          type: string
+          format: date-time
+      description: Saludo de una organización (módulo de ejemplo).
+    SesionDispositivo:
+      required:
+        - id
+        - dispositivo
+        - ip
+        - creadaEn
+        - ultimoUsoEn
+        - expiraEn
+        - actual
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dispositivo:
+          type: string
+        ip:
+          type:
+            - 'null'
+            - string
+        creadaEn:
+          type: string
+          format: date-time
+        ultimoUsoEn:
+          type: string
+          format: date-time
+        expiraEn:
+          type: string
+          format: date-time
+        actual:
+          type: boolean
+      description: Sesión activa del usuario en un dispositivo («dispositivos conectados»). La IP es un dato personal.
+    SolicitudAsignacion:
+      required:
+        - rol
+        - organizacionId
+        - alcance
+        - vigenteDesde
+        - vigenteHasta
+      type: object
+      properties:
+        rol:
+          type: string
+          description: Código del rol (atlas.* o ext.*).
+        organizacionId:
+          type:
+            - 'null'
+            - string
+          description: 'Organización de la asignación; por defecto, la de la persona.'
+          format: uuid
+        alcance:
+          oneOf:
+            - type: 'null'
+            - description: 'Alcance; por defecto, global.'
+              $ref: '#/components/schemas/AlcanceVista'
+        vigenteDesde:
+          type:
+            - 'null'
+            - string
+          description: 'Desde cuándo vale; por defecto, ahora.'
+          format: date-time
+        vigenteHasta:
+          type:
+            - 'null'
+            - string
+          description: Hasta cuándo vale; obligatoria para roles externos.
+          format: date-time
+      description: Rol que se asigna a una persona. Un rol externo exige vencimiento (máximo 90 días) y queda en la organización de la persona.
+    SolicitudMapeoGrupo:
+      required:
+        - grupoId
+        - grupoNombre
+        - rol
+      type: object
+      properties:
+        grupoId:
+          type: string
+          format: uuid
+        grupoNombre:
+          type: string
+        rol:
+          type: string
+      description: Grupo de Entra ID (object id y nombre) y el rol interno que otorga.
+    SuscripcionDto:
+      required:
+        - endpoint
+        - p256dh
+        - auth
+        - dispositivo
+      type: object
+      properties:
+        endpoint:
+          type: string
+          description: URL https del servicio de push del navegador.
+        p256dh:
+          type: string
+          description: 'Llave pública del navegador, base64url (65 bytes).'
+        auth:
+          type: string
+          description: 'Secreto de autenticación, base64url (16 bytes).'
+        dispositivo:
+          type:
+            - 'null'
+            - string
+          description: 'Resumen del dispositivo, p. ej. «Chrome en Android».'
+      description: Suscripción Web Push de un dispositivo (PushSubscription del navegador).
+    VersionApi:
+      required:
+        - servicio
+        - version
+      type: object
+      properties:
+        servicio:
+          type: string
+        version:
+          type:
+            - 'null'
+            - string
+      description: Servicio y versión del ensamblado desplegado.
+    Yo:
+      required:
+        - sub
+        - personaId
+        - nombre
+        - tipoPrincipal
+        - organizacionId
+        - proveedor
+        - roles
+        - permisos
+      type: object
+      properties:
+        sub:
+          type: string
+          format: uuid
+        personaId:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        tipoPrincipal:
+          type: string
+        organizacionId:
+          type: string
+          format: uuid
+        proveedor:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+          description: 'Códigos de los roles vigentes en este momento, ordenados; incluye atlas.lector de todo empleado.'
+        permisos:
+          type: array
+          items:
+            type: string
+          description: 'Permisos efectivos (atlas.<modulo>.<accion>) en este momento, ordenados: la PWA filtra la navegación con ellos. Se recalculan en cada petición.'
+      description: 'Usuario de la sesión actual: persona, organización, proveedor con el que entró, roles vigentes y permisos efectivos.'
+  securitySchemes:
+    sesionAtlas:
+      type: apiKey
+      description: 'Cookie de sesión del BFF. La emite el ingreso y solo lleva el id cifrado de la sesión, que vive en el servidor.'
+      name: __Host-atlas
+      in: cookie
+    csrfAtlas:
+      type: apiKey
+      description: 'Antifalsificación: obligatoria (cualquier valor) en POST, PUT, PATCH y DELETE bajo /api/. Sin ella, o con otro Origin, la respuesta es 403.'
+      name: X-Atlas-Csrf
+      in: header
+    tokenAtlas:
+      type: oauth2
+      description: 'Token de acceso de Atlas (OpenIddict, ATLAS-ADR-0024) en «Authorization: Bearer». Vida de 15 minutos, audiencia atlas-api. Código con PKCE para atlas-cli y MCP; client_credentials para servicios internos. JWT firmado (RS256) y cifrado según RFC8725 (buenas prácticas de JWT). La cookie de la PWA no sirve en estas operaciones.'
+      flows:
+        clientCredentials:
+          tokenUrl: /connect/token
+          scopes:
+            atlas.mcp: Usar el servidor MCP de Atlas con los permisos de la persona.
+            atlas.publicar: 'Publicar contratos, documentación y modelos en Atlas.'
+            atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.
+        authorizationCode:
+          authorizationUrl: /connect/authorize
+          tokenUrl: /connect/token
+          refreshUrl: /connect/token
+          scopes:
+            atlas.mcp: Usar el servidor MCP de Atlas con los permisos de la persona.
+            atlas.publicar: 'Publicar contratos, documentación y modelos en Atlas.'
+            atlas.widget: Usar el asistente de Atlas embebido en otra aplicación de FLIT.
+tags:
+  - name: Identidad
+    description: 'Ingreso de empleados con Microsoft, proveedores habilitados, cierre de sesión, dispositivos conectados, suspensión y reautenticación (ATLAS-ADR-0004 y ATLAS-ADR-0022), y tokens para clientes que no son el navegador (ATLAS-ADR-0024).'
+  - name: Plataforma
+    description: Datos del usuario en sesión (con sus roles y permisos efectivos) y de la propia API.
+  - name: Permisos
+    description: 'Roles internos y externos, asignaciones con alcance y vigencia, mapeo de grupos de Entra y la matriz rol × permiso generada desde el código (ATLAS-ADR-0023).'
+  - name: Hola
+    description: 'Módulo de ejemplo de docs/como-crear-un-modulo.md: saludos por organización con permisos, predicado obligatorio y RLS. Apagado por defecto (bandera modulo.hola).'

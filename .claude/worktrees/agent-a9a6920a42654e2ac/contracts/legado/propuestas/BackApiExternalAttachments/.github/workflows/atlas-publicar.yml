@@ -1,0 +1,29 @@
+# Propuesta (HU 3.8, ATLAS-ADR-0037): publica el contrato de BackApiExternalAttachments en Flit Atlas.
+# Copiar a .github/workflows/atlas-publicar.yml del repo BackApiExternalAttachments, junto con el spec enriquecido
+# (contracts/legado/external-attachments.yaml de flit-atlas → contracts/openapi/external-attachments.yaml de este repo).
+# El workflow reutilizable lo entrega la HU 3.3: valida con vacuum, compara con oasdiff contra la versión de pdn y
+# publica con el token OIDC de GitHub (ATLAS-ADR-0009). [por verificar] versión fijada del workflow y variable
+# ATLAS_URL de la organización.
+name: atlas-publicar
+
+on:
+  push:
+    branches: [develop, staging, release]
+  pull_request:
+    branches: [develop, staging, release]
+
+permissions:
+  contents: read
+
+jobs:
+  publicar:
+    permissions:
+      contents: read
+      id-token: write
+    uses: flitsas/flit-atlas/.github/workflows/atlas-publicar.yml@v1
+    with:
+      aplicativo: legado-back-api-external-attachments
+      contrato: external-attachments
+      tipo: openapi
+      ruta: contracts/openapi/external-attachments.yaml
+      atlas_url: ${{ vars.ATLAS_URL }}

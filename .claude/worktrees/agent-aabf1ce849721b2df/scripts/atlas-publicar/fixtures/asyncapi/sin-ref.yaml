@@ -1,0 +1,19 @@
+asyncapi: '2.6.0'
+info:
+  title: Eventos Demo sin referencias externas
+  description: Eventos ficticios del Organismo Demo para probar el workflow atlas-publicar (HU 3.10).
+  version: 1.0.0
+channels:
+  demo.tramite.anulado:
+    subscribe:
+      operationId: tramiteAnulado
+      message:
+        $ref: '#/components/messages/TramiteAnulado'
+components:
+  messages:
+    TramiteAnulado:
+      name: demo.tramite.anulado
+      payload:
+        type: object
+        properties:
+          numero: { type: string }

@@ -1,0 +1,95 @@
+/* Exportaciones de Flit Atlas (ATLAS-ADR-0042): marca FLIT sobria, sin fuentes ni recursos remotos.
+   Colores tomados de los tokens de la marca (apps/web/src/marca/tokens.css): azul #557eff, tinta #476bd9,
+   azul noche #162744, gris de cabecera #dfe5ed, cian #00dbd5. */
+:root {
+  --azul: #557eff;
+  --tinta: #476bd9;
+  --noche: #162744;
+  --gris: #dfe5ed;
+  --gris-texto: #445569;
+  --cian: #00dbd5;
+  --fondo-codigo: #f4f6fa;
+}
+* { box-sizing: border-box; }
+html { font-size: 15px; }
+body {
+  margin: 0;
+  color: var(--noche);
+  background: #ffffff;
+  font-family: "DejaVu Sans", "Liberation Sans", "Segoe UI", Arial, sans-serif;
+  line-height: 1.5;
+}
+main { max-width: 1040px; margin: 0 auto; padding: 0 20px 48px; }
+h1, h2, h3, h4 { color: var(--noche); line-height: 1.25; }
+h2 { border-bottom: 3px solid var(--azul); padding-bottom: 4px; margin-top: 2.2em; }
+h3 { margin-top: 1.8em; }
+a { color: var(--tinta); }
+code, pre { font-family: "DejaVu Sans Mono", "Liberation Mono", Consolas, monospace; font-size: 0.86em; }
+pre {
+  background: var(--fondo-codigo);
+  border: 1px solid var(--gris);
+  border-radius: 6px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 0.9em; }
+th, td { border: 1px solid var(--gris); padding: 5px 7px; text-align: left; vertical-align: top; overflow-wrap: break-word; }
+th { background: var(--gris); color: var(--noche); }
+.matriz { font-size: 0.8em; table-layout: fixed; }
+.matriz td { overflow-wrap: anywhere; }
+.marca-agua {
+  position: fixed;
+  top: 42%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 34px;
+  font-weight: bold;
+  color: rgba(22, 39, 68, 0.07);
+  transform: rotate(-28deg);
+  pointer-events: none;
+  z-index: 0;
+}
+.portada {
+  border-top: 10px solid var(--azul);
+  padding: 48px 0 32px;
+}
+.portada .marca { font-weight: bold; letter-spacing: 0.2em; color: var(--tinta); }
+.portada h1 { font-size: 2.2em; margin: 0.4em 0 0.2em; }
+.portada dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+.portada dt { font-weight: bold; color: var(--gris-texto); }
+.portada dd { margin: 0; }
+.hash { font-family: "DejaVu Sans Mono", "Liberation Mono", Consolas, monospace; font-size: 0.82em; word-break: break-all; }
+.leyenda { border-left: 4px solid var(--cian); padding: 6px 12px; background: #f2fcfc; }
+.indice ol { padding-left: 1.4em; }
+.indice li { margin: 2px 0; }
+.metodo {
+  display: inline-block;
+  min-width: 64px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--tinta);
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 0.8em;
+  text-align: center;
+}
+.ruta { font-family: "DejaVu Sans Mono", "Liberation Mono", Consolas, monospace; overflow-wrap: anywhere; }
+td.ruta { overflow-wrap: break-word; }
+.operacion { border-top: 1px solid var(--gris); padding-top: 4px; }
+.etiqueta { color: var(--gris-texto); font-size: 0.85em; }
+.obligatorio { font-weight: bold; }
+.nivel-1 { padding-left: 18px; }
+.nivel-2 { padding-left: 32px; }
+.nivel-3 { padding-left: 46px; }
+.enlace-externo { text-decoration: underline dotted; }
+.imagen-omitida { color: var(--gris-texto); font-style: italic; }
+.pie { margin-top: 48px; color: var(--gris-texto); font-size: 0.85em; }
+.deprecada { color: #b45309; font-weight: bold; }
+@media (max-width: 640px) {
+  html { font-size: 14px; }
+  main { padding: 0 16px 32px; }
+  table { display: block; overflow-x: auto; }
+}

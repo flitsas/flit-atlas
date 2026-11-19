@@ -1,0 +1,20 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.0">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>flit-atlas-apphost</UserSecretsId>
+    <!-- ASPIRE010: el bundle del CLI de Aspire no se usa; el AppHost se corre con dotnet run. -->
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.JavaScript" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+    <PackageReference Include="Aspire.Hosting.Python" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" />
+    <PackageReference Include="Aspire.Hosting.Redis" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Golang" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\services\api\src\Flit.Atlas.Api\Flit.Atlas.Api.csproj" />
+    <ProjectReference Include="..\..\services\api\src\Flit.Atlas.Migrador\Flit.Atlas.Migrador.csproj" />
+  </ItemGroup>
+</Project>

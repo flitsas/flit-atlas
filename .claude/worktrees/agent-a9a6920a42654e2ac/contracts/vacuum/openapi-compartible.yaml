@@ -1,0 +1,114 @@
+# Ruleset de vacuum para los contratos «compartibles» (HU 3.8, ATLAS-ADR-0037). Compatible con Spectral.
+#
+# «Lo compartible» (prompt maestro §8.4 y plan 00 §8.1, §8.6 y §8.8) es lo que puede llegar a un cliente dentro de un
+# paquete: operaciones marcadas `x-public: true` que la poda de Atlas deja en el spec del portal. Para eso el contrato
+# tiene que:
+#   1. traer ejemplos en cada petición y respuesta (alimentan el sandbox de Microcks, plan 00 §8.8) y en cada esquema;
+#   2. declarar versión semántica, título propio, descripción y visibilidad (`x-flit-visibilidad`);
+#   3. no apuntar a hosts internos (localhost, IP privadas, API Gateway, *.svc.cluster.local) en `servers`;
+#   4. declarar seguridad en toda operación pública, salvo la que entrega el token (`x-flit-sin-autenticacion`);
+#   5. cumplir lo mismo que exige contracts/vacuum/openapi.yaml a los contratos propios (operationId, etiquetas,
+#      descripciones, solo HTTPS, nada sensible en la URL).
+# Se corre sobre contracts/legado/*.yaml en el job «contratos» de ci.yml, con la misma versión de vacuum (0.32.0).
+extends:
+  - [spectral:oas, recommended]
+  - [vacuum:owasp, all]
+
+rules:
+  # Lo mismo que el ruleset de los contratos propios (ATLAS-ADR-0010).
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-operationId-valid-in-url: error
+  operation-tags: error
+  operation-tag-defined: error
+  operation-description: error
+  info-description: error
+  owasp-no-credentials-in-url: error
+  owasp-no-api-keys-in-url: error
+  owasp-security-hosts-https-oas3: error
+  owasp-auth-insecure-schemes: error
+  owasp-no-http-basic: error
+  owasp-protection-global-safe: off
+  owasp-rate-limit-retry-after: error
+  owasp-rate-limit: warn
+  owasp-define-error-responses-429: warn
+  owasp-define-error-responses-500: warn
+  owasp-define-error-validation: warn
+  owasp-string-limit: info
+  owasp-string-restricted: info
+  owasp-integer-limit: info
+  owasp-integer-format: info
+  owasp-array-limit: info
+  owasp-no-additionalProperties: info
+  owasp-constrained-additionalProperties: info
+  owasp-define-error-responses-401: info
+  description-duplication: off
+  # Las operaciones internas de los legados (x-internal) no siempre declaran seguridad: el informe las lista y la
+  # poda las quita antes de compartir. Para las públicas manda flit-publica-con-seguridad.
+  owasp-protection-global-unsafe: warn
+  owasp-protection-global-unsafe-strict: warn
+
+  # 1. Ejemplos obligatorios.
+  oas3-missing-example: error
+  oas3-valid-schema-example: error
+  flit-ejemplos-obligatorios:
+    description: Toda petición y respuesta con cuerpo trae `example` o `examples` (alimentan el sandbox).
+    severity: error
+    # Sin `examples`, tiene que estar `example` (la función xor de vacuum 0.32 no avisa cuando faltan los dos).
+    given:
+      - "$.paths[*][*].requestBody.content[?(!@.examples)]"
+      - "$.paths[*][*].responses[*].content[?(!@.examples)]"
+      - "$.webhooks[*][*].requestBody.content[?(!@.examples)]"
+      - "$.webhooks[*][*].responses[*].content[?(!@.examples)]"
+    then:
+      field: example
+      function: defined
+
+  # 2. Metadatos.
+  flit-version-semantica:
+    description: info.version es una versión semántica (MAJOR.MINOR.PATCH, con prerelease opcional).
+    severity: error
+    given: "$.info"
+    then:
+      field: version
+      function: pattern
+      functionOptions:
+        match: "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+  flit-titulo-propio:
+    description: El título no es el genérico de la plantilla de tsoa.
+    severity: error
+    given: "$.info"
+    then:
+      field: title
+      function: pattern
+      functionOptions:
+        notMatch: "(?i)boilerplate"
+  flit-visibilidad-declarada:
+    description: El contrato declara si es compartible o interno.
+    severity: error
+    given: "$.info['x-flit-visibilidad']"
+    then:
+      function: enumeration
+      functionOptions:
+        values: [compartible, interna]
+
+  # 3. Sin hosts internos.
+  flit-servidores-publicos:
+    description: Los servidores no apuntan a hosts internos ni a IP privadas.
+    severity: error
+    given:
+      - "$.servers[*].url"
+      - "$.servers[*].variables[*].default"
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "(?i)(localhost|127\\.|(^|[/.])10\\.|192\\.168\\.|172\\.(1[6-9]|2\\d|3[01])\\.|execute-api|\\.svc|\\.cluster\\.local|\\.internal)"
+
+  # 4. Seguridad en lo público.
+  flit-publica-con-seguridad:
+    description: Toda operación pública declara seguridad, salvo la que entrega el token (x-flit-sin-autenticacion).
+    severity: error
+    given: "$.paths[*][?(@['x-public'] == true && @['x-flit-sin-autenticacion'] != true)]"
+    then:
+      field: security
+      function: truthy

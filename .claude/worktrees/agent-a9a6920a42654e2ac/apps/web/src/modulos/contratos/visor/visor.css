@@ -1,0 +1,30 @@
+/*
+ * Visor OpenAPI aislado (ATLAS-ADR-0039): sin fuentes externas (tipografía del sistema), el acento de la marca FLIT y
+ * los grises de Scalar oscurecidos para llegar a AA (4,5:1) sobre su fondo, como pide el §11.
+ */
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+html.light-mode,
+html.light-mode .scalar-app,
+html.light-mode .light-mode {
+  --scalar-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
+  --scalar-font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+  --scalar-color-2: #525252 !important;
+  --scalar-color-3: #5f5f5f !important;
+  --scalar-color-accent: #3a56c5 !important;
+}
+
+html.dark-mode,
+html.dark-mode .scalar-app,
+html.dark-mode .dark-mode {
+  --scalar-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
+  --scalar-font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+  --scalar-color-2: #b8b8b8 !important;
+  --scalar-color-3: #a8a8a8 !important;
+  --scalar-color-accent: #a5b8ff !important;
+}

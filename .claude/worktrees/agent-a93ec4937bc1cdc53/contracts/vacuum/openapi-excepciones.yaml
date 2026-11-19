@@ -1,0 +1,8 @@
+# Excepciones puntuales al ruleset de vacuum (contracts/vacuum/openapi.yaml), cada una decidida en un ADR. Formato del
+# --ignore-file de vacuum: regla → rutas JSON de los resultados que se aceptan. Toda línea nueva va en la revisión del PR.
+
+# ATLAS-ADR-0033 (HU 2.10): el feed .ics lo leen Outlook, Google Calendar y el calendario del teléfono, que no mandan
+# cabeceras ni cookies; el token va en la URL por necesidad (como la «dirección secreta» de otros calendarios). Es de
+# 256 bits, se guarda como hash, se revoca y se regenera desde Atlas, y el feed no trae datos de contacto.
+owasp-no-credentials-in-url:
+  - "$.paths['/api/v1/soporte/ics/{token}.ics'].get.parameters[0].name"

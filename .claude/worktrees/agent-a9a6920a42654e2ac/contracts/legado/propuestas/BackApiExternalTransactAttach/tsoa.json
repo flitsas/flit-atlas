@@ -1,0 +1,23 @@
+{
+  "entryFile": "src/index.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "controllerPathGlobs": [
+    "src/**/*Controller.ts"
+  ],
+  "spec": {
+    "outputDirectory": "./",
+    "specVersion": 3,
+    "name": "API externa ICT · Adjuntos de trámites (BackApiExternalTransactAttach)",
+    "version": "1.8.0",
+    "description": "Carga de los documentos adjuntos de un trámite según la guía de documentos por tipo de trámite.",
+    "contact": {
+      "name": "FLIT S.A.S."
+    }
+  },
+  "ignore": [
+    "**/node_modules/**"
+  ],
+  "routes": {
+    "routesDir": "build"
+  }
+}

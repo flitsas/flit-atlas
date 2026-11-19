@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "nota": "Lista blanca inicial de publicación desde la CI (HU 3.1, ATLAS-ADR-0035). Cada entrada se aplica una sola vez (no revive si se elimina en Atlas); para agregar fuentes después, se crean en Atlas (atlas.catalogo.gestionar). Los repos de FLIT 2.0 y los BackApiExternal* se agregan cuando sus workflows existan (HU 3.10).",
+  "fuentes": [
+    {
+      "aplicativo": "atlas-api",
+      "repositorio": "flitsas/flit-atlas",
+      "ramas": ["develop", "staging", "release"],
+      "tipos": ["openapi", "asyncapi"],
+      "nota": "Atlas publica su propio contrato (contracts/openapi/atlas.v1.yaml y contracts/asyncapi/atlas-events.v1.yaml)."
+    }
+  ]
+}
