@@ -7,11 +7,13 @@
 ## 1. Qué significa cada rol
 
 **Responsable principal**
+
 - Dueño técnico del producto o módulo: backlog técnico, calidad, decisiones de diseño, despliegues y atención de incidentes.
 - Revisa (o delega la revisión de) todo PR que toque su módulo.
 - Mantiene al día la documentación (README, manual de operación, ADRs del módulo).
 
 **Responsable secundario**
+
 - Respaldo real: debe poder desarrollar, desplegar y atender un incidente sin el principal.
 - Revisa PRs del módulo como segundo aprobador y participa en las decisiones grandes.
 - Dedicación orientativa: ~20 % de su tiempo en ese módulo.
