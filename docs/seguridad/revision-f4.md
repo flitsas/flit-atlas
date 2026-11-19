@@ -223,6 +223,7 @@ mayor quedan para que el coordinador los asigne, con su prueba omitida.
 
 **F4-SEC-01 · Alta (7.4, `AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N`) · La contraseña correcta reinicia el contador y deja
 adivinar el TOTP sin bloqueo.**
+
 - *Dónde:* `Identidad/Seguridad/VerificadorContrasena.cs:67-70` (`ResetAccessFailedCountAsync` también cuando el factor
   válido es la contraseña, llamado desde `Externos/EndpointsCuentasExternas.cs:314`); el paso del TOTP se lee sin
   borrarse y un fallo no lo invalida (`EndpointsCuentasExternas.cs:340, 372-375`).
@@ -299,6 +300,7 @@ en la aplicación, `GET /api/v1/portal/paquetes/{p}/contratos/{c}/spec`, la expo
 estructura interna a clientes (contra ATLAS-ADR-0038 y §15 del prompt maestro). *Recomendación:* lista blanca de
 extensiones (`x-flit-obligatoriedad`, `x-enum-descriptions`, …) que quite cualquier otra `x-*` en todo nivel, también
 en `Verificar` (fail-closed); revisar las descripciones de `info`.
+
 - **Estado: corregido en `ca7dadc`.** `Poda/ExtensionesPoda.cs`: solo salen `x-enum-descriptions`, `x-flit-obligatoriedad`,
   `x-flit-tabla`, `x-flit-decimales` y `x-public`, saneadas (de la matriz se quitan `discriminador`, nota interna, y
   `columna_excel`; de la tabla, `hoja`); toda otra `x-*` se quita en cualquier nivel salvo en los mapas de nombres del
@@ -320,6 +322,7 @@ aplica al proxy del sandbox, al feed ICS, al ingreso y a los informes de CSP. Ad
 *Recomendación:* `Ninguno` con `HttpContext` presente y sin autenticar, `Sistema` explícito solo en segundo plano;
 separar el rol dueño (migrador) del de la app; fallar al arrancar si `current_user` es superusuario o `BYPASSRLS`; correr
 `AislamientoPortalTests` con el usuario de servicio.
+
 - **Estado: corregido en `ca7dadc`** (ATLAS-ADR-0050, propuesto). Sin sesión, `Ninguno`; piden el alcance del sistema, por
   metadata (`ConAlcanceDelSistemaSinSesion`), el grupo `/api/v1/identidad`, `/connect/*`, el proxy del sandbox y el feed
   `.ics`, y por código (`AlcanceDelSistema.Abrir`) la devolución de Entra; sin petición HTTP (segundo plano) sigue el del
@@ -335,6 +338,7 @@ como fórmula. Toca guías completas, descripciones, ejemplos y changelog. *Repr
 (`services/docs/tests/exportes/test_seguridad_excel.py`, omitida). *Impacto:* el libro llega a otra organización con
 enlaces o fórmulas activas. *Recomendación:* forzar `data_type = "s"` cuando openpyxl infiera `"f"` en `_celda` y
 `_encabezado` (o anteponer `'`), y quitar el `skip` de la prueba.
+
 - **Estado: corregido en `ca7dadc`.** `_como_texto` fija `data_type = "s"` en `_celda` y `_encabezado`; la prueba (sin `skip`)
   recorre guía, changelog, descripciones, enum y ejemplo con valores que empiezan por `=`, `+`, `-`, `@`, tabulador y
   retorno de carro, y exige que toda celda sea texto con el valor intacto.
@@ -345,6 +349,7 @@ resuelve el cuerpo antes de las dependencias); uvicorn sin tope; los topes del m
 desde un pod con red hacia atlas-docs, sin token, `POST /exportes` con varios GB o en paralelo. *Impacto:* OOM del pod y
 caída del consumidor de la cola. *Recomendación:* middleware que rechace sin `Content-Length` o por encima del tope (413)
 y valide el token antes del cuerpo; confirmar la `NetworkPolicy` en flit-gitops.
+
 - **Estado: corregido en `ca7dadc`.** `atlas_docs/guardia.py` (middleware ASGI antes de FastAPI): token y scope sin leer el
   cuerpo (401/403), `Content-Length` obligatorio (411) y tope de 64 MiB (`MAX_BYTES_ENTRADA`, 413), y corte si llegan
   más bytes que los anunciados. La cola rechaza sobres de más de 64 KiB y la entrada del S3 se lee con el mismo tope de
@@ -390,6 +395,7 @@ respondía 204. No explotable entre orígenes sin CORS (el preflight lo bloquea)
 `__Host-atlas`. Regresión: `Pentest_un_Bearer_inventado_no_exime_de_la_antifalsificacion_a_una_peticion_con_la_cookie`.
 
 **F4-SEC-34 · Informativos agrupados.**
+
 - `cola.py:148` validaba el `exportacionId` con `re.match` y `$`, que acepta un salto de línea final: **corregido** a
   `re.fullmatch`. `cola.py:146` registra `type` sin quitar saltos de línea (productor de confianza).
 - atlas-docs no revisa `typ` del JWT (`at+jwt`, RFC 9068 §4) (`autenticacion.py:53-56`) **[por verificar el `typ` que
